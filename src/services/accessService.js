@@ -607,6 +607,17 @@ export class AccessService {
       throw new Error('A foto facial deve ter no maximo 1 MB.');
     }
 
+    if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+      const deviceUserId = member.controlid_user_id || member.id;
+      this.saveLocalPhoto(member.id, buffer);
+      this.store.run(
+        "UPDATE members SET controlid_user_id = COALESCE(controlid_user_id, ?), face_registered = 1, last_sync_error = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?",
+        [deviceUserId, member.id],
+      );
+      this.edgeCloudHub?.enqueueCommand('register_face', { memberId: member.id, imageBase64 });
+      return this.getMember(member.id);
+    }
+
     const syncResult = await this.trySyncMemberToDevice(member);
     if (!syncResult.synced) {
       throw new Error(`Nao foi possivel sincronizar usuario com a catraca: ${syncResult.error}`);
