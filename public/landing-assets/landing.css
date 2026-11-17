@@ -1,13 +1,13 @@
 :root {
-  --bg: #070b10;
-  --surface: #0f1621;
-  --surface-2: #151f2e;
-  --border: rgba(148, 163, 184, 0.16);
+  --bg: #07080b;
+  --surface: #101218;
+  --surface-2: #171a22;
+  --border: rgba(255, 255, 255, 0.11);
   --text: #f8fafc;
-  --muted: #94a3b8;
-  --primary: #10b981;
-  --primary-strong: #059669;
-  --primary-soft: rgba(16, 185, 129, 0.14);
+  --muted: #a1a1aa;
+  --primary: #ff6a00;
+  --primary-strong: #ea580c;
+  --primary-soft: rgba(255, 106, 0, 0.14);
   --radius: 18px;
 }
 
@@ -16,7 +16,7 @@ html { scroll-behavior: smooth; }
 body {
   margin: 0;
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: radial-gradient(circle at 15% 0%, rgba(16, 185, 129, 0.12), transparent 42%), var(--bg);
+  background: radial-gradient(circle at 15% 0%, rgba(255, 106, 0, 0.16), transparent 44%), var(--bg);
   color: var(--text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -58,7 +58,7 @@ img { max-width: 100%; display: block; }
   height: 40px;
   border-radius: 10px;
   object-fit: cover;
-  border: 1px solid rgba(16, 185, 129, 0.45);
+  border: 1px solid rgba(255, 106, 0, 0.55);
 }
 .nav-links {
   display: flex;
@@ -92,9 +92,9 @@ img { max-width: 100%; display: block; }
 .btn:hover { transform: translateY(-1px); }
 .btn-primary {
   background: var(--primary);
-  color: #032016;
+  color: #ffffff;
 }
-.btn-primary:hover { background: #34d399; }
+.btn-primary:hover { background: #ff8533; }
 .btn-secondary {
   background: var(--surface-2);
   color: var(--text);
@@ -120,8 +120,8 @@ img { max-width: 100%; display: block; }
   padding: 6px 12px;
   border-radius: 999px;
   background: var(--primary-soft);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: #6ee7b7;
+  border: 1px solid rgba(255, 106, 0, 0.4);
+  color: #fdba74;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -242,7 +242,7 @@ img { max-width: 100%; display: block; }
 }
 .plan-card.featured {
   border-color: var(--primary);
-  background: linear-gradient(180deg, rgba(16, 185, 129, 0.12), var(--surface));
+  background: linear-gradient(180deg, rgba(255, 106, 0, 0.14), var(--surface));
 }
 .plan-tag {
   align-self: flex-start;
@@ -253,7 +253,7 @@ img { max-width: 100%; display: block; }
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--primary-soft);
-  color: #6ee7b7;
+  color: #fdba74;
 }
 .plan-card h3 { margin: 0; font-size: 20px; }
 .plan-price { font-size: 28px; font-weight: 800; letter-spacing: -0.03em; }
@@ -336,13 +336,13 @@ img { max-width: 100%; display: block; }
   right: 18px;
   bottom: 18px;
   z-index: 45;
-  background: #25d366;
-  color: #052e16;
+  background: var(--primary);
+  color: #ffffff;
   font-weight: 800;
   font-size: 14px;
   padding: 12px 18px;
   border-radius: 999px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
   display: inline-flex;
   align-items: center;
   gap: 8px;
