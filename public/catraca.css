@@ -430,10 +430,22 @@ body:has(#display:is([data-state="unrecognized"], [data-state="offline"]))::afte
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
-.turnstile-preview, .turnstile-plan-alert {
+.turnstile-preview {
   background: rgba(245, 158, 11, 0.18);
   border: 1px solid rgba(251, 191, 36, 0.42);
   color: #fde68a;
+}
+
+.turnstile-plan-alert {
+  border-radius: 16px;
+  padding: 0.6em 1.35em;
+  font-size: clamp(1.15rem, 3.2vmin, 2.2rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: rgba(245, 158, 11, 0.28);
+  border: 2px solid rgba(251, 191, 36, 0.72);
+  color: #fef3c7;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.22);
 }
 
 .turnstile-birthday {
