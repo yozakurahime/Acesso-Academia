@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Academia Oxigênio | Tela da catraca</title>
+  <link rel="icon" href="/oxigenio.jpg" />
+  <meta name="theme-color" content="#07080b" />
+  <link rel="stylesheet" href="/catraca.css?v=20261115.7" />
+</head>
+<body class="turnstile">
+  <div id="displayTimerBar" class="turnstile-timer-bar" aria-hidden="true" hidden>
+    <div id="displayTimerFill" class="turnstile-timer-fill"></div>
+  </div>
+  <header class="turnstile-header">
+    <div class="turnstile-brand">
+      <img src="/oxigenio.jpg" width="64" height="64" alt="" />
+      <div>
+        <strong id="displayGymName">Academia Oxigênio</strong>
+        <span class="turnstile-location">Entrada da academia</span>
+      </div>
+    </div>
+    <div class="turnstile-header-right">
+      <span id="displayOccupancy" class="turnstile-occ-badge" hidden></span>
+      <div class="turnstile-time">
+        <span id="displayClock" class="turnstile-clock"></span>
+        <span id="displayDate" class="turnstile-date"></span>
+      </div>
+      <button id="fullscreen" type="button" class="turnstile-fullscreen" hidden>Tela cheia</button>
+    </div>
+  </header>
+  <main id="display" class="turnstile-display" data-state="idle">
+    <div class="turnstile-main-card">
+      <div id="displayHeroWrap" class="turnstile-hero-wrap">
+        <img id="displayAvatar" class="turnstile-avatar" alt="" hidden />
+        <div id="displayIcon" class="turnstile-icon" aria-hidden="true">◎</div>
+      </div>
+      <div class="turnstile-copy" role="status" aria-live="polite" aria-atomic="true">
+        <p id="displayPreview" class="turnstile-preview" hidden>Teste de tela</p>
+        <p id="displayBirthday" class="turnstile-birthday" hidden>Feliz aniversário! Tudo de bom no seu dia.</p>
+        <p id="displayStatus" class="turnstile-status">Controle de acesso</p>
+        <h1 id="displayTitle">Olhe para o leitor facial</h1>
+        <p id="displayMessage" class="turnstile-message">Aguarde a confirmação para passar.</p>
+        <p id="displayPlanAlert" class="turnstile-plan-alert" hidden></p>
+        <div id="displayProgressWrap" class="turnstile-progress-wrap">
+          <p id="displayProgress" class="turnstile-progress" hidden></p>
+          <div id="displayGoalDots" class="turnstile-goal-dots" aria-hidden="true" hidden></div>
+        </div>
+        <div id="displayWorkoutCard" class="turnstile-workout-card" hidden>
+          <span class="turnstile-workout-tag">Ficha do dia</span>
+          <strong id="displayWorkoutTitle"></strong>
+          <span id="displayWorkoutMeta" class="muted"></span>
+        </div>
+      </div>
+    </div>
+    <aside class="turnstile-idle-widgets">
+      <section id="displayRanking" class="turnstile-ranking" aria-labelledby="displayRankingTitle" hidden>
+        <h2 id="displayRankingTitle">Top 3 da semana</h2>
+        <ol id="displayRankingList"></ol>
+      </section>
+      <section id="displayChallenge" class="turnstile-challenge" aria-labelledby="displayChallengeTitle" hidden>
+        <div class="turnstile-challenge-head">
+          <h2 id="displayChallengeTitle">Desafio mensal</h2>
+          <span id="displayChallengeCount" aria-live="off"></span>
+        </div>
+        <div class="turnstile-challenge-bar" aria-hidden="true">
+          <div id="displayChallengeFill" class="turnstile-challenge-fill" style="width:0%"></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+  <section id="faceMirrorOverlay" class="turnstile-face-mirror" aria-live="polite" hidden>
+    <div class="turnstile-face-mirror-card">
+      <span class="turnstile-status">Cadastro facial</span>
+      <h2 id="faceMirrorTitle">Olhe para a câmera</h2>
+      <p id="faceMirrorSubtitle" class="turnstile-message">Centralize seu rosto na moldura</p>
+      <div class="turnstile-face-mirror-frame">
+        <img id="faceMirrorImg" alt="Visualização da câmera para cadastro facial" />
+        <div class="turnstile-face-mirror-guide" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+  <script src="/catraca.js?v=20261116.1" defer></script>
+</body>
+</html>

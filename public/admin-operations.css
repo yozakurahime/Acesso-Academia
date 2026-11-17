@@ -1,0 +1,179 @@
+.workspace-app :is(#tab-billing, #tab-cash, #tab-products, #tab-reports) {
+  --operation-muted: var(--muted, #94a3b8);
+  --operation-line: var(--border, rgba(255, 255, 255, 0.11));
+}
+
+.workspace-app :is(#tab-billing, #tab-cash, #tab-products, #tab-reports) .operations-heading p {
+  color: var(--operation-muted);
+  margin: 5px 0 0;
+}
+
+.workspace-app #tab-billing #billingSection {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.workspace-app #tab-billing .billing-queues-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.workspace-app #tab-billing .billing-queues-grid > .panel {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.workspace-app #tab-billing #paymentForm {
+  gap: 0;
+}
+
+.workspace-app #tab-billing .billing-step-block {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 var(--border-specular);
+  margin-bottom: 14px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.workspace-app #tab-billing .billing-step-block:last-child {
+  margin-bottom: 0;
+}
+.workspace-app #tab-billing .billing-step-title { font-size: 1rem; }
+.workspace-app #tab-billing .billing-hero-input { font-size: 1rem; }
+.workspace-app #tab-billing .billing-hero-label { font-size: .875rem; }
+.workspace-app #tab-billing .billing-queues-grid .panel-header { display: block; margin-bottom: 12px; }
+.workspace-app #tab-billing .billing-queues-grid .panel-header p { margin: 5px 0 0; }
+.workspace-app #tab-billing .billing-queue { padding: 0; }
+
+.workspace-app #tab-billing .billing-method-card {
+  min-height: 61px;
+  padding: 12px;
+  gap: 10px;
+  border-radius: 12px;
+}
+
+.workspace-app #tab-billing .billing-actions-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  padding: 8px 0 0;
+}
+
+.workspace-app #tab-billing .billing-actions-bar .btn {
+  min-height: 42px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.workspace-app #tab-billing .billing-actions-bar > .billing-submit-btn {
+  grid-column: 1 / -1;
+  background: var(--gradient-primary);
+  color: var(--primary-text, #fff);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 20px -6px rgba(255, 106, 0, 0.50);
+}
+
+.workspace-app #tab-billing #whatsappCheckoutBox {
+  margin: 14px 0 0;
+  padding: 12px;
+}
+
+.workspace-app #tab-billing #whatsappCheckoutBox p { margin-top: 0; }
+
+.workspace-app #tab-cash .cash-operation-forms {
+  align-items: start;
+  gap: 14px;
+  margin: 16px 0 20px;
+}
+
+.workspace-app #tab-cash .cash-operation-forms form {
+  padding: 16px;
+  border: 1px solid var(--operation-line);
+  border-radius: 16px;
+  background: var(--surface-alt);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 var(--border-specular);
+}
+
+.workspace-app #tab-cash .cash-operation-forms form h3 { margin: 0 0 4px; }
+.workspace-app #tab-cash #cashOpenView .cards > :last-child,
+.workspace-app #tab-products #saleTotalPreview {
+  background: linear-gradient(135deg, rgba(255, 106, 0, 0.24) 0%, rgba(255, 140, 36, 0.16) 100%);
+  border: 1px solid rgba(255, 106, 0, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: var(--text);
+}
+
+.workspace-app #tab-cash #cashOpenView .cards > :last-child .card-label { color: var(--accent-text); }
+.workspace-app #tab-cash #cashOpenView .cards > :last-child .card-value { color: var(--text); }
+
+.workspace-app #tab-cash .payment-monitor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 16px 0 0;
+}
+
+.workspace-app #tab-cash .payment-monitor-grid > section {
+  border: 1px solid var(--operation-line);
+  border-radius: 16px;
+  padding: 16px;
+  background: var(--surface-alt);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 var(--border-specular);
+  min-width: 0;
+}
+
+.workspace-app #tab-cash .payment-monitor-grid h3 { margin: 0 0 10px; }
+.workspace-app #tab-cash .payment-monitor-grid .billing-queue { padding: 0; }
+.workspace-app #tab-cash .panel-header .inline-actions { min-width: 0; max-width: 100%; }
+.workspace-app #tab-cash #receiptFileInput { font-size: .875rem; min-width: 0; max-width: 100%; }
+
+.workspace-app #tab-products .operations-pos-grid {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.workspace-app #tab-products #saleTotalPreview {
+  align-self: stretch;
+  width: 100%;
+  margin: 4px 0;
+  padding: 14px;
+  border-radius: 14px;
+  font-size: 1.12rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.workspace-app #tab-reports #reportMonth { min-height: 38px; }
+
+@media (max-width: 1400px) {
+  .workspace-app #tab-billing .billing-method-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1050px) {
+  .workspace-app #tab-billing #billingSection { grid-template-columns: minmax(0, 1fr); }
+  .workspace-app #tab-billing .billing-queues-grid { display: grid; }
+}
+
+@media (max-width: 720px) {
+  .workspace-app #tab-cash .payment-monitor-grid,
+  .workspace-app #tab-products .operations-pos-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 510px) {
+  .workspace-app #tab-billing .billing-actions-bar { grid-template-columns: minmax(0, 1fr); }
+  .workspace-app #tab-billing .billing-method-card { align-items: flex-start; padding: 8px; }
+  .workspace-app #tab-billing .billing-method-hint { display: none; }
+  .workspace-app #tab-cash #cashOpenView .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

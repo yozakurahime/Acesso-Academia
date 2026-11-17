@@ -1,0 +1,912 @@
+import crypto from 'node:crypto';
+import { normalizeBrPhone } from './whatsappService.js';
+
+function digitsOnly(str) {
+  return String(str || '').replace(/\D/g, '');
+}
+
+const SUB_CYCLE_MAP = {
+  WEEKLY: { frequency: 7, frequency_type: 'days' },
+  BIWEEKLY: { frequency: 15, frequency_type: 'days' },
+  MONTHLY: { frequency: 1, frequency_type: 'months' },
+  BIMONTHLY: { frequency: 2, frequency_type: 'months' },
+  QUARTERLY: { frequency: 3, frequency_type: 'months' },
+  SEMIANNUALLY: { frequency: 6, frequency_type: 'months' },
+  YEARLY: { frequency: 12, frequency_type: 'months' },
+};
+
+function mapDurationToCycle(durationDays) {
+  const days = Number(durationDays || 30);
+  if (days <= 7) return 'WEEKLY';
+  if (days <= 15) return 'BIWEEKLY';
+  if (days <= 45) return 'MONTHLY';
+  if (days <= 75) return 'BIMONTHLY';
+  if (days <= 120) return 'QUARTERLY';
+  if (days <= 210) return 'SEMIANNUALLY';
+  return 'YEARLY';
+}
+
+function mapPreapprovalStatus(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'authorized' || s === 'active') return 'active';
+  if (s === 'paused') return 'paused';
+  if (s === 'cancelled' || s === 'canceled') return 'canceled';
+  return 'pending';
+}
+
+export class GatewayService {
+  constructor(store, accessService, { whatsappService = null, fetchFn = globalThis.fetch } = {}) {
+    this.store = store;
+    this.accessService = accessService;
+    this.whatsappService = whatsappService;
+    this.fetch = fetchFn;
+    this.checkoutRequests = new Map();
+    this.pixRequests = new Map();
+  }
+
+  /**
+   * Executes safe read-only Mercado Pago requests with short exponential backoff
+   * on transient HTTP statuses (429/502/503/504) or network errors.
+   */
+  async mpFetchWithRetry(url, options = {}, { retries = 2, baseDelayMs = 200 } = {}) {
+    const method = String(options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') {
+      return this.fetch(url, options);
+    }
+    const transientStatuses = new Set([429, 502, 503, 504]);
+    let lastError;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await this.fetch(url, options);
+        if (!transientStatuses.has(res.status) || attempt === retries) {
+          return res;
+        }
+      } catch (err) {
+        lastError = err;
+        if (options.signal?.aborted || attempt === retries) {
+          throw err;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * (attempt + 1)));
+    }
+    throw lastError;
+  }
+
+  async safeJson(res) {
+    if (typeof res?.text === 'function') {
+      const text = await res.text();
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
+    }
+    if (typeof res?.json === 'function') {
+      return res.json().catch(() => null);
+    }
+    return null;
+  }
+
+  getMpAuth(settings = this.store.getSettings()) {
+    const token = String(settings.mp_access_token || '').trim();
+    if (!token) {
+      throw new Error('Access Token do Mercado Pago não configurado em Configurações.');
+    }
+    if (/^APP_USR-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
+      throw new Error('O valor salvo no Mercado Pago é uma Public Key (Chave Pública). Cole o Access Token de Produção em Configurações → Pagamentos Online.');
+    }
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  getPointAuth(settings = this.store.getSettings()) {
+    if (process.env.MP_POINT_TEST_MODE === 'true') {
+      const testToken = process.env.MP_POINT_TEST_ACCESS_TOKEN;
+      if (!testToken) throw new Error('Informe MP_POINT_TEST_ACCESS_TOKEN para testar a Point.');
+      return this.getMpAuth({ mp_access_token: testToken });
+    }
+    return this.getMpAuth({ mp_access_token: process.env.MP_POINT_ACCESS_TOKEN || settings.mp_point_access_token || settings.mp_access_token });
+  }
+
+  getPointTerminalId(terminalId, settings = this.store.getSettings()) {
+    return String(terminalId || process.env.MP_POINT_TERMINAL_ID || settings.mp_point_terminal_id || '').trim();
+  }
+
+  listCharges(limit = 20) {
+    return this.store.all(
+      `SELECT gc.*, m.name AS member_name, p.name AS plan_name
+       FROM gateway_charges gc
+       JOIN members m ON m.id = gc.member_id
+       LEFT JOIN plans p ON p.id = gc.plan_id
+       ORDER BY CASE WHEN gc.status = 'pending' THEN 0 ELSE 1 END, gc.id DESC
+       LIMIT ?`,
+      [Number(limit)],
+    );
+  }
+
+  resolveBillableMember(member, planId, amount) {
+    if (!member || member.access_role !== 'student') throw new Error('Selecione um aluno para cobrar.');
+    const charge = this.store.get('SELECT id, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due, id LIMIT 1', [member.id]);
+    const plan = this.store.get('SELECT * FROM plans WHERE id = ?', [charge ? member.plan_id : Number(planId || member.plan_id)]);
+    if (!plan) throw new Error('Selecione um plano para cobrar.');
+    const cents = charge?.amount ?? Number(amount ?? plan.price_cents);
+    if (!Number.isSafeInteger(cents) || cents <= 0) throw new Error('Valor da cobrança inválido.');
+    return { plan, cents, charge };
+  }
+
+  async createPixCharge({ member_id, plan_id = null, amount_cents = null }) {
+    const memberId = Number(member_id);
+    if (this.pixRequests.has(memberId)) return this.pixRequests.get(memberId);
+    const request = this._createPixChargeOnce({ member_id: memberId, plan_id, amount_cents });
+    this.pixRequests.set(memberId, request);
+    try {
+      return await request;
+    } finally {
+      this.pixRequests.delete(memberId);
+    }
+  }
+
+  async _createPixChargeOnce({ member_id, plan_id = null, amount_cents = null }) {
+    const settings = this.store.getSettings();
+    const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
+    if (!member) throw new Error('Aluno não encontrado.');
+
+    const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
+
+    if (charge?.id) {
+      const existingPending = this.store.get(
+        `SELECT gc.*, m.name AS member_name, p.name AS plan_name
+         FROM gateway_charges gc
+         JOIN members m ON m.id = gc.member_id
+         LEFT JOIN plans p ON p.id = gc.plan_id
+         WHERE gc.provider = 'mercadopago' AND gc.checkout_ref IS NULL AND gc.member_id = ? AND gc.membership_charge_id = ? AND gc.status = 'pending'
+         ORDER BY gc.id DESC LIMIT 1`,
+        [member.id, charge.id],
+      );
+      if (existingPending) return existingPending;
+    }
+
+    const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`;
+    const windowBucket = Math.floor(Date.now() / (5 * 60 * 1000));
+    const idempotencyKey = `mp_pix:${member.id}:${charge?.id || 'adhoc'}:${finalAmount}:${windowBucket}`;
+    const created = await this.createMercadoPagoPix({ member, amountCents: finalAmount, description, settings, idempotencyKey });
+
+    const res = this.store.run(
+      `INSERT INTO gateway_charges (provider, external_id, member_id, plan_id, amount_cents, status, qr_code, qr_base64, payment_url, membership_charge_id)
+       VALUES ('mercadopago', ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+      [
+        String(created.externalId),
+        member.id,
+        plan?.id || null,
+        finalAmount,
+        created.qrCode || null,
+        created.qrBase64 || null,
+        created.paymentUrl || null,
+        charge?.id ?? null,
+      ],
+    );
+
+    return this.store.get(
+      `SELECT gc.*, m.name AS member_name, p.name AS plan_name
+       FROM gateway_charges gc
+       JOIN members m ON m.id = gc.member_id
+       LEFT JOIN plans p ON p.id = gc.plan_id
+       WHERE gc.id = ?`,
+      [res.lastInsertRowid],
+    );
+  }
+
+  async createCheckoutCharge({ member_id, plan_id = null }) {
+    const memberId = Number(member_id);
+    if (this.checkoutRequests.has(memberId)) return this.checkoutRequests.get(memberId);
+    const request = this.openCheckoutCharge(memberId, plan_id);
+    this.checkoutRequests.set(memberId, request);
+    try {
+      return await request;
+    } finally {
+      this.checkoutRequests.delete(memberId);
+    }
+  }
+
+  async createWhatsAppCheckout(memberId) {
+    const member = this.store.get('SELECT id, name, phone FROM members WHERE id = ?', [Number(memberId)]);
+    const phone = normalizeBrPhone(member?.phone);
+    if (!phone) throw new Error('Cadastre um telefone válido no perfil do aluno antes de compartilhar.');
+    const charge = await this.createCheckoutCharge({ member_id: member.id });
+    const amount = (charge.amount_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const name = member.name.trim().split(/\s+/)[0];
+    const gym = this.store.getSettings().gym_name || 'Academia Oxigênio';
+    const message = `Olá, ${name}! Segue o link do Mercado Pago para pagar sua mensalidade de ${amount} na ${gym}: ${charge.payment_url}`;
+    return { charge, whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
+  }
+
+  async openCheckoutCharge(memberId, planId) {
+    const settings = this.store.getSettings();
+    const member = this.store.get('SELECT * FROM members WHERE id = ?', [memberId]);
+    const { plan, cents, charge } = this.resolveBillableMember(member, planId);
+    const existing = this.store.get(`SELECT * FROM gateway_charges WHERE member_id = ? AND plan_id = ? AND amount_cents = ?
+      AND membership_charge_id IS ? AND checkout_ref IS NOT NULL AND status = 'pending'
+      AND created_at > datetime('now', 'localtime', '-24 hours') ORDER BY id DESC LIMIT 1`,
+    [memberId, plan.id, cents, charge?.id ?? null]);
+    if (existing) return existing;
+
+    const reference = 'ox_checkout_' + crypto.randomUUID();
+    const title = `${settings.gym_name || 'Academia'} - ${plan.name}`.slice(0, 120);
+    const now = Date.now();
+    const response = await this.fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: { ...this.getMpAuth(settings), 'X-Idempotency-Key': reference },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        items: [{ id: String(plan.id), title, quantity: 1, currency_id: 'BRL', unit_price: cents / 100 }],
+        external_reference: reference,
+        expires: true,
+        expiration_date_from: new Date(now - 60000).toISOString(),
+        expiration_date_to: new Date(now + 24 * 3600000).toISOString(),
+      }),
+    });
+    const data = await this.safeJson(response);
+    if (!response.ok || !data?.id || !data?.init_point) {
+      throw new Error(data?.message || 'Não foi possível gerar o link de pagamento.');
+    }
+    const url = new URL(data.init_point);
+    if (url.protocol !== 'https:' || !/(^|\.)mercadopago\.com(?:\.br)?$/i.test(url.hostname)) {
+      throw new Error('O Mercado Pago retornou um endereço de checkout inválido.');
+    }
+    const { lastInsertRowid } = this.store.run(`INSERT INTO gateway_charges
+      (provider, external_id, member_id, plan_id, amount_cents, payment_url, membership_charge_id, checkout_ref)
+      VALUES ('mercadopago', ?, ?, ?, ?, ?, ?, ?)`, [String(data.id), memberId, plan.id, cents, url.href, charge?.id ?? null, reference]);
+    return this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [lastInsertRowid]);
+  }
+
+  async createMercadoPagoPix({ member, amountCents, description, settings, idempotencyKey = null }) {
+    const headers = this.getMpAuth(settings);
+    const parts = String(member.name || 'Aluno').trim().split(/\s+/);
+    const firstName = parts[0] || 'Aluno';
+    const lastName = parts.slice(1).join(' ') || 'Academia';
+    const cpf = digitsOnly(member.document);
+
+    const payer = {
+      email: member.email || `aluno${member.id}@academia.local`,
+      first_name: firstName,
+      last_name: lastName,
+    };
+    if (cpf.length === 11) {
+      payer.identification = { type: 'CPF', number: cpf };
+    }
+
+    const resolvedKey =
+      idempotencyKey || `mp_pix:${member.id}:${amountCents}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
+
+    const response = await this.fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'X-Idempotency-Key': resolvedKey,
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        transaction_amount: Number((amountCents / 100).toFixed(2)),
+        description: description.slice(0, 120),
+        payment_method_id: 'pix',
+        external_reference: String(member.id),
+        payer,
+      }),
+    });
+
+    const data = await this.safeJson(response);
+    if (!response.ok || !data?.id) {
+      throw new Error(data?.message || data?.cause?.[0]?.description || `Erro Mercado Pago (${response.status})`);
+    }
+
+    const txData = data?.point_of_interaction?.transaction_data || {};
+    const base64 = txData.qr_code_base64 ? `data:image/png;base64,${txData.qr_code_base64}` : null;
+
+    return {
+      externalId: String(data.id),
+      qrCode: txData.qr_code || null,
+      qrBase64: base64,
+      paymentUrl: txData.ticket_url || null,
+    };
+  }
+
+  async checkChargeStatus(chargeId) {
+    const charge = this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [Number(chargeId)]);
+    if (!charge) throw new Error('Cobrança não encontrada.');
+    if (charge.status === 'paid') {
+      return { paid: true, charge };
+    }
+
+    const headers = this.getMpAuth();
+    if (charge.checkout_ref) {
+      const query = new URLSearchParams({ external_reference: charge.checkout_ref, status: 'approved' });
+      const response = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/payments/search?${query}`, {
+        headers, signal: AbortSignal.timeout(15000),
+      });
+      const data = await this.safeJson(response);
+      if (!response.ok) throw new Error(data?.message || 'Não foi possível consultar o pagamento online.');
+      const payment = data?.results?.find((entry) => entry.status === 'approved' && entry.external_reference === charge.checkout_ref);
+      if (!payment) return { paid: false, charge };
+      return { paid: true, ...await this.settleCheckoutPayment(charge, payment) };
+    }
+    const res = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(charge.external_id)}`, {
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.message || `Erro ao consultar Mercado Pago (${res.status})`);
+
+    if (data?.status === 'approved') {
+      if (Math.round(Number(data.transaction_amount) * 100) !== charge.amount_cents) {
+        throw new Error('Valor aprovado pelo Mercado Pago difere da cobrança registrada.');
+      }
+      const settled = await this.settleCharge(charge);
+      return { paid: true, ...settled };
+    }
+    return { paid: false, charge };
+  }
+
+  async settleCheckoutPayment(charge, payment) {
+    if (!payment.id || payment.status !== 'approved' || payment.currency_id !== 'BRL' ||
+        Math.round(Number(payment.transaction_amount) * 100) !== charge.amount_cents) {
+      throw new Error('O pagamento aprovado não corresponde à cobrança online.');
+    }
+    const method = { credit_card: 'credit', debit_card: 'debit', prepaid_card: 'debit', ticket: 'boleto' }[payment.payment_type_id] ||
+      (payment.payment_method_id === 'pix' ? 'pix' : 'other');
+    return await this.settleCharge(charge, { paymentId: payment.id, method, notes: 'Pagamento online (Mercado Pago)' });
+  }
+
+  async settleCharge(charge, { paymentId = charge.external_id, method = 'pix', notes = 'Pix automático (Mercado Pago)' } = {}) {
+    const fresh = this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [charge.id]);
+    if (!fresh || fresh.status === 'paid') {
+      return { alreadyPaid: true, charge: fresh || charge };
+    }
+
+    const paymentResult = await this.accessService.recordPayment(
+      {
+        member_id: fresh.member_id,
+        plan_id: fresh.plan_id,
+        amount_cents: fresh.amount_cents,
+        method,
+        external_id: `mercadopago:${paymentId}`,
+        charge_id: fresh.membership_charge_id,
+        notes,
+      },
+      { reconcileOpenCharge: true, exactCharge: Boolean(fresh.membership_charge_id),
+        onRecorded: (paymentId) => this.store.run(
+          `UPDATE gateway_charges SET status = 'paid', payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+          [paymentId, fresh.id],
+        ) },
+    );
+
+    if (this.whatsappService && !paymentResult.alreadyRecorded) {
+      this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
+    }
+
+    return {
+      alreadyPaid: Boolean(paymentResult.alreadyRecorded),
+      charge: this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [fresh.id]),
+      paymentResult,
+    };
+  }
+
+  // --- Assinaturas Recorrentes (Mercado Pago Preapproval) ---
+
+  listSubscriptions(limit = 50) {
+    return this.store.all(
+      `SELECT s.*, m.name AS member_name, p.name AS plan_name
+       FROM mp_subscriptions s
+       JOIN members m ON m.id = s.member_id
+       LEFT JOIN plans p ON p.id = s.plan_id
+       ORDER BY CASE WHEN s.status IN ('active', 'pending') THEN 0 ELSE 1 END, s.id DESC
+       LIMIT ?`,
+      [Number(limit)],
+    );
+  }
+
+  getSubscriptionById(id) {
+    return this.store.get(
+      `SELECT s.*, m.name AS member_name, p.name AS plan_name
+       FROM mp_subscriptions s
+       JOIN members m ON m.id = s.member_id
+       LEFT JOIN plans p ON p.id = s.plan_id
+       WHERE s.id = ?`,
+      [Number(id)],
+    );
+  }
+
+  async createMpSubscription({ member_id, plan_id = null, amount_cents = null, cycle = null, payer_email = null }) {
+    const settings = this.store.getSettings();
+    const headers = this.getMpAuth(settings);
+
+    const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
+    if (!member || member.access_role !== 'student') throw new Error('Selecione um aluno para cobrar.');
+
+    const plan = plan_id
+      ? this.store.get('SELECT * FROM plans WHERE id = ?', [Number(plan_id)])
+      : member.plan_id
+        ? this.store.get('SELECT * FROM plans WHERE id = ?', [Number(member.plan_id)])
+        : null;
+
+    const finalAmount = Number(amount_cents || plan?.price_cents || 0);
+    if (!plan || !Number.isSafeInteger(finalAmount) || finalAmount <= 0) {
+      throw new Error('Informe um valor válido para a assinatura.');
+    }
+
+    const cycleKey = String(cycle || mapDurationToCycle(plan?.duration_days)).toUpperCase();
+    const cycleSpec = SUB_CYCLE_MAP[cycleKey];
+    if (!cycleSpec) {
+      throw new Error('Ciclo de recorrência inválido.');
+    }
+
+    const email = String(payer_email || member.email || '').trim() || `aluno${member.id}@academiaoxigenio.com`;
+    const externalRef = `mp_sub:${member.id}:${crypto.randomUUID().slice(0, 8)}`;
+    const reason = `${settings.gym_name || 'Academia Oxigênio'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 120);
+    const idempotencyKey = `mp_sub:${member.id}:${plan.id}:${finalAmount}:${cycleKey}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
+
+    const res = await this.fetch('https://api.mercadopago.com/preapproval', {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        reason,
+        external_reference: externalRef,
+        payer_email: email,
+        back_url: 'https://academiaoxigenio.com',
+        auto_recurring: {
+          frequency: cycleSpec.frequency,
+          frequency_type: cycleSpec.frequency_type,
+          transaction_amount: Number((finalAmount / 100).toFixed(2)),
+          currency_id: 'BRL',
+        },
+      }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok || !data?.id) {
+      throw new Error(data?.message || data?.cause?.[0]?.description || `Erro ao criar assinatura Mercado Pago (${res.status})`);
+    }
+
+    const ins = this.store.run(
+      `INSERT INTO mp_subscriptions
+       (preapproval_id, external_ref, member_id, plan_id, amount_cents, frequency, frequency_type, payer_email, init_point, next_payment_date, status, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))`,
+      [
+        String(data.id),
+        externalRef,
+        member.id,
+        plan?.id || null,
+        finalAmount,
+        cycleSpec.frequency,
+        cycleSpec.frequency_type,
+        email,
+        data.init_point || null,
+        data.next_payment_date || null,
+        mapPreapprovalStatus(data.status),
+      ],
+    );
+
+    return this.getSubscriptionById(ins.lastInsertRowid);
+  }
+
+  async settleMpSubscriptionPayment({ sub, mpPaymentId, amountCents, method = 'credit' }) {
+    if (!mpPaymentId || !Number.isSafeInteger(amountCents) || amountCents !== sub.amount_cents) {
+      throw new Error('Valor confirmado difere da assinatura registrada.');
+    }
+
+    const paymentResult = await this.accessService.recordPayment(
+      {
+        member_id: sub.member_id,
+        plan_id: sub.plan_id,
+        amount_cents: amountCents,
+        method,
+        external_id: `mercadopago:${mpPaymentId}`,
+        notes: `Assinatura Mercado Pago (${sub.preapproval_id})`,
+      },
+      { reconcileOpenCharge: true },
+    );
+
+    if (this.whatsappService && !paymentResult.alreadyRecorded) {
+      this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
+    }
+
+    return { alreadyPaid: Boolean(paymentResult.alreadyRecorded), paymentResult };
+  }
+
+  async syncMpSubscription(id) {
+    const sub = this.store.get('SELECT * FROM mp_subscriptions WHERE id = ?', [Number(id)]);
+    if (!sub) throw new Error('Assinatura não encontrada.');
+
+    const headers = this.getMpAuth();
+    const preRes = await this.mpFetchWithRetry(`https://api.mercadopago.com/preapproval/${encodeURIComponent(sub.preapproval_id)}`, {
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+    const preData = await this.safeJson(preRes);
+    if (!preRes.ok) {
+      throw new Error(preData?.message || `Erro ao consultar assinatura Mercado Pago (${preRes.status})`);
+    }
+
+    let settledCount = 0;
+    const searchUrl = `https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(sub.external_ref)}&status=approved&sort=date_created&criteria=desc`;
+    const payRes = await this.mpFetchWithRetry(searchUrl, { headers, signal: AbortSignal.timeout(15000) });
+    if (payRes.ok) {
+      const payJson = await this.safeJson(payRes);
+      const results = Array.isArray(payJson?.results) ? payJson.results : [];
+      for (const item of results) {
+        if (item.status !== 'approved' || (item.external_reference && item.external_reference !== sub.external_ref)) continue;
+        const amountCents = Math.round(Number(item.transaction_amount) * 100);
+        try {
+          const settled = await this.settleMpSubscriptionPayment({
+            sub,
+            mpPaymentId: item.id,
+            amountCents,
+            method: item.payment_type_id === 'debit_card' ? 'debit' : 'credit',
+          });
+          if (!settled.alreadyPaid) settledCount += 1;
+        } catch (err) {
+          console.warn(`[GatewayService] Pagamento ${item.id} da assinatura ${sub.id} ignorado:`, err.message);
+        }
+      }
+    }
+
+    this.store.run(
+      `UPDATE mp_subscriptions
+       SET status = ?, next_payment_date = COALESCE(?, next_payment_date), updated_at = datetime('now', 'localtime')
+       WHERE id = ?`,
+      [mapPreapprovalStatus(preData?.status), preData?.next_payment_date || null, sub.id],
+    );
+
+    return {
+      settledCount,
+      subscription: this.getSubscriptionById(sub.id),
+    };
+  }
+
+  async cancelMpSubscription(id) {
+    const sub = this.store.get('SELECT * FROM mp_subscriptions WHERE id = ?', [Number(id)]);
+    if (!sub) throw new Error('Assinatura não encontrada.');
+    if (sub.status === 'canceled') {
+      return { alreadyCanceled: true, subscription: this.getSubscriptionById(sub.id) };
+    }
+
+    const headers = this.getMpAuth();
+    const res = await this.fetch(`https://api.mercadopago.com/preapproval/${encodeURIComponent(sub.preapproval_id)}`, {
+      method: 'PUT',
+      headers,
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ status: 'cancelled' }),
+    });
+    if (!res.ok && res.status !== 404) {
+      const data = (await this.safeJson(res)) || {};
+      throw new Error(data?.message || `Erro ao cancelar assinatura Mercado Pago (${res.status})`);
+    }
+
+    this.store.run(
+      `UPDATE mp_subscriptions
+       SET status = 'canceled', canceled_at = datetime('now', 'localtime'), updated_at = datetime('now', 'localtime')
+       WHERE id = ?`,
+      [sub.id],
+    );
+
+    return { alreadyCanceled: false, subscription: this.getSubscriptionById(sub.id) };
+  }
+
+  // --- Mercado Pago Point Smart ---
+
+  async listPointTerminals() {
+    const headers = this.getPointAuth();
+    const res = await this.mpFetchWithRetry('https://api.mercadopago.com/terminals/v1/list', { headers, signal: AbortSignal.timeout(15000) });
+    const data = (await this.safeJson(res)) || {};
+    if (!res.ok) {
+      const detail = data?.message || data?.errors?.[0]?.message || data?.cause?.[0]?.description || '';
+      throw new Error(detail ? `${detail} (HTTP ${res.status})` : `Erro ao listar maquininhas Point (HTTP ${res.status})`);
+    }
+    return data?.data?.terminals || data?.terminals || (Array.isArray(data?.data) ? data.data : []);
+  }
+
+  async setPointTerminalMode(terminalId, operatingMode = 'PDV') {
+    const settings = this.store.getSettings();
+    const headers = this.getPointAuth(settings);
+    const id = this.getPointTerminalId(terminalId, settings);
+    if (!id) throw new Error('Informe o ID da maquininha Point.');
+    const mode = ['PDV', 'STANDALONE'].includes(String(operatingMode).toUpperCase())
+      ? String(operatingMode).toUpperCase()
+      : 'PDV';
+
+    const res = await this.fetch('https://api.mercadopago.com/terminals/v1/setup', {
+      method: 'PATCH',
+      headers,
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        terminals: [{ id, operating_mode: mode }],
+      }),
+    });
+    const data = (await this.safeJson(res)) || {};
+    if (!res.ok) {
+      const detail = data?.message || data?.errors?.[0]?.message || data?.cause?.[0]?.description || '';
+      throw new Error(detail ? `${detail} (HTTP ${res.status})` : `Erro ao configurar modo da maquininha (HTTP ${res.status})`);
+    }
+    return { terminalId: id, operatingMode: mode, data };
+  }
+
+  listPointOrders(limit = 20) {
+    return this.store.all(
+      `SELECT po.*, m.name AS member_name, p.name AS plan_name
+       FROM point_orders po
+       JOIN members m ON m.id = po.member_id
+       LEFT JOIN plans p ON p.id = po.plan_id
+       ORDER BY CASE WHEN po.status = 'pending' THEN 0 ELSE 1 END, po.id DESC
+       LIMIT ?`,
+      [Number(limit)],
+    );
+  }
+
+  getPointOrderById(id) {
+    return this.store.get(
+      `SELECT po.*, m.name AS member_name, p.name AS plan_name
+       FROM point_orders po
+       JOIN members m ON m.id = po.member_id
+       LEFT JOIN plans p ON p.id = po.plan_id
+       WHERE po.id = ?`,
+      [Number(id)],
+    );
+  }
+
+  async createPointOrder({ member_id, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit' }) {
+    const settings = this.store.getSettings();
+    const headers = this.getPointAuth(settings);
+    const productionTerminal = this.getPointTerminalId(terminal_id, settings);
+    const chosenTerminal = process.env.MP_POINT_TEST_MODE === 'true' ? 'NEWLAND_N950__SBX0000001' : productionTerminal;
+    if (!chosenTerminal) {
+      throw new Error('Configure o ID da maquininha Point Smart em Configurações.');
+    }
+
+    const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
+    if (!member) throw new Error('Aluno não encontrado.');
+
+    const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
+
+    if (charge?.id) {
+      const existingPending = this.store.get(
+        `SELECT id FROM point_orders WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+        [member.id, charge.id],
+      );
+      if (existingPending) return this.getPointOrderById(existingPending.id);
+    }
+
+    const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
+    const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
+    const res = await this.fetch('https://api.mercadopago.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        type: 'point',
+        external_reference: String(member.id),
+        expiration_time: 'PT16M',
+        description,
+        config: {
+          point: {
+            terminal_id: chosenTerminal,
+            print_on_terminal: 'no_ticket',
+          },
+        },
+        transactions: {
+          payments: [
+            {
+              amount: (finalAmount / 100).toFixed(2),
+            },
+          ],
+        },
+      }),
+    });
+
+    const data = await this.safeJson(res);
+    if (!res.ok || !data?.id) {
+      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao enviar cobrança para Point (${res.status})`);
+    }
+
+    const ins = this.store.run(
+      `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [String(data.id), chosenTerminal, member.id, plan.id, finalAmount, String(payment_method || 'credit'), charge?.id ?? null],
+    );
+
+    return this.getPointOrderById(ins.lastInsertRowid);
+  }
+
+  async checkPointOrder(id) {
+    const order = this.store.get('SELECT * FROM point_orders WHERE id = ?', [Number(id)]);
+    if (!order) throw new Error('Cobrança da maquininha não encontrada.');
+    if (order.status === 'paid') {
+      return { paid: true, alreadyPaid: true, order: this.getPointOrderById(order.id) };
+    }
+
+    const headers = this.getPointAuth();
+    const res = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(order.order_id)}`, {
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao consultar ordem Point (${res.status})`);
+    }
+
+    const payItem = data?.transactions?.payments?.[0];
+    const orderStatus = String(data?.status || '').toLowerCase();
+    const payStatus = String(payItem?.status || '').toLowerCase();
+
+    if (orderStatus === 'processed' || payStatus === 'processed') {
+      if (Math.round(Number(payItem?.amount) * 100) !== order.amount_cents) {
+        throw new Error('Valor processado pela maquininha difere da cobrança registrada.');
+      }
+      const mpType = String(payItem?.payment_method?.type || '').toLowerCase();
+      const method = mpType === 'debit_card' ? 'debit' : mpType === 'pix' ? 'pix' : order.payment_method || 'credit';
+      const extKey = `mp_order:${order.order_id}`;
+      const paymentResult = await this.accessService.recordPayment(
+          {
+            member_id: order.member_id,
+            plan_id: order.plan_id,
+            amount_cents: order.amount_cents,
+            method,
+            external_id: extKey,
+            charge_id: order.membership_charge_id,
+            notes: `Point Smart (${order.terminal_id})`,
+          },
+          { reconcileOpenCharge: true, exactCharge: Boolean(order.membership_charge_id),
+            onRecorded: (paymentId) => this.store.run(
+              `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+              [method, paymentId, order.id],
+            ) },
+      );
+      if (this.whatsappService && !paymentResult.alreadyRecorded) {
+        this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
+      }
+
+      return {
+        paid: true,
+        alreadyPaid: Boolean(paymentResult.alreadyRecorded),
+        order: this.getPointOrderById(order.id),
+        paymentResult,
+      };
+    }
+
+    if (['canceled', 'cancelled', 'expired', 'failed'].includes(orderStatus)) {
+      const normalized = orderStatus === 'cancelled' ? 'canceled' : orderStatus;
+      this.store.run(`UPDATE point_orders SET status = ? WHERE id = ? AND status <> 'paid'`, [normalized, order.id]);
+    }
+
+    return { paid: false, status: orderStatus || 'pending', order: this.getPointOrderById(order.id) };
+  }
+
+  async cancelPointOrder(id) {
+    const order = this.store.get('SELECT * FROM point_orders WHERE id = ?', [Number(id)]);
+    if (!order) throw new Error('Cobrança da maquininha não encontrada.');
+    if (order.status === 'paid') throw new Error('Cobrança já foi paga e não pode ser cancelada.');
+
+    const headers = this.getPointAuth();
+    const res = await this.fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(order.order_id)}/cancel`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'X-Idempotency-Key': `cancel_point_order:${order.order_id}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok && res.status !== 404) {
+      const data = (await this.safeJson(res)) || {};
+      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao cancelar cobrança na Point (${res.status})`);
+    }
+
+    this.store.run(`UPDATE point_orders SET status = 'canceled' WHERE id = ?`, [order.id]);
+    return { canceled: true, order: this.getPointOrderById(order.id) };
+  }
+
+  verifyWebhookSignature(payload, headers, settings = this.store.getSettings()) {
+    const secret = String(process.env.MP_WEBHOOK_SECRET || settings?.mp_webhook_secret || '').trim();
+    if (!secret || !headers || typeof headers !== 'object') return;
+
+    const getHeader = (name) => {
+      for (const [k, v] of Object.entries(headers)) {
+        if (k.toLowerCase() === name) return Array.isArray(v) ? v[0] : v;
+      }
+      return '';
+    };
+
+    const rawSig = String(getHeader('x-signature') || '').trim();
+    const parts = new URLSearchParams(rawSig.replaceAll(',', '&'));
+    const timestamp = parts.get('ts')?.trim() || '';
+    const signature = parts.get('v1')?.trim() || '';
+    const requestId = String(getHeader('x-request-id') || '').trim();
+    const itemId = String(payload?.data?.id || payload?.id || '').trim();
+    const manifest = `id:${itemId.toLowerCase()};request-id:${requestId};ts:${timestamp};`;
+    const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+
+    const a = Buffer.from(signature, 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    const valid = Boolean(timestamp && signature && a.length === b.length && crypto.timingSafeEqual(a, b));
+    if (!valid) {
+      const err = new Error('Assinatura do webhook Mercado Pago inválida.');
+      err.statusCode = 401;
+      throw err;
+    }
+  }
+
+  async handleWebhook(provider, payload = {}, headers = null) {
+    if (provider !== 'mercadopago') {
+      throw new Error('Provider inválido.');
+    }
+
+    if (headers && typeof headers === 'object') {
+      this.verifyWebhookSignature(payload, headers);
+    }
+
+    const itemId = payload?.data?.id || payload?.id;
+    const eventType = String(payload?.type || '').toLowerCase();
+    const action = String(payload?.action || '').toLowerCase();
+
+    if (itemId && (['order', 'orders'].includes(eventType) || action.startsWith('order'))) {
+      const pointOrder = this.store.get(`SELECT * FROM point_orders WHERE order_id = ? COLLATE NOCASE`, [String(itemId)]);
+      if (pointOrder) {
+        return await this.checkPointOrder(pointOrder.id);
+      }
+    }
+
+    if (itemId && eventType === 'subscription_preapproval') {
+      const sub = this.store.get(`SELECT * FROM mp_subscriptions WHERE preapproval_id = ?`, [String(itemId)]);
+      if (sub) {
+        return await this.syncMpSubscription(sub.id);
+      }
+      return { ignored: true, reason: 'subscription_not_found' };
+    }
+
+    const isPaymentEvent = !payload?.type || eventType === 'payment' || action.startsWith('payment');
+    if (!itemId || !isPaymentEvent) {
+      return { ignored: true };
+    }
+
+    const charge = this.store.get(
+      `SELECT * FROM gateway_charges WHERE provider = 'mercadopago' AND external_id = ?`,
+      [String(itemId)],
+    );
+    if (charge) {
+      return await this.checkChargeStatus(charge.id);
+    }
+
+    // Verifica se o pagamento pertence a alguma assinatura recorrente do Mercado Pago
+    const mpHeaders = this.getMpAuth();
+    const res = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(itemId))}`, {
+      headers: mpHeaders,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) {
+      const payData = await this.safeJson(res);
+      if (payData?.status === 'approved' && payData?.external_reference) {
+        const checkout = this.store.get('SELECT * FROM gateway_charges WHERE checkout_ref = ?', [String(payData.external_reference)]);
+        if (checkout) return { paid: true, ...await this.settleCheckoutPayment(checkout, payData) };
+        const sub = this.store.get(`SELECT * FROM mp_subscriptions WHERE external_ref = ?`, [String(payData.external_reference)]);
+        if (sub) {
+          const amountCents = Math.round(Number(payData.transaction_amount) * 100);
+          const settled = await this.settleMpSubscriptionPayment({
+            sub,
+            mpPaymentId: itemId,
+            amountCents,
+            method: payData.payment_type_id === 'debit_card' ? 'debit' : 'credit',
+          });
+          return { paid: true, ...settled };
+        }
+      }
+    }
+
+    return { ignored: true, reason: 'charge_not_found' };
+  }
+}

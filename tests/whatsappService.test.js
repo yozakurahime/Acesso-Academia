@@ -1,0 +1,183 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseStore } from '../src/db.js';
+import { WhatsappService, normalizeBrPhone } from '../src/services/whatsappService.js';
+
+test('normalizeBrPhone formata telefones brasileiros e rejeita inválidos', () => {
+  assert.equal(normalizeBrPhone('(11) 99999-8888'), '5511999998888');
+  assert.equal(normalizeBrPhone('011988887777'), '5511988887777');
+  assert.equal(normalizeBrPhone('+55 11 98888-7777'), '5511988887777');
+  assert.equal(normalizeBrPhone('12345'), null);
+  assert.equal(normalizeBrPhone(''), null);
+});
+
+test('WhatsappService enfileira pagamento, vencimento e aluno ausente respeitando deduplicação e limite diário', async () => {
+  const store = await DatabaseStore.create(null);
+  const wa = new WhatsappService(store, { sleepFn: async () => {} });
+
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_notify_payment: '1',
+    whatsapp_notify_due: '1',
+    whatsapp_due_days_before: '2',
+    whatsapp_notify_inactive: '1',
+    whatsapp_inactive_days: '10',
+    whatsapp_daily_limit: '3',
+    whatsapp_window_start: '08:00',
+    whatsapp_window_end: '20:00',
+  });
+
+  assert.equal(wa.isWithinAllowedWindow(store.getSettings(), new Date('2026-11-14T10:00:00')), true);
+  assert.equal(wa.isWithinAllowedWindow(store.getSettings(), new Date('2026-11-14T23:30:00')), false);
+
+  const plan = store.get('SELECT * FROM plans LIMIT 1');
+  const m1 = store.run(
+    `INSERT INTO members (name, phone, plan_id, status, valid_until) VALUES (?, ?, ?, 'active', ?)`,
+    ['João Treino', '11999991111', plan.id, '2026-11-15'],
+  ).lastInsertRowid;
+  const m2 = store.run(
+    `INSERT INTO members (name, phone, plan_id, status, valid_until) VALUES (?, ?, ?, 'active', ?)`,
+    ['Maria Sumida', '11999992222', plan.id, '2026-12-20'],
+  ).lastInsertRowid;
+  const m3 = store.run(
+    `INSERT INTO members (name, phone, plan_id, status, valid_until) VALUES (?, ?, ?, 'active', ?)`,
+    ['Pedro Frequente', '11999993333', plan.id, '2026-12-20'],
+  ).lastInsertRowid;
+
+  // Maria passou há 15 dias; Pedro passou hoje
+  store.run(`INSERT INTO access_logs (member_id, event_code, event_label, occurred_at) VALUES (?, 7, 'Acesso autorizado (FaceID)', '2026-10-29 10:00:00')`, [m2]);
+  store.run(`INSERT INTO access_logs (member_id, event_code, event_label, occurred_at) VALUES (?, 7, 'Acesso autorizado (FaceID)', '2026-11-14 09:00:00')`, [m3]);
+
+  const now = new Date('2026-11-14T10:00:00');
+  const receipt = await wa.enqueuePaymentReceipt({
+    member: store.get('SELECT * FROM members WHERE id = ?', [m1]),
+    payment: { id: 77, amount_cents: 15000 },
+    plan,
+  });
+  assert.ok(receipt);
+  assert.equal(receipt.kind, 'payment');
+  assert.match(receipt.message, /João/);
+  assert.match(receipt.message, /150,00/);
+
+  // Deduplicação do mesmo pagamento
+  const dupReceipt = await wa.enqueuePaymentReceipt({
+    member: store.get('SELECT * FROM members WHERE id = ?', [m1]),
+    payment: { id: 77, amount_cents: 15000 },
+    plan,
+  });
+  assert.equal(dupReceipt, null);
+
+  // Campanhas fora da janela são ignoradas
+  const outside = await wa.runScheduledCampaigns({ now: new Date('2026-11-14T22:00:00') });
+  assert.equal(outside.skippedReason, 'outside_window');
+
+  // Dentro da janela: 1 vencimento (João 2026-11-15) + 1 ausente (Maria 15 dias) -> fecha limite diário = 3 (1+1+1)
+  const inside = await wa.runScheduledCampaigns({ now });
+  assert.equal(inside.dueQueued, 1);
+  assert.equal(inside.inactiveQueued, 1);
+
+  const logs = wa.listLogs(10);
+  assert.equal(logs.length, 3);
+  assert.equal(logs.some((l) => l.member_id === m3), false);
+
+  // Reexecutar não duplica
+  const repeat = await wa.runScheduledCampaigns({ now });
+  assert.equal(repeat.dueQueued, 0);
+  assert.equal(repeat.inactiveQueued, 0);
+});
+
+test('WhatsappService cobre boas-vindas, fila de espera, lembrete de aula, revisão de ficha e win-back', async () => {
+  const store = await DatabaseStore.create();
+  const wa = new WhatsappService(store);
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_daily_limit: '20',
+    whatsapp_window_start: '08:00',
+    whatsapp_window_end: '22:00',
+    gym_name: 'Academia Oxigênio',
+  });
+
+  const now = new Date('2026-11-14T10:00:00');
+  const activeId = store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until) VALUES (?, ?, ?, 'active', '2026-12-10')",
+    ['Lucas Ativo', '10000000101', '11988881001'],
+  ).lastInsertRowid;
+  const inactiveOldId = store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until) VALUES (?, ?, ?, 'blocked', '2026-09-20')",
+    ['Carla Ex', '10000000102', '11988881002'],
+  ).lastInsertRowid;
+
+  // Ficha antiga (> 45 dias)
+  store.run(
+    "INSERT INTO workouts (member_id, title, active, created_at, updated_at) VALUES (?, 'Treino A', 1, '2026-09-01 10:00:00', '2026-09-01 10:00:00')",
+    [activeId],
+  );
+
+  // Aula confirmada para hoje
+  const clsId = store.run("INSERT INTO classes (name, schedule, capacity) VALUES ('Spinning', '19:00', 10)").lastInsertRowid;
+  const bookingId = store.run(
+    "INSERT INTO class_bookings (class_id, member_id, booking_date, status) VALUES (?, ?, '2026-11-14', 'confirmed')",
+    [clsId, activeId],
+  ).lastInsertRowid;
+
+  const welcome = await wa.enqueueWelcomeMessage({
+    member: store.get('SELECT * FROM members WHERE id = ?', [activeId]),
+    inviteCode: 'OXI-1234',
+  });
+  assert.ok(welcome);
+  assert.match(welcome.message, /OXI-1234/);
+  assert.equal(await wa.enqueueWelcomeMessage({ member: store.get('SELECT * FROM members WHERE id = ?', [activeId]) }), null);
+
+  const promoted = await wa.enqueueWaitlistPromotion({
+    booking: store.get('SELECT * FROM class_bookings WHERE id = ?', [bookingId]),
+    member: store.get('SELECT * FROM members WHERE id = ?', [activeId]),
+    classInfo: store.get('SELECT * FROM classes WHERE id = ?', [clsId]),
+  });
+  assert.ok(promoted);
+  assert.match(promoted.message, /Spinning/);
+
+  const campaigns = await wa.runScheduledCampaigns({ now });
+  assert.equal(campaigns.classReminderQueued, 1);
+  assert.equal(campaigns.workoutReviewQueued, 1);
+  assert.equal(campaigns.winBackQueued, 1);
+
+  const logs = wa.listLogs(20);
+  assert.equal(logs.some((l) => l.member_id === inactiveOldId && l.kind === 'winback'), true);
+});
+
+test('WhatsappService aplica opt-out automático, spintax e trava de win-back', async () => {
+  const store = await DatabaseStore.create();
+  const wa = new WhatsappService(store);
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_daily_limit: '40',
+    whatsapp_window_start: '08:00',
+    whatsapp_window_end: '22:00',
+  });
+
+  const mId = store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until) VALUES (?, ?, ?, 'active', '2026-11-15')",
+    ['Marcos OptOut', '10000000201', '11977772001'],
+  ).lastInsertRowid;
+
+  // Spintax funciona no template
+  const rendered = wa.renderTemplate('{Olá|Oi} {primeiro_nome}!', { name: 'Marcos OptOut' });
+  assert.match(rendered, /^(Olá|Oi) Marcos!$/);
+
+  // Enfileira e depois aluno responde SAIR
+  const queued = wa.enqueueMessage({ memberId: mId, phone: '11977772001', kind: 'due_reminder', refKey: 'due:1', message: 'Teste' });
+  assert.ok(queued);
+  assert.equal(wa.handleIncomingText('5511977772001', 'SAIR'), true);
+
+  const memberAfter = store.get('SELECT whatsapp_opt_out FROM members WHERE id = ?', [mId]);
+  assert.equal(memberAfter.whatsapp_opt_out, 1);
+  const logAfter = store.get('SELECT status FROM whatsapp_logs WHERE id = ?', [queued.id]);
+  assert.equal(logAfter.status, 'skipped');
+
+  // Nova campanha automática não enfileira enquanto estiver em opt-out
+  assert.equal(wa.enqueueMessage({ memberId: mId, phone: '11977772001', kind: 'winback', refKey: 'wb:1', message: 'Volte' }), null);
+
+  // Responder VOLTAR reativa
+  assert.equal(wa.handleIncomingText('5511977772001', 'VOLTAR'), true);
+  assert.ok(wa.enqueueMessage({ memberId: mId, phone: '11977772001', kind: 'winback', refKey: 'wb:2', message: 'Volte' }));
+});

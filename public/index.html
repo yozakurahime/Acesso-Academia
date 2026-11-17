@@ -1,0 +1,2278 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07080b" />
+  <title>Academia Oxigênio | Recepção</title>
+  <link rel="icon" href="/oxigenio.jpg" />
+  <link rel="stylesheet" href="/styles.css?v=20261115.14" />
+  <link rel="stylesheet" href="/admin.css?v=20261115.14" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261115.14" />
+</head>
+<body class="workspace-app">
+  <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
+  <div id="loginOverlay" class="login-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <div class="panel login-card">
+      <div class="brand" style="margin-bottom:14px;">
+        <img class="brand-badge" src="/oxigenio.jpg" width="48" height="48" alt="" />
+        <div>
+          <h2 id="loginTitle" style="margin:0;">Academia Oxigênio</h2>
+          <p class="muted" style="margin:2px 0 0;">Acesso restrito ao painel</p>
+        </div>
+      </div>
+      <form id="loginForm" class="form-stack">
+        <label>Usuário
+          <input type="text" id="loginUser" autocomplete="username" value="admin" required />
+        </label>
+        <label>Senha
+          <input type="password" id="loginPass" autocomplete="current-password" required />
+        </label>
+        <p id="loginError" class="muted hidden" style="color:var(--danger,#dc2626);margin:0;"></p>
+        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+      </form>
+    </div>
+  </div>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v2m2-15a3 3 0 0 1 0 6m4 9v-2a5 5 0 0 0-3-4.6"/></symbol>
+    <symbol id="i-cash" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-14 5h3"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m3 7 9-4 9 4v10l-9 4-9-4V7Zm0 0 9 4 9-4m-9 4v10M7.5 5l9 4"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-14 5h4"/></symbol>
+    <symbol id="i-log" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="currentColor"/><circle cx="15" cy="17" r="2" fill="currentColor"/></symbol>
+    <symbol id="i-entry" viewBox="0 0 24 24"><path d="M13 4h6a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-6M3 12h12m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-up-right" viewBox="0 0 24 24"><path d="M6 18 18 6M8 6h10v10"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5m11 0a8 8 0 0 0-13-6m-3 6a8 8 0 0 0 13 6"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3Z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  </svg>
+  <div class="layout">
+    <aside id="workspaceMenu" class="sidebar">
+      <div class="brand">
+        <div class="brand-identity">
+          <img class="brand-badge" src="/oxigenio.jpg" width="48" height="48" alt="" />
+          <div>
+            <h1 id="gymNameTitle">Academia Oxigênio</h1>
+            <p id="deviceStatusText">Control iD + Toletus</p>
+          </div>
+        </div>
+        <button type="button" id="btnCollapseSidebar" class="sidebar-collapse-btn" aria-label="Recolher ou expandir menu lateral" title="Recolher menu"><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+      </div>
+
+      <nav class="nav-menu" aria-label="Navegação principal">
+        <div class="nav-group">
+          <p>Recepção</p>
+          <button class="tab active" data-tab="dashboard" aria-current="page" title="Visão geral"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Visão geral</span></button>
+          <button class="tab" data-tab="members" title="Alunos"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span class="tab-label">Alunos</span></button>
+          <button class="tab" data-tab="logs" title="Controle de acesso"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg><span class="tab-label">Controle de acesso</span></button>
+        </div>
+        <div class="nav-group">
+          <p>Financeiro</p>
+          <button class="tab" data-tab="billing" title="Mensalidades"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg><span class="tab-label">Mensalidades</span></button>
+          <button class="tab" data-tab="cash" title="Caixa"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg><span class="tab-label">Caixa</span></button>
+          <button class="tab" data-tab="products" title="Produtos e PDV"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg><span class="tab-label">Produtos e PDV</span></button>
+          <button class="tab" data-tab="reports" title="Relatórios"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg><span class="tab-label">Relatórios</span></button>
+        </div>
+        <div class="nav-group">
+          <p>Academia</p>
+          <button class="tab" data-tab="classes" title="Turmas e modalidades"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg><span class="tab-label">Turmas e modalidades</span></button>
+          <button class="tab" data-tab="workouts" title="Treinos"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg><span class="tab-label">Treinos</span></button>
+          <button class="tab" data-tab="staff" title="Equipe"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span class="tab-label">Equipe</span></button>
+          <button class="tab" data-tab="settings" title="Configurações"><svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="tab-label">Configurações</span></button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <small id="demoBadge" class="demo-badge hidden">Demonstração · use dados fictícios</small>
+        <div class="hime-pro-badge">
+          <div class="hime-pro-badge-head">
+            <svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg>
+            <span>Oxigênio Liquid Pro</span>
+          </div>
+          <p>Catraca, IA &amp; Recepção ativos</p>
+        </div>
+        <div class="release-controls">
+          <select id="releaseTurnstileId" aria-label="Catraca para liberar" class="hidden" style="width:100%;padding:6px 8px;border-radius:6px;"></select>
+          <select id="releaseDirection" aria-label="Direção da liberação" style="width:100%;padding:6px 8px;border-radius:6px;">
+            <option value="entry">Direção: Entrada</option>
+            <option value="exit">Direção: Saída</option>
+            <option value="both">Direção: Ambos lados</option>
+          </select>
+        </div>
+        <button id="btnRelease" class="btn btn-success btn-block release-button"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg><span data-button-label>Liberar catraca</span><kbd>F9</kbd></button>
+      </div>
+    </aside>
+
+    <div class="workspace-main">
+      <header class="workspace-topbar">
+        <div class="workspace-topbar-left">
+          <button class="btn btn-secondary workspace-menu-toggle" id="workspaceMenuToggle" type="button" aria-controls="workspaceMenu" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>Menu</button>
+          <span id="workspaceLocation">Recepção</span>
+          <button id="workspaceCommandOpen" type="button" class="btn btn-secondary workspace-command-trigger" aria-label="Buscar no painel" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span>Buscar alunos, comandos, páginas...</span><kbd>Ctrl K</kbd></button>
+        </div>
+        <div class="workspace-account">
+          <div class="live-status-pill" title="Servidor local e banco de dados ativos"><span class="live-status-dot"></span><span>Sistema Online</span></div>
+          <a class="workspace-portal-link" href="https://academiaoxigenio.com/aluno" target="_blank" rel="noopener">Portal do aluno <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
+          <button id="btnThemeToggle" type="button" class="btn btn-secondary theme-toggle" aria-pressed="false">Tema escuro</button>
+          <button id="btnLogout" type="button" class="btn btn-secondary hidden">Sair</button>
+        </div>
+      </header>
+    <main id="workspaceContent" class="main-content" tabindex="-1">
+      <div id="toast" class="toast" role="status" aria-atomic="true"></div>
+      <div id="turnstileNotifStack" class="turnstile-notif-stack" aria-live="polite" aria-atomic="false"></div>
+
+      <!-- PAGINA INICIAL -->
+      <section id="tab-dashboard" class="tab-panel active">
+        <div class="page-title">
+          <div><time id="receptionDate" class="reception-date"></time><h2>Visão geral</h2></div>
+          <div class="inline-actions">
+            <button type="button" id="btnRefreshDashboard" class="btn btn-secondary"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-button-label>Atualizar</span></button>
+            <a class="btn btn-secondary display-link" href="/catraca.html" target="_blank" rel="noopener">Tela da catraca <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
+          </div>
+        </div>
+
+        <div class="dashboard-workbench">
+        <div class="reception-hero">
+          <div class="hero-content">
+            <h3>Encontre um aluno</h3>
+            <form id="quickSearchForm" class="quick-search">
+              <div class="quick-search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="quickSearch" aria-label="Nome, CPF ou telefone do aluno" placeholder="Nome, CPF ou telefone" /></div>
+              <button type="submit" class="btn">Buscar aluno <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+            </form>
+          </div>
+        </div>
+          <section class="dashboard-shortcuts" aria-labelledby="shortcutHeading">
+            <h3 id="shortcutHeading">Ações rápidas</h3>
+        <div class="quick-actions">
+          <button type="button" class="quick-action" data-go="billing" data-focus="pMemberSearch"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></span><span>Receber mensalidade</span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <button type="button" class="quick-action" data-go="products" data-focus="saleProduct"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg></span><span>Venda rápida</span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <button type="button" class="quick-action" data-go="members" data-focus="mName"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span><span>Cadastrar aluno</span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        </div>
+          </section>
+        </div>
+
+        <div class="cards overview-cards dashboard-primary">
+          <div class="card card-accent-green">
+            <div class="stat-card-inner">
+              <div>
+                <span class="card-label">Alunos com acesso ativo</span>
+                <strong id="statActive" class="card-value">—</strong>
+                <small class="card-sub">Liberados na catraca</small>
+              </div>
+              <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></div>
+            </div>
+          </div>
+          <div class="card card-accent-red">
+            <div class="stat-card-inner">
+              <div>
+                <span class="card-label">Alunos bloqueados ou pendentes</span>
+                <strong id="statBlocked" class="card-value">—</strong>
+                <small class="card-sub">Vencidos ou inativos</small>
+              </div>
+              <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
+            </div>
+          </div>
+          <div class="card card-accent-orange">
+            <div class="stat-card-inner">
+              <div>
+                <span class="card-label">Recebido hoje</span>
+                <strong id="statToday" class="card-value">—</strong>
+                <small class="card-sub">Entradas do dia</small>
+              </div>
+              <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></div>
+            </div>
+          </div>
+          <div class="card card-accent-orange">
+            <div class="stat-card-inner">
+              <div>
+                <span class="card-label">Recebido no mês</span>
+                <strong id="statMonth" class="card-value">—</strong>
+                <small class="card-sub">Faturamento mensal</small>
+              </div>
+              <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg></div>
+            </div>
+          </div>
+          <div class="card card-accent-amber">
+            <div class="stat-card-inner">
+              <div>
+                <span class="card-label">Caixa atual</span>
+                <strong id="statCash" class="card-value">—</strong>
+                <small class="card-sub">Status do turno</small>
+              </div>
+              <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg></div>
+            </div>
+          </div>
+          <div class="card card-accent-amber">
+            <div class="stat-card-inner">
+              <div>
+                <span class="card-label">Lotação atual</span>
+                <strong id="statOccupancy" class="card-value">—</strong>
+                <small class="card-sub">Na academia agora</small>
+              </div>
+              <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-lower">
+        <div class="panel dashboard-activity">
+          <div class="panel-header">
+            <h2>Passagens recentes</h2>
+            <div class="inline-actions">
+              <button id="btnSyncLogsDash" class="btn btn-secondary btn-sm">Sincronizar catraca</button>
+              <button class="btn btn-secondary btn-sm" data-go="logs">Ver registros</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Pessoa</th><th>Evento</th><th>Horário</th></tr>
+              </thead>
+              <tbody id="dashLogsBody"><tr><td colspan="3" class="empty-cell">Carregando registros…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="dashboard-details">
+          <section class="panel">
+            <div class="panel-header"><h2>Pendências</h2></div>
+            <dl class="dashboard-metrics">
+              <div><dt>Matrículas vencidas</dt><dd id="statExpired">—</dd></div>
+              <div><dt>Cobranças vencidas em aberto</dt><dd id="statOverdue">—</dd></div>
+              <div><dt>Produtos com até 5 unidades</dt><dd id="statLowStock">—</dd></div>
+            </dl>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Academia e catraca</h2></div>
+            <dl class="dashboard-metrics">
+              <div><dt>Integrantes da equipe com acesso</dt><dd id="statTeam">—</dd></div>
+              <div><dt>Turmas cadastradas</dt><dd id="statClasses">—</dd></div>
+              <div><dt>Eventos de acesso hoje</dt><dd id="statAccess">—</dd></div>
+              <div><dt>A uma visita da meta semanal</dt><dd id="statFitnessNear">—</dd></div>
+              <div><dt>Voltaram hoje após 14 dias ou mais</dt><dd id="statFitnessReturn">—</dd></div>
+            </dl>
+          </section>
+        </div>
+        </div>
+        <details class="panel dashboard-visitor">
+          <summary>Registrar visitante / Day Use</summary>
+          <form id="visitorForm" class="form-grid">
+            <label>Nome do visitante <input type="text" id="visName" placeholder="Nome completo" required /></label>
+            <label>CPF (opcional) <input type="text" id="visDoc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" /></label>
+            <label>Telefone (opcional) <input type="tel" id="visPhone" placeholder="(11) 99999-9999" /></label>
+            <label>Válido até <input type="date" id="visValidUntil" /></label>
+            <div><button type="submit" class="btn btn-primary">Liberar visitante</button></div>
+          </form>
+        </details>
+      </section>
+
+      <!-- ALUNOS -->
+      <section id="tab-members" class="tab-panel">
+        <div class="page-title"><h2>Alunos</h2><button id="btnNewMember" class="btn btn-primary" type="button" aria-controls="newMemberPanel" aria-expanded="false">Novo aluno</button></div>
+        <div class="panel panel-highlight hidden" id="newMemberPanel">
+          <div class="panel-header">
+            <h2>Novo aluno</h2>
+            <div id="memberWizardSteps" class="wizard-steps" aria-label="Etapas do cadastro">
+              <span class="wizard-step active" data-wizard-step="1">1. Nome</span>
+              <span class="wizard-step" data-wizard-step="2">2. Dados</span>
+              <span class="wizard-step" data-wizard-step="3">3. Modalidade e Plano</span>
+              <span class="wizard-step" data-wizard-step="4">4. Turma</span>
+            </div>
+          </div>
+          <form id="memberForm">
+            <select id="mModality" class="hidden" aria-hidden="true"></select>
+            <select id="mPlan" class="hidden" aria-hidden="true"></select>
+
+            <div id="memberStep1" class="wizard-pane">
+              <p class="muted" style="margin-top:0;">Informe apenas o nome completo para verificar se já existe cadastro.</p>
+              <div class="form-grid">
+                <label>Nome completo <input type="text" id="mName" required autocomplete="off" /></label>
+              </div>
+              <div id="mNameCheckAlert" class="wizard-alert hidden"></div>
+              <div class="wizard-actions">
+                <button type="button" id="btnMemberStep1Next" class="btn btn-primary">Verificar e continuar</button>
+              </div>
+            </div>
+
+            <div id="memberStep2" class="wizard-pane hidden">
+              <div id="mStep2NameLabel" class="wizard-summary"></div>
+              <div class="form-grid">
+                <label>CPF * <input type="text" id="mDoc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required /><small id="mDocFeedback" class="cpf-feedback"></small></label>
+                <label>Data de nascimento <input type="date" id="mBirth" /></label>
+                <label>Telefone / WhatsApp <input type="tel" id="mPhone" autocomplete="tel" /></label>
+                <label>Sexo <select id="mSex">
+                  <option value="">Não informado</option>
+                  <option value="feminino">Feminino</option>
+                  <option value="masculino">Masculino</option>
+                  <option value="outro">Outro</option>
+                </select></label>
+              </div>
+              <div class="wizard-actions">
+                <button type="button" id="btnMemberStep2Back" class="btn btn-secondary">Voltar</button>
+                <button type="button" id="btnMemberStep2Next" class="btn btn-primary">Continuar para modalidade e plano</button>
+              </div>
+            </div>
+
+            <div id="memberStep3" class="wizard-pane hidden">
+              <div id="memberPartnerPicker" class="plan-picker" style="margin-top:0;padding-top:0;border-top:0;margin-bottom:14px;">
+                <p class="plan-picker-title">Tipo de vínculo</p>
+                <input type="hidden" id="mPartnerProvider" value="" />
+                <div id="memberPartnerPills" class="modality-pills">
+                  <button type="button" class="pill-btn active" data-partner="">Plano da Academia</button>
+                  <button type="button" class="pill-btn" data-partner="wellhub">Wellhub (Gympass)</button>
+                  <button type="button" class="pill-btn" data-partner="totalpass">TotalPass (CPF)</button>
+                </div>
+                <div id="mWellhubBox" class="form-grid hidden" style="margin-top:10px;">
+                  <label>ID Wellhub (Gympass) * <input type="text" id="mWellhubId" placeholder="Ex: 1234567890" /></label>
+                </div>
+                <p id="mTotalpassNote" class="muted hidden" style="margin:8px 0 0;font-size:13px;">
+                  O acesso TotalPass será liberado automaticamente pelo CPF informado na etapa anterior, sem precisar de matrícula paga.
+                </p>
+              </div>
+              <div id="memberPlanPicker" class="plan-picker" style="margin-top:0;padding-top:0;border-top:0;">
+                <p class="plan-picker-title">Escolha a modalidade</p>
+                <div id="memberModalityPills" class="modality-pills"></div>
+                <p class="plan-picker-title">Escolha o plano ou combo</p>
+                <div id="memberPlanCards" class="plan-cards-grid"></div>
+              </div>
+              <div id="mStep3Summary" class="wizard-summary" style="margin-top:14px;"></div>
+              <div class="wizard-actions">
+                <button type="button" id="btnMemberStep3Back" class="btn btn-secondary">Voltar</button>
+                <button type="button" id="btnMemberStep3Next" class="btn btn-primary">Continuar para turma</button>
+              </div>
+            </div>
+
+            <div id="memberStep4" class="wizard-pane hidden">
+              <div id="mStep4Summary" class="wizard-summary"></div>
+              <div class="form-grid">
+                <label>Turma <select id="mClass" disabled></select></label>
+              </div>
+              <p id="mClassHint" class="muted" style="margin:6px 0 0;font-size:13px;"></p>
+              <div class="wizard-actions">
+                <button type="button" id="btnMemberStep4Back" class="btn btn-secondary">Voltar</button>
+                <button type="submit" id="btnMemberSubmit" class="btn btn-success">Confirmar e ir para pagamento</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Lista de Alunos</h2>
+            <input type="search" id="memberSearch" class="search-input" aria-label="Buscar por nome, CPF ou telefone" placeholder="Buscar por nome, CPF ou telefone" />
+          </div>
+          <div id="memberFilterChips" class="filter-chips">
+            <button type="button" class="chip active" data-filter="all">Todos</button>
+            <button type="button" class="chip" data-filter="active">Ativos</button>
+            <button type="button" class="chip" data-filter="blocked">Bloqueados</button>
+            <button type="button" class="chip" data-filter="pending">Pendentes</button>
+            <button type="button" class="chip" data-filter="noface">Sem FaceID</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Aluno</th>
+                  <th>Modalidade / Plano</th>
+                  <th>Vencimento</th>
+                  <th>FaceID</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="membersBody"></tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <span id="membersCounter" class="muted" role="status">Carregando…</span>
+            <button id="btnLoadMoreMembers" type="button" class="btn btn-secondary btn-sm hidden">Mostrar mais (+50)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTROLE DE CAIXA -->
+      <section id="tab-cash" class="tab-panel">
+        <div class="page-title">
+          <div class="operations-heading"><h2>Caixa</h2><p>Abertura, conferência e histórico dos turnos.</p></div>
+          <div class="inline-actions">
+            <button type="button" class="btn btn-primary btn-sm" data-switch-tab="billing">Receber mensalidade</button>
+          </div>
+        </div>
+
+        <div class="panel" id="cashPanel">
+          <div class="panel-header">
+            <h2>Turno atual</h2>
+            <span id="cashBadge" class="badge badge-pending">Fechado</span>
+          </div>
+          <div id="cashClosedView">
+            <div id="cashOpeningNotice" class="alert-banner hidden" role="status">Caixa fechado. Informe o operador e o saldo inicial para continuar o recebimento.</div>
+            <form id="openCashForm" class="form-grid">
+              <label>Atendente / Operador
+                <select id="openCashStaff"></select>
+              </label>
+              <label>Saldo Inicial (R$)
+                <input type="number" step="0.01" id="openCashAmount" value="0.00" required />
+              </label>
+              <label>Observação
+                <input type="text" id="openCashNotes" placeholder="Turno manhã/tarde..." />
+              </label>
+              <button type="submit" class="btn btn-success">Abrir Caixa</button>
+            </form>
+          </div>
+          <div id="cashOpenView" class="hidden">
+            <div class="cards">
+              <div class="card"><span class="card-label">Abertura</span><strong id="cashOpeningVal" class="card-value">R$ 0,00</strong></div>
+              <div class="card"><span class="card-label">Entradas em todas as formas</span><strong id="cashInVal" class="card-value">R$ 0,00</strong></div>
+              <div class="card"><span class="card-label">Saídas / Sangrias</span><strong id="cashOutVal" class="card-value">R$ 0,00</strong></div>
+              <div class="card"><span class="card-label">Dinheiro esperado na gaveta</span><strong id="cashExpectedVal" class="card-value">R$ 0,00</strong></div>
+            </div>
+            <p id="cashMethodsSummary" class="muted"></p>
+            <div class="grid-2 cash-operation-forms">
+              <form id="cashMovementForm" class="form-stack">
+                <h3>Suprimento ou sangria</h3>
+                <select id="movType" aria-label="Tipo de movimentação">
+                  <option value="in">Suprimento (Entrada)</option>
+                  <option value="out">Sangria (Retirada)</option>
+                </select>
+                <input type="number" step="0.01" id="movAmount" aria-label="Valor da movimentação (R$)" placeholder="Valor (R$)" required />
+                <input type="text" id="movDesc" aria-label="Descrição da movimentação" placeholder="Descrição" required />
+                <button type="submit" class="btn btn-primary">Registrar movimentação</button>
+              </form>
+              <form id="closeCashForm" class="form-stack">
+                <h3>Fechar Caixa</h3>
+                <input type="number" step="0.01" id="closeCashAmount" aria-label="Valor conferido na gaveta (R$)" placeholder="Valor conferido na gaveta (R$)" required />
+                <div id="closeCashDiff" class="summary-pill hidden"></div>
+                <input type="text" id="closeCashNotes" aria-label="Observações do fechamento" placeholder="Observações do fechamento" />
+                <button type="submit" class="btn btn-danger">Encerrar turno</button>
+              </form>
+            </div>
+            <h3 style="margin-top:16px;">Movimentações do turno</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Hora</th><th>Tipo</th><th>Forma</th><th>Descrição</th><th>Valor</th></tr></thead>
+                <tbody id="cashMovementsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Turnos encerrados</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Abertura</th><th>Fechamento</th><th>Operador</th><th>Esperado</th><th>Conferido</th><th>Diferença</th></tr></thead>
+              <tbody id="cashHistoryBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Acompanhar cobranças</h2>
+            <div class="inline-actions">
+              <input type="file" id="receiptFileInput" aria-label="Arquivo do comprovante Pix" accept="image/*,.pdf" />
+              <button type="button" id="btnAnalyzeReceipt" class="btn btn-primary btn-sm">Ler comprovante Pix</button>
+              <button type="button" id="btnRefreshReceipts" class="btn btn-secondary btn-sm">Atualizar</button>
+            </div>
+          </div>
+          <div id="receiptsQueue" class="billing-queue"></div>
+          <div class="payment-monitor-grid">
+            <section>
+              <h3>Online</h3>
+              <div id="pixChargesList" class="billing-queue"></div>
+            </section>
+            <section>
+              <h3>Maquininha Point</h3>
+              <div id="pointOrdersList" class="billing-queue"></div>
+            </section>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2 style="margin:0;">Histórico de mensalidades</h2>
+            <input type="search" id="paymentsSearch" class="search-input" style="max-width:280px;" placeholder="Buscar recibo por aluno ou CPF..." aria-label="Buscar pagamento por aluno ou CPF" />
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Data</th><th>Aluno</th><th>Plano</th><th>Forma</th><th>Valor</th><th>Recibo</th></tr></thead>
+              <tbody id="paymentsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Assinaturas do Mercado Pago</h2>
+            <button type="button" id="btnRefreshSubscriptions" class="btn btn-secondary btn-sm">Atualizar</button>
+          </div>
+          <p class="muted" style="margin-top:0;">Selecione o aluno, plano e valor na aba Recebimento e gere um link de assinatura automática no Mercado Pago.</p>
+          <div class="form-grid" style="margin-bottom:10px;">
+            <label>Ciclo
+              <select id="subCycle">
+                <option value="MONTHLY">Mensal</option>
+                <option value="WEEKLY">Semanal</option>
+                <option value="BIWEEKLY">Quinzenal</option>
+                <option value="BIMONTHLY">Bimestral</option>
+                <option value="QUARTERLY">Trimestral</option>
+                <option value="SEMIANNUALLY">Semestral</option>
+                <option value="YEARLY">Anual</option>
+              </select>
+            </label>
+            <label>E-mail do pagador (opcional)
+              <input type="email" id="subPayerEmail" placeholder="Usa e-mail do cadastro se vazio" />
+            </label>
+          </div>
+          <div class="inline-actions" style="margin-bottom:12px;">
+            <button type="button" id="btnCreateSubscription" class="btn btn-primary btn-sm">Criar Assinatura Mercado Pago</button>
+          </div>
+          <div id="mpSubscriptionsList" class="billing-queue"></div>
+        </div>
+      </section>
+
+      <!-- RECEBIMENTO DE MENSALIDADES -->
+      <section id="tab-billing" class="tab-panel">
+        <div class="page-title">
+          <div>
+            <h2>Receber mensalidade</h2>
+          </div>
+          <div class="inline-actions">
+            <span id="billingCashStatusBadge" class="badge badge-pending">Caixa: Fechado</span>
+            <button type="button" class="btn btn-secondary btn-sm" data-switch-tab="cash">Ver caixa</button>
+          </div>
+        </div>
+
+        <div class="billing-focus-layout" id="billingSection">
+          <div class="panel billing-main-card">
+            <div id="cashClosedAlert" class="alert-banner hidden">Caixa fechado. <button type="button" id="btnOpenCashForPayment" class="btn btn-secondary btn-sm">Abrir caixa</button></div>
+            <form id="paymentForm" class="form-stack billing-steps-form">
+              <!-- PASSO 1: ALUNO E SITUAÇÃO ATUAL -->
+              <div class="billing-step-block">
+                <div class="billing-step-header">
+                  <span class="billing-step-num" aria-hidden="true">1</span>
+                  <div class="billing-step-head-text">
+                    <strong class="billing-step-title">Procura por aluno</strong>
+                    <span class="billing-step-subtitle">Busque por nome, CPF ou #ID para abrir o vencimento ou lançar pagamento futuro</span>
+                  </div>
+                </div>
+                <div id="billingSearchWrap" class="billing-hero-search">
+                  <label for="pMemberSearch" class="billing-hero-label">Nome, CPF ou ID</label>
+                  <div class="billing-hero-input-wrap">
+                    <svg class="icon billing-hero-icon" aria-hidden="true"><use href="#i-search"/></svg>
+                    <input type="search" id="pMemberSearch" class="billing-hero-input" placeholder="Digite para buscar e clique no aluno..." autocomplete="off" required />
+                    <input type="hidden" id="pMember" />
+                  </div>
+                  <ul id="billingMemberResults" class="simple-list hidden" style="margin-top:8px;"></ul>
+                </div>
+                <div id="billingSummary" class="summary-pill" aria-live="polite">Busque e selecione um aluno para abrir o vencimento em aberto ou lançar um pagamento futuro.</div>
+              </div>
+
+              <!-- PASSO 2: VALOR E PLANO (AREA TOTAL DO PAINEL, SO QUANDO SEM MATRICULA OU AO TROCAR) -->
+              <div id="billingStep2" class="billing-step-block hidden">
+                <div class="billing-step-header">
+                  <span class="billing-step-num" aria-hidden="true">2</span>
+                  <div class="billing-step-head-text">
+                    <strong class="billing-step-title">Valor e plano</strong>
+                    <span class="billing-step-subtitle">Selecione a modalidade e o plano desejado</span>
+                  </div>
+                </div>
+                <div id="paymentOptions" class="billing-plan-step">
+                  <select id="pPlan" class="sr-only-select" aria-hidden="true" tabindex="-1"></select>
+                  <div id="billingModalityPills" class="modality-pills billing-modality-pills"></div>
+                  <div id="billingPlanCards" class="plan-cards-grid billing-plan-cards"></div>
+                  <div class="form-grid payment-options" style="margin-top:12px;">
+                    <label>Valor a cobrar (R$)
+                      <input type="number" min="0.01" step="0.01" id="pAmount" required />
+                    </label>
+                    <div class="billing-quick-adjust" id="billingQuickAdjust" style="align-self:end;">
+                      <span class="muted">Ajuste rápido:</span>
+                      <button type="button" class="btn btn-secondary btn-sm" data-billing-discount="flat:10">- R$ 10</button>
+                      <button type="button" class="btn btn-secondary btn-sm" data-billing-discount="pct:10">- 10%</button>
+                      <button type="button" class="btn btn-secondary btn-sm" data-billing-discount="reset">Valor do plano</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="pCreditBox" class="summary-pill hidden" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <label class="checkbox-label" style="display:inline-flex;align-items:center;gap:8px;margin:0;cursor:pointer;">
+                    <input type="checkbox" id="pUseCredit" />
+                    <span>Usar crédito disponível neste pagamento</span>
+                  </label>
+                  <strong id="pCreditInfo">Saldo: R$ 0,00</strong>
+                </div>
+              </div>
+
+              <div class="billing-checkout-grid">
+                <div class="billing-checkout-steps">
+                  <!-- PASSO 3: FORMA DE PAGAMENTO NO BALCÃO -->
+                  <div id="billingStep3" class="billing-step-block hidden">
+                    <div class="billing-step-header">
+                      <span class="billing-step-num" aria-hidden="true">3</span>
+                      <div class="billing-step-head-text">
+                        <strong class="billing-step-title">Forma de pagamento</strong>
+                        <span class="billing-step-subtitle">Escolha como o aluno vai pagar</span>
+                      </div>
+                    </div>
+                    <div id="pSingleMethodWrap" class="billing-method-section">
+                      <div id="pMethodCards" class="billing-method-cards" role="radiogroup" aria-label="Escolha como o aluno vai pagar"></div>
+                      <label class="sr-only-label">Forma de Pagamento
+                        <select id="pMethod" class="sr-only-select"></select>
+                      </label>
+                    </div>
+                    <label class="billing-split-toggle checkbox-label" for="pSplitToggle">
+                      <input type="checkbox" id="pSplitToggle" />
+                      <span><strong>Dividir pagamento</strong> (ex.: Dinheiro + Pix) ou <strong>deixar saldo pendente (fiado)</strong> para pagar depois</span>
+                    </label>
+                    <div id="pSplitBox" class="panel billing-split-box hidden" style="margin:0;padding:12px;background:var(--surface-alt);">
+                      <div class="panel-header" style="margin-bottom:8px;">
+                        <strong>Distribuição do pagamento / Saldo pendente (fiado)</strong>
+                        <span id="pSplitSummary" class="muted">Restante: R$ 0,00</span>
+                      </div>
+                      <div id="pSplitRows" class="form-stack" style="gap:8px;"></div>
+                      <div class="inline-actions" style="margin-top:8px;">
+                        <button type="button" id="btnAddSplitRow" class="btn btn-secondary btn-sm">+ Adicionar forma</button>
+                        <button type="button" id="btnRestToDebt" class="btn btn-secondary btn-sm">Jogar restante p/ saldo pendente (fiado)</button>
+                      </div>
+                      <div class="form-grid" style="margin-top:10px;">
+                        <label>Deixar saldo pendente p/ pagar depois (R$)
+                          <input type="number" min="0" step="0.01" id="pDebtAmount" placeholder="0,00" value="0" />
+                        </label>
+                        <label>Data combinada p/ quitar pendência (opcional)
+                          <input type="date" id="pDebtDueDate" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- COLUNA DIREITA STICKY: RESUMO E CONFIRMAÇÃO -->
+                <aside id="billingCheckoutAsideWrap" class="billing-checkout-aside hidden">
+                  <div class="billing-aside-card" id="billingCheckoutAside">
+                    <div class="billing-aside-head">
+                      <span class="billing-aside-kicker">Resumo da cobrança</span>
+                      <label style="display:flex;align-items:center;gap:6px;margin:4px 0 0;">
+                        <span style="font-size:18px;font-weight:800;">R$</span>
+                        <input type="number" id="billingAsideFinalAmount" min="0.01" step="0.01" value="0.00" aria-label="Valor final a cobrar (R$)" style="font-size:22px;font-weight:800;width:140px;padding:4px 8px;" />
+                      </label>
+                      <strong id="billingAsideTotal" class="billing-aside-total hidden">R$ 0,00</strong>
+                    </div>
+                    <dl class="billing-aside-rows">
+                      <div><dt>Aluno</dt><dd id="billingAsideMember">Nenhum selecionado</dd></div>
+                      <div><dt>Plano</dt><dd id="billingAsidePlan">—</dd></div>
+                      <div><dt>Nova validade</dt><dd id="billingAsideValidity">—</dd></div>
+                      <div><dt>Forma</dt><dd id="billingAsideMethod">Pix</dd></div>
+                    </dl>
+                    <div id="billingDiffBox" class="billing-aside-extra hidden"></div>
+                    <div id="billingAsideExtra" class="billing-aside-extra hidden"></div>
+                    <div class="billing-aside-actions">
+                      <button type="submit" id="btnSubmitPayment" class="btn btn-primary billing-submit-btn" disabled>Confirmar recebimento</button>
+                      <div class="billing-aside-secondary">
+                        <button type="button" id="btnGeneratePix" class="btn btn-secondary">Gerar Pix</button>
+                        <button type="button" id="btnCreateWhatsAppCheckout" class="btn btn-secondary">WhatsApp</button>
+                        <button type="button" id="btnSendPointOrder" class="btn btn-secondary">Maquininha Point</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="whatsappCheckoutBox" class="panel hidden" aria-live="polite">
+                    <p id="whatsappCheckoutAmount"></p>
+                    <a id="whatsappCheckoutLink" class="btn btn-success" target="_blank" rel="noopener noreferrer">Abrir conversa no WhatsApp</a>
+                  </div>
+                  <div id="pixChargeBox" class="wa-qr-box hidden">
+                    <img id="pixQrImg" alt="QR Code Pix" />
+                    <div class="inline-actions" style="width:100%;margin-top:8px;">
+                      <input type="text" id="pixCopyInput" readonly style="flex:1;" aria-label="Código Pix Copia e Cola" />
+                      <button type="button" id="btnCopyPix" class="btn btn-secondary btn-sm">Copiar</button>
+                      <button type="button" id="btnCheckPixCharge" class="btn btn-success btn-sm">Verificar pagamento</button>
+                    </div>
+                    <p id="pixChargeStatus" class="muted" style="margin:6px 0 0;"></p>
+                  </div>
+                </aside>
+              </div>
+            </form>
+          </div>
+
+          <div id="billingQueuesGrid" class="grid-2 billing-queues-grid hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Vencimentos</h2>
+                <p class="muted">Três dias antes e três dias depois de hoje.</p>
+              </div>
+              <div id="billingQueue" class="billing-queue"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Saldos pendentes</h2>
+              </div>
+              <div id="openDebtsQueue" class="billing-queue"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRODUTOS (PDV) -->
+      <section id="tab-products" class="tab-panel">
+        <div class="page-title"><div class="operations-heading"><h2>Produtos e vendas</h2><p>Venda no balcão e acompanhe o estoque.</p></div></div>
+        <div class="grid-2 operations-pos-grid">
+          <div class="panel">
+            <h2>Nova venda</h2>
+            <div id="saleCashAlert" class="alert-banner hidden">Caixa fechado: a venda será registrada, mas não entrará em nenhum turno de caixa aberto.</div>
+            <form id="saleForm" class="form-stack">
+              <label>Produto <select id="saleProduct" required></select></label>
+              <label>Aluno (opcional)
+                <input type="search" id="saleMemberSearch" list="membersDatalist" placeholder="Consumidor Avulso (digite para buscar aluno)" autocomplete="off" />
+              </label>
+              <label>Quantidade <input type="number" id="saleQty" value="1" min="1" required /></label>
+              <div id="saleTotalPreview" class="summary-pill">Total: R$ 0,00</div>
+              <label>Forma de Pagamento <select id="saleMethod"></select></label>
+              <button type="submit" class="btn btn-success">Finalizar Venda</button>
+            </form>
+          </div>
+          <div class="panel">
+            <h2>Novo produto</h2>
+            <form id="productForm" class="form-stack">
+              <label>Nome <input type="text" id="prodName" placeholder="Ex: Garrafa Térmica" required /></label>
+              <label>Categoria <input type="text" id="prodCategory" placeholder="Bebidas / Suplementos" /></label>
+              <label>Preço (R$) <input type="number" step="0.01" id="prodPrice" required /></label>
+              <label>Estoque Inicial <input type="number" id="prodStock" value="10" min="0" required /></label>
+              <button type="submit" class="btn btn-primary">Salvar Produto</button>
+            </form>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h2>Estoque</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Produto</th><th>Categoria</th><th>Preço</th><th>Estoque</th></tr></thead>
+                <tbody id="productsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <h2>Últimas vendas</h2>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Produto</th><th>Qtd</th><th>Total</th><th>Pagamento</th><th>Recibo</th></tr></thead>
+                <tbody id="salesHistoryBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+      <datalist id="membersDatalist"></datalist>
+
+      <!-- TURMAS & MODALIDADES -->
+      <section id="tab-workouts" class="tab-panel">
+        <div class="page-title"><h2>Treinos</h2><button type="button" id="btnNewTemplate" class="btn btn-primary">Novo modelo</button></div>
+        <section class="panel" aria-labelledby="exerciseCatalogTitle">
+          <div class="panel-header">
+            <h2 id="exerciseCatalogTitle">Biblioteca de exercícios</h2>
+            <button type="button" id="btnNewCatalogExercise" class="btn btn-primary">Novo exercício</button>
+          </div>
+          <div class="form-grid">
+            <label>Buscar exercício <input id="exerciseSearch" type="search" placeholder="Nome, grupo ou equipamento" /></label>
+            <label>Equipamento
+              <select id="exerciseEquipmentFilter"><option value="">Todos</option><option value="1">Com equipamento</option><option value="0">Sem equipamento</option></select>
+            </label>
+            <label>Demonstração
+              <select id="exerciseVideoFilter"><option value="">Todas</option><option value="1">Com vídeo</option><option value="0">Sem vídeo</option></select>
+            </label>
+          </div>
+          <p id="exerciseCatalogCount" class="muted" aria-live="polite"></p>
+          <ul id="exerciseCatalogList" class="simple-list"></ul>
+          <div class="inline-actions">
+            <button type="button" id="exercisePrevPage" class="btn btn-secondary btn-sm">Anterior</button>
+            <button type="button" id="exerciseNextPage" class="btn btn-secondary btn-sm">Próxima</button>
+          </div>
+        </section>
+        <div class="panel">
+          <h2>Modelos de treino</h2>
+          <ul id="workoutTemplatesList" class="simple-list"></ul>
+        </div>
+        <form id="workoutTemplateForm" class="panel form-stack hidden">
+          <input type="hidden" id="templateId" />
+          <div class="form-grid">
+            <label>Nome do modelo <input id="templateTitle" required /></label>
+            <label>Objetivo <input id="templateGoal" /></label>
+            <label>Observações <input id="templateNotes" /></label>
+          </div>
+          <div id="templateRows" class="form-stack"></div>
+          <div class="inline-actions">
+            <button type="button" id="btnAddTemplateExercise" class="btn btn-secondary">Adicionar exercício</button>
+            <button type="submit" class="btn btn-primary">Salvar modelo</button>
+            <button type="button" id="btnCancelTemplate" class="btn btn-secondary">Cancelar</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="tab-classes" class="tab-panel">
+        <div class="page-title"><h2>Turmas & Professores</h2><button type="button" class="btn btn-secondary" data-go="settings" data-expand="settings-classes">Configurar turmas</button></div>
+        <div class="panel">
+          <h2>Turmas Ativas</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Turma</th><th>Modalidade</th><th>Professor</th><th>Horário</th><th>Alunos</th></tr></thead>
+              <tbody id="classesBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Agenda de Aulas &amp; Chamada</h2>
+            <div class="inline-actions">
+              <select id="cbClassSelect" aria-label="Selecionar turma"></select>
+              <input type="date" id="cbDate" aria-label="Data da aula" />
+              <button type="button" id="btnRefreshClassBookings" class="btn btn-secondary btn-sm">Atualizar</button>
+            </div>
+          </div>
+          <form id="cbBookingForm" class="form-grid" style="margin-bottom:12px;align-items:end;">
+            <label>Aluno
+              <input type="search" id="cbMemberSearch" list="membersDatalist" placeholder="Nome ou CPF do aluno..." autocomplete="off" required />
+            </label>
+            <label>Repetir semanalmente (semanas)
+              <input type="number" id="cbWeeks" min="1" max="12" value="1" />
+            </label>
+            <div><button type="submit" class="btn btn-primary btn-sm">Reservar vaga</button></div>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Aluno</th><th>Status</th><th>Ações</th></tr></thead>
+              <tbody id="cbBookingsBody"><tr><td colspan="3" class="muted">Selecione uma turma e data.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Professores cadastrados</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Nome</th><th>Especialidade</th><th>Telefone</th></tr></thead>
+              <tbody id="instructorsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- EQUIPE -->
+      <section id="tab-staff" class="tab-panel">
+        <div class="page-title"><h2>Equipe</h2></div>
+        <div class="panel">
+          <h2>Elevar aluno existente para a equipe</h2>
+          <p class="muted" style="margin-bottom:10px;">Promova um aluno já cadastrado para Funcionário, Professor ou Usuário da equipe, mantendo histórico e FaceID com acesso permanente sem mensalidade.</p>
+          <form id="promoteStudentForm" class="form-grid">
+            <label>Buscar aluno (nome, CPF ou ID)
+              <input type="text" id="promoteStudentQuery" list="promoteStudentOptions" placeholder="Digite nome, CPF ou #ID..." autocomplete="off" required />
+              <datalist id="promoteStudentOptions"></datalist>
+            </label>
+            <label>Novo tipo de acesso
+              <select id="promoteStudentRole" required></select>
+            </label>
+            <button type="submit" class="btn btn-primary" style="align-self:end;">Elevar para equipe</button>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>Novo integrante</h2>
+          <form id="staffForm" class="form-grid">
+            <label>Tipo de acesso <select id="stRole" required></select></label>
+            <label>Nome completo <input type="text" id="stName" required /></label>
+            <label>CPF * <input type="text" id="stDoc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required /><small id="stDocFeedback" class="cpf-feedback"></small></label>
+            <label>Data de nascimento <input type="date" id="stBirth" /></label>
+            <label>Telefone / WhatsApp <input type="tel" id="stPhone" autocomplete="tel" /></label>
+            <label>Sexo <select id="stSex">
+              <option value="">Não informado</option>
+              <option value="feminino">Feminino</option>
+              <option value="masculino">Masculino</option>
+              <option value="outro">Outro</option>
+            </select></label>
+            <button type="submit" class="btn btn-primary">Cadastrar integrante</button>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>Equipe com acesso pelo FaceID</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Integrante</th><th>Tipo</th><th>Telefone</th><th>FaceID</th><th>Ações</th></tr></thead>
+              <tbody id="teamBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <details class="panel settings-section">
+          <summary>Operadores de caixa e professores cadastrados</summary>
+          <p class="muted">Para cadastrar o FaceID de alguém desta lista, use Preparar cadastro. Se a pessoa já tiver perfil facial, ajuste o tipo de acesso nesse perfil.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Nome</th><th>Cadastro</th><th>Telefone</th><th>Ações</th></tr></thead>
+              <tbody id="staffBody"></tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <!-- LOGS -->
+      <section id="tab-logs" class="tab-panel">
+        <div class="page-title">
+          <h2>Controle de acesso</h2>
+          <div class="inline-actions">
+            <input type="search" id="logSearch" class="search-input" aria-label="Filtrar por aluno ou evento" placeholder="Filtrar por aluno ou evento" />
+            <label class="checkbox-label"><input type="checkbox" id="logsAutoRefresh" /> Atualizar auto (15s)</label>
+            <button id="btnSyncLogs" class="btn btn-primary">Sincronizar com Control iD</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h2>Terminal de entrada</h2><a class="btn btn-secondary display-link" href="/catraca.html" target="_blank" rel="noopener">Abrir tela da catraca</a></div>
+          <div id="demoAccess" class="inline-actions hidden"></div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Data/Hora</th><th>ID Equipamento</th><th>Aluno</th><th>Evento</th></tr></thead>
+              <tbody id="logsBody"></tbody>
+            </table>
+          </div>
+          <div class="table-footer">
+            <span id="logsCounter" class="muted" role="status">Carregando…</span>
+            <button id="btnLoadMoreLogs" type="button" class="btn btn-secondary btn-sm hidden">Mostrar mais (+50)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- RELATORIOS E ANALYTICS -->
+      <section id="tab-reports" class="tab-panel">
+        <div class="page-title">
+          <div class="operations-heading"><h2>Relatórios</h2><p>Receita, matrículas e permanência no período.</p></div>
+          <div class="inline-actions">
+            <label style="display:flex;align-items:center;gap:8px;margin:0;">
+              <span>Mês:</span>
+              <input type="month" id="reportMonth" />
+            </label>
+            <button type="button" id="btnRefreshReports" class="btn btn-secondary">Atualizar</button>
+          </div>
+        </div>
+
+        <div class="cards overview-cards">
+          <div class="card card-accent-green"><span class="card-label">Receita Total no Mês</span><strong id="repTotalCents" class="card-value">—</strong><small id="repGrowth" class="muted"></small></div>
+          <div class="card card-accent-orange"><span class="card-label">Mensalidades / Produtos</span><strong id="repSplit" class="card-value">—</strong><small id="repTicket" class="muted"></small></div>
+          <div class="card card-accent-amber"><span class="card-label">Projeção Fim do Mês</span><strong id="repProjectedEnd" class="card-value">—</strong><small id="repOpenReceivables" class="muted"></small></div>
+          <div class="card card-accent-green"><span class="card-label">MRR Estimado (Ativos)</span><strong id="repMrr" class="card-value">—</strong><small class="muted">Receita recorrente mensal</small></div>
+          <div class="card card-accent-orange"><span class="card-label">Permanência Média</span><strong id="repAvgStay" class="card-value">—</strong><small id="repAvgStaySub" class="muted"></small></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Evolução da receita</h2>
+            <span class="muted">Sólido = Realizado · Tracejado = Projeção</span>
+          </div>
+          <div id="repRevenueChart" class="report-chart-wrap"></div>
+        </div>
+
+        <div class="dashboard-details">
+          <section class="panel">
+            <div class="panel-header"><h2>Receita por Forma de Pagamento</h2></div>
+            <div id="repMethodsChart" class="report-bars"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Receita por Plano</h2></div>
+            <div id="repPlansList" class="report-bars"></div>
+          </section>
+        </div>
+
+        <div class="dashboard-details">
+          <section class="panel">
+            <div class="panel-header"><h2>Resumo de Alunos &amp; Retenção</h2></div>
+            <dl class="dashboard-metrics">
+              <div><dt>Alunos ativos</dt><dd id="repStuActive">—</dd></div>
+              <div><dt>Bloqueados / vencidos</dt><dd id="repStuBlocked">—</dd></div>
+              <div><dt>Pendentes</dt><dd id="repStuPending">—</dd></div>
+              <div><dt>Novos no mês</dt><dd id="repStuNew">—</dd></div>
+              <div><dt>Renovações no mês</dt><dd id="repStuRenewed">—</dd></div>
+              <div><dt>Cancelamentos no mês (Churn)</dt><dd id="repStuCanceled">—</dd></div>
+              <div><dt>Permanência média (ativos)</dt><dd id="repStayActive">—</dd></div>
+              <div><dt>Permanência média (saíram)</dt><dd id="repStayCanceled">—</dd></div>
+              <div><dt>Média de pagamentos / aluno</dt><dd id="repAvgPayments">—</dd></div>
+            </dl>
+          </section>
+          <section class="panel">
+            <div class="panel-header"><h2>Ativos por Modalidade</h2></div>
+            <div id="repModalitiesChart" class="report-bars"></div>
+          </section>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Motivos de Cancelamento de Matrícula</h2>
+          </div>
+          <div id="repCancelChart" class="report-bars" style="margin-bottom:16px;"></div>
+
+          <form id="cancelEnrollmentForm" class="form-grid" style="margin-bottom:16px;">
+            <label>Aluno
+              <input type="search" id="cancelMemberSearch" list="membersDatalist" placeholder="Digite o nome ou CPF do aluno..." autocomplete="off" required />
+              <input type="hidden" id="cancelMemberId" />
+            </label>
+            <label>Motivo do cancelamento
+              <select id="cancelReason" required>
+                <option value="Preço / Financeiro">Preço / Financeiro</option>
+                <option value="Falta de tempo">Falta de tempo</option>
+                <option value="Mudança de endereço / cidade">Mudança de endereço / cidade</option>
+                <option value="Saúde / Lesão">Saúde / Lesão</option>
+                <option value="Insatisfação com atendimento ou estrutura">Insatisfação com atendimento ou estrutura</option>
+                <option value="Mudou para outra academia">Mudou para outra academia</option>
+                <option value="Inadimplência">Inadimplência</option>
+                <option value="Outro">Outro</option>
+              </select>
+            </label>
+            <label>Observação (opcional)
+              <input type="text" id="cancelNotes" placeholder="Detalhes adicionais..." />
+            </label>
+            <div style="display:flex;align-items:flex-end;">
+              <button type="submit" class="btn btn-danger">Registrar cancelamento</button>
+            </div>
+          </form>
+
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Data</th><th>Aluno</th><th>Plano</th><th>Motivo</th><th>Observação</th></tr></thead>
+              <tbody id="repCancelBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>DRE do Mês &amp; Cobrança Automática</h2>
+            <button type="button" id="btnAutoCollection" class="btn btn-warning btn-sm">Disparar Cobrança Automática</button>
+          </div>
+          <div id="dreSummary" class="cards overview-cards" style="margin-bottom:0;">
+            <div class="card card-accent-green"><span class="card-label">Receita realizada</span><strong id="dreRevenue" class="card-value">—</strong></div>
+            <div class="card card-accent-red"><span class="card-label">Despesas pagas</span><strong id="dreExpensesPaid" class="card-value">—</strong></div>
+            <div class="card card-accent-amber"><span class="card-label">Despesas pendentes</span><strong id="dreExpensesPending" class="card-value">—</strong></div>
+            <div class="card card-accent-orange"><span class="card-label">Lucro líquido</span><strong id="dreNetProfit" class="card-value">—</strong></div>
+          </div>
+        </div>
+
+        <div class="dashboard-details">
+          <section class="panel">
+            <div class="panel-header"><h2>Contas a Pagar (Despesas)</h2></div>
+            <form id="expenseForm" class="form-grid" style="margin-bottom:12px;">
+              <label>Descrição <input type="text" id="expDesc" placeholder="Ex: Aluguel, Energia" required /></label>
+              <label>Categoria <input type="text" id="expCategory" value="geral" placeholder="geral" /></label>
+              <label>Valor (R$) <input type="number" step="0.01" min="0.01" id="expAmount" required /></label>
+              <label>Vencimento <input type="date" id="expDueDate" required /></label>
+              <label>Obs. <input type="text" id="expNotes" /></label>
+              <div><button type="submit" class="btn btn-primary btn-sm">Lançar despesa</button></div>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Descrição</th><th>Categoria</th><th>Venc.</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead>
+                <tbody id="expensesBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header"><h2>Comissões</h2></div>
+            <form id="commissionForm" class="form-grid" style="margin-bottom:12px;">
+              <label>Profissional <input type="text" id="commStaffName" placeholder="Nome" required /></label>
+              <label>Origem <select id="commSourceType">
+                <option value="personal">Personal / Avaliação</option>
+                <option value="sale">Venda PDV</option>
+                <option value="enrollment">Matrícula</option>
+              </select></label>
+              <label>Valor (R$) <input type="number" step="0.01" min="0.01" id="commAmount" required /></label>
+              <label>Descrição <input type="text" id="commDesc" /></label>
+              <div><button type="submit" class="btn btn-primary btn-sm">Lançar comissão</button></div>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Profissional</th><th>Origem</th><th>Valor</th><th>Status</th><th>Ação</th></tr></thead>
+                <tbody id="commissionsBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- CONFIGURACOES -->
+      <section id="tab-settings" class="tab-panel">
+        <div class="page-title settings-header-bar">
+          <div>
+            <h2>Configurações</h2>
+            <p class="muted" style="margin:2px 0 0;font-size:13px;">Gerencie academia, catracas, planos, WhatsApp, integrações e segurança.</p>
+          </div>
+          <div class="settings-search-wrap">
+            <svg class="icon settings-search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="search" id="settingsSearchInput" class="search-input" aria-label="Buscar configuração" placeholder="Buscar ajuste (ex: pix, catraca, whatsapp, backup)..." />
+            <button type="button" id="btnClearSettingsSearch" class="btn btn-secondary btn-sm hidden">Limpar</button>
+          </div>
+        </div>
+
+        <div class="settings-layout">
+          <nav class="settings-nav" id="settingsNav" aria-label="Categorias de configurações">
+            <button type="button" class="settings-nav-btn active" data-settings-cat="general">
+              <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+              <span><strong>Geral &amp; Academia</strong><small>Dados, regras e pagamentos</small></span>
+            </button>
+            <button type="button" class="settings-nav-btn" data-settings-cat="devices">
+              <svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg>
+              <span><strong>Catracas &amp; Leitores</strong><small>Hardware, testes e tela</small></span>
+            </button>
+            <button type="button" class="settings-nav-btn" data-settings-cat="structure">
+              <svg class="icon" aria-hidden="true"><use href="#i-box"/></svg>
+              <span><strong>Planos &amp; Estrutura</strong><small>Planos, modalidades e turmas</small></span>
+            </button>
+            <button type="button" class="settings-nav-btn" data-settings-cat="whatsapp">
+              <svg class="icon" aria-hidden="true"><use href="#i-log"/></svg>
+              <span><strong>WhatsApp &amp; IA</strong><small>QR Code, anti-ban e Pix IA</small></span>
+            </button>
+            <button type="button" class="settings-nav-btn" data-settings-cat="integrations">
+              <svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg>
+              <span><strong>Pagamentos &amp; Convênios</strong><small>Mercado Pago, Wellhub, TotalPass</small></span>
+            </button>
+            <button type="button" class="settings-nav-btn" data-settings-cat="system">
+              <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>
+              <span><strong>Sistema &amp; Segurança</strong><small>Login, importação, RBAC e backup</small></span>
+            </button>
+          </nav>
+
+          <div class="settings-content" id="settingsContent">
+            <div id="settingsSearchEmpty" class="panel settings-empty hidden">
+              <p class="muted" style="margin:0;">Nenhuma configuração encontrada para essa busca.</p>
+            </div>
+
+            <!-- CATEGORIA: GERAL & ACADEMIA -->
+            <section class="panel settings-card" id="settings-general" data-settings-cat="general" data-settings-keywords="academia nome telefone tolerancia antipassback lotacao maxima catraca toletus control id faceid ip porta modo simulado">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Dados da Academia &amp; Conexão Padrão</h3>
+                  <p class="muted">Identificação da academia, regras de acesso e credenciais padrão de hardware.</p>
+                </div>
+              </div>
+              <form id="settingsForm" class="settings-grouped-form">
+                <div class="settings-subblock">
+                  <h4>Academia &amp; Regras de Acesso</h4>
+                  <div class="form-grid">
+                    <label>Nome da Academia <input type="text" id="sGymName" /></label>
+                    <label>Telefone da Academia <input type="text" id="sGymPhone" /></label>
+                    <label>Tolerância vencimento (dias) <input type="number" id="sTolerance" min="0" /></label>
+                    <label>Antipassback (minutos) <input type="number" id="sAntipassback" min="0" value="0" /></label>
+                    <label>Lotação máxima (0 = ilimitada) <input type="number" id="sMaxCapacity" min="0" value="0" /></label>
+                  </div>
+                </div>
+                <div class="settings-subblock">
+                  <h4>Control iD &amp; Catraca Toletus (Padrão)</h4>
+                  <div class="form-grid">
+                    <label>IP FaceID (Control iD) <input type="text" id="sIp" required /></label>
+                    <label>Porta FaceID <input type="number" id="sPort" required /></label>
+                    <label>Usuário FaceID <input type="text" id="sUser" required /></label>
+                    <label>Senha FaceID <input type="password" id="sPass" /></label>
+                    <label>IP Catraca Toletus <input type="text" id="sToletusIp" required /></label>
+                    <label>Porta Toletus (7878) <input type="number" id="sToletusPort" required /></label>
+                    <label class="checkbox-label"><input type="checkbox" id="sToletusEnabled" /> Usar Catraca Toletus (TCP)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="sMockMode" /> Modo Simulado (sem equipamentos)</label>
+                  </div>
+                </div>
+                <div class="settings-form-actions">
+                  <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel settings-card" id="settings-payment-methods" data-settings-cat="general" data-settings-keywords="formas de pagamento pix dinheiro cartao credito debito link asaas">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Formas de Pagamento</h3>
+                  <p class="muted">Métodos disponíveis no recebimento de mensalidades e vendas no caixa.</p>
+                </div>
+              </div>
+              <form id="pmForm" class="form-grid" style="margin-bottom: 14px;">
+                <input type="text" id="pmName" aria-label="Nome da forma de pagamento" placeholder="Nova forma (ex: Link Asaas)" required />
+                <button type="submit" class="btn btn-primary">Adicionar Forma</button>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Nome</th><th>Código</th><th>Status</th><th>Ação</th></tr></thead>
+                  <tbody id="pmBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- CATEGORIA: CATRACAS & LEITORES -->
+            <div class="settings-ops-grid" data-settings-cat="devices" data-settings-keywords="operacoes catraca testar toletus faceid sincronizar faces bloquear inadimplentes tela monitor">
+              <section class="panel settings-card" data-settings-cat="devices" data-settings-keywords="operacoes catraca testar toletus faceid sincronizar faces bloquear inadimplentes">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Operações Rápidas</h3>
+                    <p class="muted">Testes de comunicação, sincronização biométrica e bloqueio em lote.</p>
+                  </div>
+                </div>
+                <div class="inline-actions">
+                  <button id="btnTestToletus" class="btn btn-secondary">Testar Toletus</button>
+                  <button id="btnTestConn" class="btn btn-secondary">Testar FaceID</button>
+                  <button id="btnSyncAllReaders" type="button" class="btn btn-secondary">Sincronizar Faces em Todos Leitores</button>
+                  <button id="btnCheckExpired" class="btn btn-warning">Bloquear inadimplentes</button>
+                </div>
+              </section>
+
+              <section class="panel settings-card" data-settings-cat="devices" data-settings-keywords="testar tela catraca monitor 2 exibicao preview">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Testar Tela da Catraca</h3>
+                    <p class="muted">Mostra uma mensagem de exemplo no monitor 2 por 6s sem acionar a catraca física.</p>
+                  </div>
+                </div>
+                <form id="turnstilePreviewForm" class="inline-actions">
+                  <label>Estado da tela
+                    <select id="turnstilePreviewState">
+                      <option value="idle">Aguardando identificação</option>
+                      <option value="allowed">Entrada liberada</option>
+                      <option value="denied">Acesso negado</option>
+                      <option value="unrecognized">Face não reconhecida</option>
+                      <option value="error">Falha na catraca</option>
+                      <option value="offline">Servidor indisponível</option>
+                    </select>
+                  </label>
+                  <button type="submit" class="btn btn-primary" style="align-self:end;">Exibir teste</button>
+                </form>
+              </section>
+            </div>
+
+            <section class="panel settings-card" id="settings-devices" data-settings-cat="devices" data-settings-keywords="catracas leitores faciais control id toletus multi equipamentos secbox porta direcao lado livre">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Catracas &amp; Leitores Faciais (Múltiplos Equipamentos)</h3>
+                  <p class="muted">Configure o tempo de liberação, direção padrão, lado livre e vincule múltiplos leitores Control iD às catracas.</p>
+                </div>
+              </div>
+
+              <h4 class="settings-section-title">Catracas</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Protocolo</th>
+                      <th>IP:Porta</th>
+                      <th>Tempo</th>
+                      <th>Direção</th>
+                      <th>Lado Livre</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="turnstilesBody">
+                    <tr><td colspan="8" class="muted">Carregando catracas...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <form id="turnstileForm" class="form-grid" style="margin-top:12px;">
+                <input type="hidden" id="tId" />
+                <label>Nome da catraca <input type="text" id="tName" placeholder="Ex: Catraca Recepção" required /></label>
+                <label>Driver / Protocolo
+                  <select id="tDriver">
+                    <option value="toletus">Toletus (LiteNet2 TCP)</option>
+                    <option value="controlid">Control iD (Relé direto)</option>
+                  </select>
+                </label>
+                <label>IP da catraca <input type="text" id="tIp" placeholder="192.168.100.242" /></label>
+                <label>Porta <input type="number" id="tPort" value="7878" min="1" max="65535" /></label>
+                <label>Tempo de liberação (s) <input type="number" id="tReleaseSeconds" value="5" min="1" max="60" required /></label>
+                <label>Direção padrão
+                  <select id="tDefaultDirection">
+                    <option value="entry">Entrada</option>
+                    <option value="exit">Saída</option>
+                    <option value="both">Ambos os lados</option>
+                  </select>
+                </label>
+                <label>Lado sempre liberado (giro livre)
+                  <select id="tFreeSide">
+                    <option value="none">Nenhum (bloqueado dos dois lados)</option>
+                    <option value="entry">Entrada livre</option>
+                    <option value="exit">Saída livre</option>
+                    <option value="both">Ambos os lados livres</option>
+                  </select>
+                </label>
+                <label class="checkbox-label"><input type="checkbox" id="tActive" checked /> Catraca ativa</label>
+                <div class="inline-actions" style="align-self:end;">
+                  <button type="submit" class="btn btn-primary" id="btnSaveTurnstile">Salvar Catraca</button>
+                  <button type="button" class="btn btn-secondary hidden" id="btnCancelTurnstileEdit">Cancelar</button>
+                </div>
+              </form>
+
+              <hr class="settings-divider" />
+
+              <h4 class="settings-section-title">Leitores Faciais (Control iD)</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>IP:Porta</th>
+                      <th>Direção</th>
+                      <th>Catraca vinculada</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="readersBody">
+                    <tr><td colspan="6" class="muted">Carregando leitores...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <form id="readerForm" class="form-grid" style="margin-top:12px;">
+                <input type="hidden" id="rId" />
+                <label>Nome do leitor <input type="text" id="rName" placeholder="Ex: Leitor Entrada" required /></label>
+                <label>IP do leitor <input type="text" id="rIp" placeholder="192.168.100.10" required /></label>
+                <label>Porta <input type="number" id="rPort" value="80" min="1" max="65535" /></label>
+                <label>Usuário <input type="text" id="rUsername" value="admin" /></label>
+                <label>Senha <input type="password" id="rPassword" placeholder="(inalterada se vazio ao editar)" /></label>
+                <label>Modo de ação
+                  <select id="rActionMode">
+                    <option value="sec_box">SecBox</option>
+                    <option value="door">Porta</option>
+                  </select>
+                </label>
+                <label>SecBox ID <input type="number" id="rSecboxId" value="65793" /></label>
+                <label>Grupo padrão <input type="number" id="rGroupId" value="1" /></label>
+                <label>Direção deste leitor
+                  <select id="rDirection">
+                    <option value="entry">Entrada</option>
+                    <option value="exit">Saída</option>
+                    <option value="both">Ambos os lados</option>
+                  </select>
+                </label>
+                <label>Vincular à catraca
+                  <select id="rTurnstileId">
+                    <option value="">Sem vínculo (usar padrão)</option>
+                  </select>
+                </label>
+                <label class="checkbox-label"><input type="checkbox" id="rActive" checked /> Leitor ativo</label>
+                <div class="inline-actions" style="align-self:end;">
+                  <button type="submit" class="btn btn-primary" id="btnSaveReader">Salvar Leitor</button>
+                  <button type="button" class="btn btn-secondary hidden" id="btnCancelReaderEdit">Cancelar</button>
+                </div>
+              </form>
+            </section>
+
+            <!-- CATEGORIA: PLANOS & ESTRUTURA -->
+            <section class="panel settings-card" id="settings-plans" data-settings-cat="structure" data-settings-keywords="planos combos mensalidade valor duracao horario limite semanal">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Planos &amp; Combos</h3>
+                  <p class="muted">Crie planos individuais ou combos multi-modalidades com periodicidade e restrição de horário.</p>
+                </div>
+              </div>
+              <form id="planForm" class="form-grid">
+                <input type="hidden" id="plEditId" />
+                <label>Periodicidade
+                  <select id="plPeriod">
+                    <option value="30" data-label="Mensal">Mensal (30 dias)</option>
+                    <option value="60" data-label="Bimestral">Bimestral (60 dias)</option>
+                    <option value="90" data-label="Trimestral">Trimestral (90 dias)</option>
+                    <option value="365" data-label="Anual">Anual (365 dias)</option>
+                    <option value="" data-label="">Personalizado</option>
+                  </select>
+                </label>
+                <label>Nome do plano <input type="text" id="plName" placeholder="Ex: Jiu-Jitsu + Musculação (Mensal)" required /></label>
+                <label>Duração (dias) <input type="number" id="plDays" value="30" min="1" required /></label>
+                <label>Valor (R$) <input type="number" step="0.01" id="plPrice" placeholder="150.00" required /></label>
+                <label>Horário início (opcional) <input type="time" id="plStartTime" /></label>
+                <label>Horário fim (opcional) <input type="time" id="plEndTime" /></label>
+                <label>Limite semanal (opcional) <input type="number" id="plWeeklyLimit" min="1" max="7" placeholder="Ilimitado" /></label>
+                <div class="inline-actions" style="align-self:end;">
+                  <button type="submit" id="btnSavePlan" class="btn btn-primary">Criar plano</button>
+                  <button type="button" id="btnCancelPlanEdit" class="btn btn-secondary hidden">Cancelar edição</button>
+                </div>
+              </form>
+              <div style="margin-top: 12px;">
+                <span class="muted" style="display:block;margin-bottom:6px;font-size:12px;">Montar combo rápido (marque as modalidades para preencher o nome automaticamente):</span>
+                <div id="plComboModalities" class="filter-chips"></div>
+              </div>
+              <ul id="plansList" class="simple-list"></ul>
+            </section>
+
+            <div class="settings-structure-grid" data-settings-cat="structure" data-settings-keywords="modalidades turmas professores">
+              <section class="panel settings-card" id="settings-modalities" data-settings-cat="structure" data-settings-keywords="modalidades musculacao jiu jitsu crossfit">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Modalidades</h3>
+                    <p class="muted">Atividades oferecidas pela academia.</p>
+                  </div>
+                </div>
+                <form id="modalityForm" class="form-stack">
+                  <input type="hidden" id="modEditId" value="" />
+                  <input type="text" id="modName" aria-label="Nome da modalidade" placeholder="Ex: Jiu-Jitsu" required />
+                  <input type="text" id="modDesc" aria-label="Descrição da modalidade" placeholder="Descrição" />
+                  <div class="inline-actions">
+                    <button type="submit" id="modSubmitBtn" class="btn btn-primary">Adicionar</button>
+                    <button type="button" id="modCancelEdit" class="btn btn-secondary hidden">Cancelar</button>
+                  </div>
+                </form>
+                <ul id="modalitiesList" class="simple-list"></ul>
+              </section>
+
+              <section class="panel settings-card" id="settings-classes" data-settings-cat="structure" data-settings-keywords="turmas horarios capacidade">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Turmas</h3>
+                    <p class="muted">Horários e capacidade por modalidade.</p>
+                  </div>
+                </div>
+                <form id="classForm" class="form-stack">
+                  <input type="text" id="clsName" aria-label="Nome da turma" placeholder="Ex: Cross Manhã" required />
+                  <label>Modalidade <select id="clsModality" required></select></label>
+                  <select id="clsInstructor" aria-label="Professor da turma"></select>
+                  <input type="text" id="clsSchedule" aria-label="Horário da turma" placeholder="Seg/Qua/Sex 08:00" required />
+                  <input type="number" id="clsCap" aria-label="Capacidade da turma" value="20" min="1" />
+                  <button type="submit" class="btn btn-primary">Criar Turma</button>
+                </form>
+              </section>
+
+              <section class="panel settings-card" id="settings-instructors" data-settings-cat="structure" data-settings-keywords="professores instrutores especialidade telefone">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Professores</h3>
+                    <p class="muted">Equipe técnica vinculada às turmas.</p>
+                  </div>
+                </div>
+                <form id="instructorForm" class="form-stack">
+                  <input type="text" id="instName" aria-label="Nome do professor" placeholder="Nome do professor" required />
+                  <input type="text" id="instPhone" aria-label="Telefone do professor" placeholder="Telefone" />
+                  <input type="text" id="instSpec" aria-label="Especialidade do professor" placeholder="Especialidade" />
+                  <button type="submit" class="btn btn-primary">Adicionar</button>
+                </form>
+              </section>
+            </div>
+
+            <!-- CATEGORIA: WHATSAPP & IA -->
+            <section class="panel settings-card" id="settings-whatsapp" data-settings-cat="whatsapp" data-settings-keywords="whatsapp qr code mensagens anti-ban limite diario gemini comprovante pix ia">
+              <div class="settings-card-head">
+                <div>
+                  <h3>WhatsApp (QR Code, Automação &amp; IA)</h3>
+                  <p class="muted">Conexão do aparelho, regras anti-ban, modelos de mensagem e leitura automática de comprovantes Pix.</p>
+                </div>
+              </div>
+
+              <div class="wa-status-bar">
+                <div>
+                  <strong>Status:</strong> <span id="waStatusBadge" class="badge badge-neutral">Desconectado</span>
+                  <span id="waPhoneInfo" class="muted"></span>
+                </div>
+                <div class="muted">
+                  Hoje: <strong id="waDailyCounter">0 / 40</strong> · Na fila: <strong id="waQueueCounter">0</strong>
+                </div>
+              </div>
+
+              <div class="inline-actions" style="margin: 12px 0;">
+                <button id="btnWaConnect" type="button" class="btn btn-primary">Conectar / Gerar QR Code</button>
+                <button id="btnWaDisconnect" type="button" class="btn btn-danger hidden">Desconectar</button>
+                <button id="btnWaRefresh" type="button" class="btn btn-secondary">Atualizar status</button>
+                <button id="btnWaRunNow" type="button" class="btn btn-secondary">Verificar vencimentos e ausentes agora</button>
+              </div>
+
+              <div id="waQrBox" class="wa-qr-box hidden">
+                <img id="waQrImg" alt="QR Code WhatsApp" />
+                <p class="muted" style="margin:8px 0 0;">Abra o WhatsApp no celular da academia → Dispositivos conectados → Conectar dispositivo e aponte para o QR Code.</p>
+              </div>
+
+              <form id="whatsappForm" class="settings-grouped-form" style="margin-top: 14px;">
+                <div class="settings-subblock">
+                  <h4>Gatilhos Automáticos</h4>
+                  <div class="settings-toggle-grid">
+                    <label class="checkbox-label"><input type="checkbox" id="waEnabled" /> Ativar envios automáticos</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyPayment" /> Confirmar pagamento efetuado</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyDue" /> Avisar próximo do vencimento</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyInactive" /> Chamar de volta aluno sem treinar</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyWelcome" /> Boas-vindas com link do Portal (matrícula)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyWorkoutReview" /> Lembrete de revisão de ficha/avaliação (45d)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyWinback" /> Reativação de ex-alunos (30–90 dias)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyClassReminder" /> Lembrete de aula reservada no dia</label>
+                    <label class="checkbox-label"><input type="checkbox" id="waNotifyWaitlist" /> Avisar aluno promovido da fila de espera</label>
+                  </div>
+                </div>
+
+                <div class="settings-subblock">
+                  <h4>Limites &amp; Janela de Envio (Anti-ban)</h4>
+                  <div class="form-grid">
+                    <label>Avisar vencimento (dias antes) <input type="number" id="waDueDays" min="0" max="7" value="1" /></label>
+                    <label>Considerar ausente após (dias) <input type="number" id="waInactiveDays" min="3" max="90" value="10" /></label>
+                    <label>Limite diário anti-ban <input type="number" id="waDailyLimit" min="1" max="100" value="40" /></label>
+                    <label>Intervalo mínimo entre envios (seg) <input type="number" id="waMinDelay" min="10" max="120" value="15" /></label>
+                    <label>Horário início <input type="time" id="waWindowStart" value="08:00" /></label>
+                    <label>Horário fim <input type="time" id="waWindowEnd" value="20:00" /></label>
+                  </div>
+                </div>
+
+                <div class="settings-subblock">
+                  <h4>Modelos de Mensagem</h4>
+                  <div class="form-stack">
+                    <label>Modelo: Pagamento confirmado <input type="text" id="waTplPayment" /></label>
+                    <label>Modelo: Lembrete de vencimento <input type="text" id="waTplDue" /></label>
+                    <label>Modelo: Chamar de volta (ausente) <input type="text" id="waTplInactive" /></label>
+                  </div>
+                  <div class="wa-placeholders-bar">
+                    <span class="muted" style="font-size:12px;">Clique para inserir variável:</span>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{saudacao}">{saudacao}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{primeiro_nome}">{primeiro_nome}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{nome}">{nome}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{plano}">{plano}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{valor}">{valor}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{vencimento}">{vencimento}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{dias_sem_vir}">{dias_sem_vir}</button>
+                    <button type="button" class="wa-placeholder-chip" data-placeholder="{academia}">{academia}</button>
+                  </div>
+                </div>
+
+                <div class="settings-subblock">
+                  <h4>Leitura de Comprovantes com IA (Gemini &amp; Pix)</h4>
+                  <label class="checkbox-label" style="margin-bottom:8px;"><input type="checkbox" id="waReceiptEnabled" /> Ler comprovantes recebidos no WhatsApp (IA)</label>
+                  <p class="muted" style="margin:0 0 10px;font-size:12px;">Os comprovantes analisados ficam pendentes até a conferência do crédito no banco.</p>
+                  <div class="form-grid">
+                    <label>Chave API Gemini <input type="password" id="waGeminiKey" placeholder="AIza..." /></label>
+                    <label>Modelo Gemini <input type="text" id="waGeminiModel" value="gemini-3.8-flash" placeholder="gemini-3.8-flash" /></label>
+                    <label>Nome/Titular Pix esperado <input type="text" id="waPixName" placeholder="Ex: Academia Oxigênio" /></label>
+                    <label>Chave Pix esperada (opcional) <input type="text" id="waPixKey" placeholder="CNPJ, telefone ou e-mail Pix" /></label>
+                  </div>
+                </div>
+
+                <div class="settings-form-actions">
+                  <button type="submit" class="btn btn-primary">Salvar regras do WhatsApp</button>
+                </div>
+              </form>
+
+              <hr class="settings-divider" />
+
+              <div class="inline-actions" style="margin-bottom: 14px;">
+                <input type="tel" id="waTestPhone" aria-label="Número para teste de WhatsApp" placeholder="Número para teste (ex: 11999998888)" />
+                <button id="btnWaTest" type="button" class="btn btn-secondary">Enviar mensagem de teste</button>
+              </div>
+
+              <h4 class="settings-section-title">Últimos registros do WhatsApp</h4>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Data/Hora</th><th>Aluno / Número</th><th>Tipo</th><th>Status</th></tr></thead>
+                  <tbody id="waLogsBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- CATEGORIA: PAGAMENTOS & CONVENIOS -->
+            <section class="panel settings-card" id="settings-gateways" data-settings-cat="integrations" data-settings-keywords="pagamentos mercado pago point smart maquininha pdv webhook">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Pagamentos (Mercado Pago &amp; Point Smart)</h3>
+                  <p class="muted">Credenciais de checkout online, maquininha Point Smart e webhooks automáticos.</p>
+                </div>
+              </div>
+              <form id="gatewaysForm" class="form-grid">
+                <label>Mercado Pago — Access Token online <input type="password" id="gwMpToken" placeholder="APP_USR-..." /></label>
+                <label>Mercado Pago — Access Token da Point (opcional) <input type="password" id="gwMpPointToken" placeholder="Usa o token online se vazio" /></label>
+                <label>Mercado Pago Point — ID da Maquininha <input type="text" id="gwMpPointTerminalId" placeholder="Ex: NEWLAND_N950__..." /></label>
+                <label>Chave secreta do webhook online <input type="password" id="gwMpWebhookSecret" autocomplete="new-password" /></label>
+                <label>Chave secreta do webhook da Point (opcional) <input type="password" id="gwMpPointWebhookSecret" autocomplete="new-password" /></label>
+                <div style="align-self:end;">
+                  <button type="submit" class="btn btn-primary">Salvar credenciais de pagamento</button>
+                </div>
+              </form>
+              <div class="inline-actions" style="margin-top:12px;">
+                <button type="button" id="btnListMpTerminals" class="btn btn-secondary btn-sm">Buscar maquininhas Point</button>
+                <button type="button" id="btnEnablePointPdv" class="btn btn-secondary btn-sm">Ativar modo PDV na maquininha</button>
+              </div>
+              <div id="mpTerminalsList" class="billing-queue" style="margin-top:10px;"></div>
+              <p class="muted" style="margin-top:10px;font-size:12px;">
+                Webhook automático do Mercado Pago: <code>POST /api/webhooks/mercadopago</code>.
+              </p>
+            </section>
+
+            <section class="panel settings-card" id="settings-partners" data-settings-cat="integrations" data-settings-keywords="convenios wellhub gympass totalpass checkin webhook">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Convênios: Wellhub (Gympass) e TotalPass</h3>
+                  <p class="muted">Alunos vinculados ao Wellhub (por ID Wellhub) ou TotalPass (por CPF) acessam a catraca sem precisar de matrícula paga na academia.</p>
+                </div>
+              </div>
+              <form id="partnersForm" class="form-grid">
+                <label class="checkbox-label"><input type="checkbox" id="sWellhubEnabled" /> Ativar Wellhub (Gympass)</label>
+                <label class="checkbox-label"><input type="checkbox" id="sWellhubRequireCheckin" /> Exigir check-in diário do Wellhub na catraca</label>
+                <label>Gym ID (Wellhub) <input type="text" id="sWellhubGymId" placeholder="Opcional (para API Wellhub)" /></label>
+                <label>API Key / Token (Wellhub) <input type="password" id="sWellhubApiKey" placeholder="Opcional" /></label>
+                <label>Webhook Secret (Wellhub) <input type="password" id="sWellhubWebhookSecret" placeholder="Opcional" /></label>
+                <label class="checkbox-label"><input type="checkbox" id="sTotalpassEnabled" /> Ativar TotalPass</label>
+                <label class="checkbox-label"><input type="checkbox" id="sTotalpassRequireCheckin" /> Exigir check-in diário do TotalPass na catraca</label>
+                <label>Place API Key (TotalPass) <input type="text" id="sTotalpassGymId" placeholder="Ex: 8ee8fec2-172e-..." /></label>
+                <label>Partner API Key / Token (TotalPass) <input type="password" id="sTotalpassApiToken" placeholder="Opcional" /></label>
+                <label>Webhook Secret (TotalPass) <input type="password" id="sTotalpassWebhookSecret" placeholder="Opcional" /></label>
+                <div style="align-self:end;"><button type="submit" class="btn btn-primary">Salvar Convênios</button></div>
+              </form>
+              <p class="muted" style="margin:10px 0 0;font-size:12px;">
+                Webhook Wellhub: <code>/api/webhooks/wellhub</code> · Webhook TotalPass: <code>/api/webhooks/totalpass</code>
+              </p>
+            </section>
+
+            <!-- CATEGORIA: SISTEMA & SEGURANCA -->
+            <section class="panel settings-card" id="settings-auth" data-settings-cat="system" data-settings-keywords="seguranca login senha acesso externo cloudflare">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Segurança &amp; Login (Acesso Externo / Cloudflare)</h3>
+                  <p class="muted">Ative o login por usuário e senha antes de expor o sistema pelo domínio <code>academiaoxigenio.com</code>. Webhooks e catraca continuam funcionando normalmente.</p>
+                </div>
+              </div>
+              <form id="authForm" class="form-grid">
+                <label class="checkbox-label"><input type="checkbox" id="authEnabled" /> Exigir login para acessar o sistema</label>
+                <label>Usuário <input type="text" id="authUsername" value="admin" required /></label>
+                <label>Nova senha <input type="password" id="authPassword" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" /></label>
+                <label>Confirmar senha <input type="password" id="authPasswordConfirm" autocomplete="new-password" placeholder="Repita a senha" /></label>
+                <div style="align-self:end;">
+                  <button type="submit" class="btn btn-primary">Salvar segurança</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel settings-card" id="settings-import" data-settings-cat="system" data-settings-keywords="importar dados sca control id arquivo xls html faces usuarios">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Importar Dados (SCA e Control iD)</h3>
+                  <p class="muted">Importe os arquivos exportados do SCA Gerencia (Alunos, Usuários, Professores em .xls/.html) ou puxe os usuários/faces já cadastrados no Control iD.</p>
+                </div>
+              </div>
+              <div class="inline-actions" style="flex-wrap: wrap; gap: 12px;">
+                <input type="file" id="scaFileInput" aria-label="Arquivo exportado do SCA" accept=".html,.htm,.xls" />
+                <button id="btnImportSca" type="button" class="btn btn-primary">Importar Arquivo SCA</button>
+                <button id="btnSyncControlIdUsers" type="button" class="btn btn-secondary">Puxar Usuários/Faces do Control iD</button>
+              </div>
+              <p id="importResult" class="muted" style="margin-top: 10px;"></p>
+            </section>
+
+            <section class="panel settings-card" id="settings-rbac" data-settings-cat="system" data-settings-keywords="usuarios permissoes rbac recepcao professor administrador">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Usuários &amp; Permissões (RBAC)</h3>
+                  <p class="muted">Gerencie contas de acesso da recepção, professores e administradores.</p>
+                </div>
+              </div>
+              <form id="rbacUserForm" class="form-grid" style="margin-bottom:12px;">
+                <label>Usuário <input type="text" id="rbacUsername" required autocomplete="off" /></label>
+                <label>Senha <input type="password" id="rbacPassword" minlength="8" maxlength="128" required autocomplete="new-password" /></label>
+                <label>Perfil <select id="rbacRole">
+                  <option value="reception">Recepção</option>
+                  <option value="instructor">Professor</option>
+                  <option value="admin">Administrador</option>
+                </select></label>
+                <div style="align-self:end;"><button type="submit" class="btn btn-primary">Criar usuário</button></div>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Usuário</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead>
+                  <tbody id="rbacUsersBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel settings-card" id="settings-audit" data-settings-cat="system" data-settings-keywords="auditoria acoes historico logs">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Auditoria de Ações</h3>
+                  <p class="muted">Registro das operações críticas realizadas no sistema.</p>
+                </div>
+                <button type="button" id="btnRefreshAudit" class="btn btn-secondary btn-sm">Atualizar auditoria</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>Detalhes</th></tr></thead>
+                  <tbody id="auditLogsBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="panel settings-card" id="settings-backup" data-settings-cat="system" data-settings-keywords="backup banco de dados restaurar download">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Backup do Banco de Dados</h3>
+                  <p class="muted">Gere e baixe cópias de segurança do banco de dados.</p>
+                </div>
+                <div class="inline-actions">
+                  <span id="backupLastAt" class="muted" style="font-size:12px;"></span>
+                  <button type="button" id="btnCreateBackup" class="btn btn-primary btn-sm">Gerar backup agora</button>
+                </div>
+              </div>
+              <ul id="backupsList" class="simple-list"></ul>
+              <hr style="margin:16px 0;border:0;border-top:1px solid var(--border);" />
+              <div>
+                <div class="settings-card-head" style="margin-bottom:10px;">
+                  <div>
+                    <h4 style="margin:0;">Backup Automático na Nuvem (Google Drive)</h4>
+                    <p class="muted" style="margin-top:4px;">Envia automaticamente todo backup diário (21:30) e manuais para o Google Drive da academia.</p>
+                  </div>
+                  <span id="gdriveBackupStatus" class="muted" style="font-size:12px;"></span>
+                </div>
+                <form id="gdriveBackupForm" class="form-grid">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="gdriveEnabled" />
+                    Ativar envio automático para o Google Drive
+                  </label>
+                  <label>Modo de envio
+                    <select id="gdriveMode">
+                      <option value="api">Google Drive API (nuvem direta)</option>
+                      <option value="local">Pasta do Google Drive no computador</option>
+                    </select>
+                  </label>
+                  <label id="gdriveLocalDirWrap" class="hidden">Pasta sincronizada do Google Drive no PC
+                    <input type="text" id="gdriveLocalDir" placeholder="Ex: G:\Meu Drive\Backups Academia Oxigenio" />
+                  </label>
+                  <div id="gdriveApiFields" class="form-grid" style="grid-column:1 / -1;">
+                    <label>ID da pasta no Google Drive (opcional)
+                      <input type="text" id="gdriveFolderId" placeholder="Ex: 1AbCdEfGhIjKlMnOpQrStUvWxYz" />
+                    </label>
+                    <label>OAuth2 Client ID
+                      <input type="text" id="gdriveClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off" />
+                    </label>
+                    <label>OAuth2 Client Secret
+                      <input type="password" id="gdriveClientSecret" placeholder="Preencha para atualizar" autocomplete="off" />
+                    </label>
+                    <label>OAuth2 Refresh Token (preenchido ao conectar)
+                      <input type="password" id="gdriveRefreshToken" placeholder="Preenchido automaticamente ou cole aqui" autocomplete="off" />
+                    </label>
+                    <label style="grid-column:1 / -1;">Ou JSON da Service Account (alternativo ao OAuth2)
+                      <textarea id="gdriveServiceAccount" rows="2" placeholder='{"client_email":"...","private_key":"..."}'></textarea>
+                    </label>
+                  </div>
+                  <div class="inline-actions" style="grid-column:1 / -1;">
+                    <button type="submit" class="btn btn-primary btn-sm">Salvar Google Drive</button>
+                    <button type="button" id="btnGdriveConnect" class="btn btn-secondary btn-sm">Conectar conta Google</button>
+                    <button type="button" id="btnGdriveSyncNow" class="btn btn-secondary btn-sm">Enviar backup para o Drive agora</button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+    </div>
+  </div>
+
+  <!-- MODAL PERFIL DO ALUNO -->
+  <div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="profTitle">
+    <div class="modal-content modal-xl profile-modal-shell">
+      <div class="profile-modal-topbar">
+        <span class="muted" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Ficha do Aluno</span>
+        <button id="btnCloseProfile" class="btn btn-secondary btn-sm">Fechar</button>
+      </div>
+      <div class="profile-shell">
+        <aside class="profile-sidebar-card">
+          <div class="profile-sidebar-hero">
+            <img id="profPhoto" class="profile-photo hidden" alt="Foto do aluno" />
+            <div id="profPhotoEmpty" class="profile-photo-empty">Sem foto</div>
+            <h2 id="profTitle">Perfil do Aluno</h2>
+            <span id="profStatusBadge" class="badge badge-pending">-</span>
+            <p id="profPlanSummary" class="profile-sidebar-sub"></p>
+          </div>
+          <div class="profile-sidebar-info">
+            <div class="profile-info-row">
+              <span class="profile-info-label">E-mail</span>
+              <strong id="profSideEmail">—</strong>
+            </div>
+            <div class="profile-info-row">
+              <span class="profile-info-label">Telefone / WhatsApp</span>
+              <div class="inline-actions" style="gap:6px;">
+                <strong id="profSidePhone">—</strong>
+                <a id="profSideWhatsapp" class="btn btn-success btn-sm hidden" target="_blank" rel="noopener noreferrer" title="Abrir no WhatsApp">WhatsApp</a>
+              </div>
+            </div>
+          </div>
+          <div class="profile-sidebar-actions">
+            <button id="btnProfPay" type="button" class="btn btn-success">Receber Mensalidade</button>
+            <button id="btnProfChangePhoto" type="button" class="btn btn-secondary btn-sm">Alterar Foto / FaceID</button>
+            <button id="btnProfToggleStatus" type="button" class="btn btn-danger btn-sm">Bloquear</button>
+            <button id="btnConvertVisitor" type="button" class="btn btn-primary btn-sm hidden">Converter em Aluno</button>
+            <a href="https://academiaoxigenio.com/aluno" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Portal do Aluno</a>
+          </div>
+        </aside>
+
+        <div class="profile-main-col">
+          <div class="profile-kpi-strip" id="profKpiStrip">
+            <div class="profile-kpi-pill">
+              <span class="profile-kpi-label">Situação</span>
+              <strong id="profKpiStatus">—</strong>
+            </div>
+            <div class="profile-kpi-pill is-debt">
+              <span class="profile-kpi-label">Total em Aberto</span>
+              <strong id="profKpiDebt">R$ 0,00</strong>
+            </div>
+            <div class="profile-kpi-pill is-credit">
+              <span class="profile-kpi-label">Crédito Disponível</span>
+              <strong id="profKpiCredit">R$ 0,00</strong>
+            </div>
+          </div>
+
+          <nav class="profile-tabs" id="profileTabs" role="tablist" aria-label="Seções do perfil do aluno">
+            <button type="button" class="profile-tab-btn" role="tab" aria-selected="false" data-prof-tab="finance">Financeiro <span id="profDebtsCountBadge" class="badge badge-blocked hidden">0</span></button>
+            <button type="button" class="profile-tab-btn" role="tab" aria-selected="false" data-prof-tab="enrollments">Matrículas</button>
+            <button type="button" class="profile-tab-btn" role="tab" aria-selected="false" data-prof-tab="workouts">Treinos</button>
+            <button type="button" class="profile-tab-btn" role="tab" aria-selected="false" data-prof-tab="assessments">Avaliações</button>
+            <button type="button" class="profile-tab-btn active" role="tab" aria-selected="true" data-prof-tab="personal">Dados Pessoais</button>
+          </nav>
+
+      <!-- ABA 1: DADOS PESSOAIS -->
+      <div class="profile-tab-panel" data-prof-tab-panel="personal">
+        <form id="profileForm" class="form-grid">
+          <label>Nome <input type="text" id="profName" required /></label>
+          <label>CPF * <input type="text" id="profDoc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required /><small id="profDocFeedback" class="cpf-feedback"></small></label>
+          <label>Telefone / WhatsApp <input type="tel" id="profPhone" /></label>
+          <label>E-mail <input type="email" id="profEmail" /></label>
+          <label>Data de nascimento <input type="date" id="profBirth" /></label>
+          <label>Sexo <select id="profSex">
+            <option value="">Não informado</option>
+            <option value="feminino">Feminino</option>
+            <option value="masculino">Masculino</option>
+            <option value="outro">Outro</option>
+          </select></label>
+          <label>Contato Emergência <input type="text" id="profEmergency" /></label>
+          <label>Endereço <input type="text" id="profAddress" /></label>
+          <label>Convênio <select id="profPartnerProvider">
+            <option value="">Nenhum (Plano da academia)</option>
+            <option value="wellhub">Wellhub (Gympass)</option>
+            <option value="totalpass">TotalPass (usa CPF)</option>
+          </select></label>
+          <label id="profWellhubWrap" class="hidden">ID Wellhub (Gympass) <input type="text" id="profWellhubId" placeholder="Ex: 1234567890" /></label>
+          <label>Observações <input type="text" id="profNotes" /></label>
+          <div class="inline-actions" style="align-self:end;">
+            <button type="submit" class="btn btn-primary">Salvar Dados</button>
+            <button type="button" id="btnPartnerCheckinNow" class="btn btn-secondary hidden">Registrar check-in hoje</button>
+          </div>
+        </form>
+
+        <div class="grid-2" style="margin-top:16px;">
+          <section class="panel" aria-labelledby="accessRoleTitle">
+            <h3 id="accessRoleTitle">Tipo de acesso ao FaceID</h3>
+            <form id="accessRoleForm" class="form-grid">
+              <label>Tipo de acesso <select id="profAccessRole"></select></label>
+              <div class="inline-actions" style="align-self:end;">
+                <button type="submit" class="btn btn-primary">Salvar tipo de acesso</button>
+                <button type="button" id="btnPromoteToStaff" class="btn btn-secondary hidden">Elevar a Funcionário</button>
+              </div>
+            </form>
+          </section>
+          <details class="panel settings-section">
+            <summary>Conferir vínculo com o Control iD</summary>
+            <p id="profFaceLinkStatus" class="muted"></p>
+            <form id="faceLinkForm" class="form-grid">
+              <label>ID no Control iD <input type="number" id="faceLinkDeviceId" min="1" step="1" required /></label>
+              <button type="submit" class="btn btn-secondary" style="align-self:end;">Conferir e vincular</button>
+            </form>
+          </details>
+        </div>
+
+        <section id="profContractSection" class="panel" style="margin-top:16px;">
+          <h3>PAR-Q &amp; Contrato Digital</h3>
+          <p id="profContractStatus" class="muted"></p>
+          <form id="contractForm" class="form-grid">
+            <label>Assinatura / Nome completo <input type="text" id="contractSignature" placeholder="Nome do aluno ou responsável" required /></label>
+            <div style="align-self:end;"><button type="submit" id="btnSignContract" class="btn btn-primary btn-sm">Registrar assinatura</button></div>
+          </form>
+        </section>
+
+      </div>
+
+      <!-- ABA: AVALIAÇÕES FÍSICAS -->
+      <div class="profile-tab-panel hidden" data-prof-tab-panel="assessments">
+        <section id="profAssessmentsSection" class="panel" aria-labelledby="profAssessmentsTitle">
+          <h3 id="profAssessmentsTitle">Avaliação Física</h3>
+          <form id="assessmentForm" class="form-grid" style="margin-bottom:10px;">
+            <label>Peso (kg) <input type="number" step="0.1" id="assWeight" /></label>
+            <label>Altura (cm) <input type="number" step="0.1" id="assHeight" /></label>
+            <label>% Gordura <input type="number" step="0.1" id="assBodyFat" /></label>
+            <label>Massa magra (kg) <input type="number" step="0.1" id="assMuscle" /></label>
+            <label>Cintura (cm) <input type="number" step="0.1" id="assWaist" /></label>
+            <label>Obs. <input type="text" id="assNotes" /></label>
+            <div style="align-self:end;"><button type="submit" class="btn btn-primary btn-sm">Salvar avaliação</button></div>
+          </form>
+          <ul id="profAssessmentsList" class="simple-list"></ul>
+        </section>
+      </div>
+
+      <!-- ABA: MATRICULAS ATIVAS -->
+      <div class="profile-tab-panel hidden" data-prof-tab-panel="enrollments">
+        <section id="profPlanSection" class="panel" aria-labelledby="planEnrollmentTitle">
+          <div class="prof-enr-toolbar">
+            <div class="prof-enr-filters" id="profEnrFilters" role="tablist" aria-label="Filtrar matrículas">
+              <button type="button" class="prof-enr-filter active" data-enr-filter="active"><span class="prof-enr-dot"></span>Ativas e Pendentes</button>
+              <button type="button" class="prof-enr-filter" data-enr-filter="cancelled"><span class="prof-enr-dot"></span>Canceladas</button>
+              <button type="button" class="prof-enr-filter" data-enr-filter="finished"><span class="prof-enr-dot"></span>Finalizadas</button>
+              <button type="button" class="prof-enr-filter" data-enr-filter="all"><span class="prof-enr-dot"></span>Todas</button>
+            </div>
+            <button type="button" id="btnTogglePlanEnrollmentForm" class="btn btn-primary btn-sm">+ Matrícula</button>
+          </div>
+
+          <div class="table-wrap prof-enr-table-wrap">
+            <table class="prof-enr-table">
+              <thead>
+                <tr>
+                  <th>Plano e Modalidade</th>
+                  <th>Matrícula</th>
+                  <th>Periodicidade</th>
+                  <th style="text-align:right;">Valor</th>
+                </tr>
+              </thead>
+              <tbody id="profEnrollmentsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="profAccessRestrictionSection" class="panel prof-access-card" style="margin-top:16px;" aria-labelledby="profAccessRestrictionTitle">
+          <div class="prof-access-header">
+            <strong id="profAccessRestrictionTitle">Restrição de Acesso</strong>
+            <span id="profAccessFrequencyBadge" class="prof-access-freq">📅 Frequência · Livre</span>
+          </div>
+          <div class="prof-access-week-grid" id="profAccessWeekGrid">
+            <div class="prof-access-day" data-day="0"><span>DOM</span><div class="prof-access-mark"></div></div>
+            <div class="prof-access-day is-allowed" data-day="1"><span>SEG</span><div class="prof-access-mark">✓</div></div>
+            <div class="prof-access-day is-allowed" data-day="2"><span>TER</span><div class="prof-access-mark">✓</div></div>
+            <div class="prof-access-day is-allowed" data-day="3"><span>QUA</span><div class="prof-access-mark">✓</div></div>
+            <div class="prof-access-day is-allowed" data-day="4"><span>QUI</span><div class="prof-access-mark">✓</div></div>
+            <div class="prof-access-day is-allowed" data-day="5"><span>SEX</span><div class="prof-access-mark">✓</div></div>
+            <div class="prof-access-day is-allowed" data-day="6"><span>SÁB</span><div class="prof-access-mark">✓</div></div>
+          </div>
+          <div class="prof-access-footer">
+            <div class="prof-access-footer-icon" aria-hidden="true">↻</div>
+            <div>
+              <strong>Acompanhe todos os acessos</strong>
+              <p class="muted" id="profAccessSummaryNote" style="margin:2px 0 0;font-size:12px;">Saiba quando foi bloqueado e quem liberou o acesso.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="profStudentDetails" class="panel" style="margin-top:16px;" aria-labelledby="enrollmentTitle">
+          <div class="panel-header" style="margin-bottom:6px;">
+            <div>
+              <h3 id="enrollmentTitle" style="margin:0;">Matrículas em Turmas</h3>
+              <p class="muted" style="margin:2px 0 0;font-size:12px;">Vínculo em turmas e horários.</p>
+            </div>
+            <button type="button" id="btnNewEnrollment" class="btn btn-secondary btn-sm">+ Adicionar matrícula</button>
+          </div>
+          <ul id="profClassesList" class="simple-list"></ul>
+          <form id="enrollmentForm" class="form-stack hidden" style="margin-top:12px;">
+            <label>Modalidade <select id="profModality" required></select></label>
+            <label>Turma <select id="profClassSelect" disabled></select></label>
+            <p id="enrollmentHint" class="muted" aria-live="polite"></p>
+            <div class="inline-actions">
+              <button type="submit" class="btn btn-primary btn-sm">Salvar matrícula</button>
+              <button type="button" id="btnCancelEnrollment" class="btn btn-secondary btn-sm">Cancelar</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="profFreezeContractSection" class="panel" style="margin-top:16px;" aria-labelledby="profFreezeTitle">
+          <h3 id="profFreezeTitle">Trancamento / Férias</h3>
+          <p id="profFreezeStatus" class="muted"></p>
+          <form id="freezeForm" class="form-grid">
+            <label>Dias de trancamento (vazio = até destrancar) <input type="number" id="freezeDays" min="1" placeholder="Sem limite" /></label>
+            <label>Motivo <input type="text" id="freezeReason" placeholder="Ex: Férias, viagem" /></label>
+            <div class="inline-actions" style="align-self:end;">
+              <button type="submit" id="btnFreezeMember" class="btn btn-warning btn-sm">Trancar</button>
+              <button type="button" id="btnUnfreezeMember" class="btn btn-success btn-sm hidden">Destrancar</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <!-- ABA 3: FINANCEIRO -->
+      <div class="profile-tab-panel hidden" data-prof-tab-panel="finance">
+        <section id="profOpenDebtsSection" class="panel" aria-labelledby="profOpenDebtsTitle">
+          <div class="panel-header" style="margin-bottom:8px;">
+            <h3 id="profOpenDebtsTitle" style="margin:0;">Contas em aberto (Débitos)</h3>
+            <strong id="profOpenDebtsTotal" class="badge badge-pending">R$ 0,00</strong>
+          </div>
+          <ul id="profOpenDebtsList" class="simple-list"></ul>
+        </section>
+
+        <section id="profCreditSection" class="panel" style="margin-top:16px;" aria-labelledby="profCreditTitle">
+          <div class="panel-header">
+            <h3 id="profCreditTitle" style="margin:0;">Crédito do Aluno (opcional no próximo pagamento)</h3>
+            <strong id="profCreditBalance" class="badge badge-active">Saldo: R$ 0,00</strong>
+          </div>
+          <form id="creditForm" class="form-grid" style="margin-top:8px;">
+            <label>Operação
+              <select id="creditType">
+                <option value="add">Adicionar crédito (+)</option>
+                <option value="remove">Remover / ajustar (-)</option>
+              </select>
+            </label>
+            <label>Valor (R$) <input type="number" id="creditAmount" min="0.01" step="0.01" placeholder="50.00" required /></label>
+            <label>Motivo <input type="text" id="creditReason" placeholder="Ex: Crédito de aula, troco, bônus" /></label>
+            <button type="submit" class="btn btn-primary" style="align-self:end;">Salvar crédito</button>
+          </form>
+          <ul id="profCreditLogsList" class="simple-list" style="margin-top:8px;"></ul>
+        </section>
+
+        <section class="panel" style="margin-top:16px;">
+          <h3>Últimos Pagamentos</h3>
+          <ul id="profPaymentsList" class="simple-list"></ul>
+        </section>
+      </div>
+
+      <!-- ABA 4: TREINOS -->
+      <div class="profile-tab-panel hidden" data-prof-tab-panel="workouts">
+        <section id="profWorkoutsSection" class="panel" aria-labelledby="profWorkoutsTitle">
+          <div class="panel-header" style="flex-wrap:wrap;gap:8px;">
+            <h3 id="profWorkoutsTitle" style="margin:0;">Treinos Ativos (Portal do Aluno)</h3>
+            <div class="inline-actions">
+              <button id="btnStudentInvite" type="button" class="btn btn-secondary btn-sm">Gerar convite do portal</button>
+              <output id="studentInviteCode"></output>
+              <button type="button" id="btnNewWorkout" class="btn btn-primary btn-sm">+ Novo Treino</button>
+            </div>
+          </div>
+
+          <div class="prof-quick-template-bar">
+            <label style="flex:1;min-width:200px;">Adicionar treino predefinido
+              <select id="profQuickTemplateSelect"><option value="">Escolha um modelo predefinido...</option></select>
+            </label>
+            <button type="button" id="btnQuickAddTemplate" class="btn btn-secondary btn-sm" style="align-self:end;">Usar modelo predefinido</button>
+          </div>
+
+          <ul id="profWorkoutsList" class="simple-list"></ul>
+
+          <form id="profFitnessGoalForm" class="inline-actions fitness-goal-form">
+            <label>Meta semanal de visitas <input type="number" id="profFitnessGoal" min="1" max="7" step="1" required /></label>
+            <button type="submit" class="btn btn-secondary btn-sm">Salvar meta</button>
+          </form>
+
+          <form id="workoutForm" class="form-stack hidden" style="margin-top:12px;">
+            <input type="hidden" id="wkEditId" />
+            <div class="inline-actions">
+              <label>Carregar modelo <select id="wkTemplateSelect"></select></label>
+              <button type="button" id="btnUseWorkoutTemplate" class="btn btn-secondary btn-sm">Substituir ficha pelo modelo</button>
+            </div>
+            <div class="form-grid">
+              <label>Título do Treino <input type="text" id="wkTitle" placeholder="Ex: Treino A — Peito e Tríceps" required /></label>
+              <label>Objetivo <input type="text" id="wkGoal" placeholder="Ex: Hipertrofia" /></label>
+              <label>Professor <select id="wkInstructor"></select></label>
+              <label>Observações <input type="text" id="wkNotes" placeholder="Ex: Aquecer 10 min na esteira" /></label>
+            </div>
+            <div>
+              <div class="panel-header" style="margin-bottom:6px;">
+                <strong>Exercícios do Treino</strong>
+                <button type="button" id="btnAddWorkoutEx" class="btn btn-secondary btn-sm">+ Adicionar Exercício</button>
+              </div>
+              <div id="wkExercisesRows" class="form-stack"></div>
+            </div>
+            <div class="inline-actions">
+              <button type="submit" class="btn btn-primary btn-sm">Salvar Treino</button>
+              <button type="button" id="btnCancelWorkout" class="btn btn-secondary btn-sm">Cancelar</button>
+            </div>
+          </form>
+        </section>
+      </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FACEID -->
+  <div id="faceModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="faceModalTitle">
+    <div class="modal-content">
+      <div class="panel-header">
+        <h2 id="faceModalTitle">Cadastrar FaceID</h2>
+        <button id="btnCloseFaceModal" class="btn btn-secondary">Fechar</button>
+      </div>
+      <p class="muted">Capture pela webcam ou escolha uma foto JPEG (até 1 MB).</p>
+      <div class="face-capture-area">
+        <video id="webcamVideo" autoplay playsinline class="hidden"></video>
+        <canvas id="webcamCanvas" class="hidden"></canvas>
+        <img id="facePreview" class="face-preview hidden" alt="Prévia da face" />
+      </div>
+      <div class="inline-actions" style="margin-top: 12px;">
+        <button id="btnStartCam" type="button" class="btn btn-secondary">Abrir Webcam</button>
+        <button id="btnSnapCam" type="button" class="btn btn-primary hidden">Tirar Foto</button>
+        <label class="btn btn-secondary" style="cursor:pointer;">
+          Escolher Arquivo
+          <input type="file" id="faceFileInput" accept="image/jpeg,image/png" hidden />
+        </label>
+        <button id="btnSaveFace" type="button" class="btn btn-success" disabled>Enviar para FaceID</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RECIBO TÉRMICO MP-4200 (80mm) -->
+  <div id="receiptPreviewModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rcpModalTitle">
+    <div class="modal-content" style="max-width:420px;">
+      <div class="panel-header">
+        <div>
+          <h2 id="rcpModalTitle" style="margin:0;">Recibo Térmico · MP-4200</h2>
+          <p class="muted" style="margin:4px 0 0;">Prévia exata em bobina de 80mm</p>
+        </div>
+        <button id="btnCloseReceiptModal" type="button" class="btn btn-secondary btn-sm">Fechar</button>
+      </div>
+      <div style="display:flex;justify-content:center;background:#1e293b;padding:14px;border-radius:10px;margin:10px 0;">
+        <iframe id="rcpPreviewFrame" sandbox="allow-modals" title="Prévia do Recibo 80mm" style="width:76mm;height:360px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;"></iframe>
+      </div>
+      <div class="inline-actions" style="justify-content:space-between;align-items:center;">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="chkAutoPrintReceipt" /> Abrir recibo após pagar/vender
+        </label>
+        <button id="btnPrintReceiptNow" type="button" class="btn btn-primary">Imprimir na MP-4200</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="exerciseCatalogDialog" class="exercise-catalog-dialog" aria-labelledby="exerciseEditTitle">
+    <div class="panel-header">
+      <h2 id="exerciseEditTitle">Exercício</h2>
+      <button type="button" id="exerciseClose" class="btn btn-secondary">Fechar</button>
+    </div>
+    <form id="exerciseEditForm" class="form-stack">
+      <label>Nome <input id="exerciseName" maxlength="120" required /></label>
+      <label>Grupo muscular <input id="exerciseMuscle" maxlength="80" required /></label>
+      <label>Tipo <select id="exerciseUsesEquipment"><option value="0">Sem equipamento</option><option value="1">Com equipamento</option></select></label>
+      <label id="exerciseEquipmentField" class="hidden">Equipamento <input id="exerciseEquipment" maxlength="100" /></label>
+      <label>Orientação de execução <textarea id="exerciseTips" maxlength="1200" rows="3"></textarea></label>
+      <button type="submit" class="btn btn-primary">Salvar exercício</button>
+    </form>
+    <section id="exerciseVideoPanel" class="hidden">
+      <h3>Vídeo de execução</h3>
+      <p class="muted">Grave pelo celular ou escolha um vídeo. O corte e a compressão (720p) rodam direto no aparelho antes de enviar.</p>
+      <div class="inline-actions exercise-video-actions">
+        <button type="button" id="exerciseRecord" class="btn btn-secondary">Gravar execução</button>
+        <button type="button" id="exerciseStop" class="btn btn-primary hidden">Parar gravação</button>
+        <button type="button" id="exerciseChooseVideo" class="btn btn-secondary">Escolher vídeo</button>
+        <input type="file" id="exerciseCameraFile" accept="video/*" capture="environment" hidden />
+        <input type="file" id="exerciseVideoFile" accept="video/*,.mp4,.webm,.mov" hidden />
+      </div>
+      <div class="exercise-video-stage">
+        <video id="exerciseVideoPreview" class="exercise-video hidden" playsinline webkit-playsinline preload="metadata"></video>
+      </div>
+      <div id="exerciseVideoTrimPanel" class="exercise-trim-panel hidden">
+        <div class="exercise-trim-head">
+          <strong>Editar antes de aprovar</strong>
+          <span id="exerciseTrimSummary" class="muted">0.0s – 0.0s</span>
+        </div>
+        <div class="exercise-trim-sliders">
+          <div class="exercise-trim-row">
+            <div class="exercise-trim-label">
+              <span>Início: <strong id="exerciseTrimStartLabel">0.0s</strong></span>
+              <button type="button" id="exerciseSetStartNow" class="btn btn-secondary btn-sm">Marcar início aqui</button>
+            </div>
+            <input type="range" id="exerciseTrimStart" min="0" max="0" step="0.1" value="0" aria-label="Início do corte em segundos" />
+          </div>
+          <div class="exercise-trim-row">
+            <div class="exercise-trim-label">
+              <span>Fim: <strong id="exerciseTrimEndLabel">0.0s</strong></span>
+              <button type="button" id="exerciseSetEndNow" class="btn btn-secondary btn-sm">Marcar fim aqui</button>
+            </div>
+            <input type="range" id="exerciseTrimEnd" min="0" max="0" step="0.1" value="0" aria-label="Fim do corte em segundos" />
+          </div>
+        </div>
+        <div class="exercise-edit-pills">
+          <button type="button" id="exerciseRotateBtn" class="btn btn-secondary btn-sm">Girar 90° (<span id="exerciseRotateLabel">0°</span>)</button>
+          <button type="button" id="exerciseFlipBtn" class="btn btn-secondary btn-sm" aria-pressed="false">Espelhar</button>
+          <button type="button" id="exerciseSpeedBtn" class="btn btn-secondary btn-sm">Velocidade: <span id="exerciseSpeedLabel">1x</span></button>
+          <input type="hidden" id="exerciseVideoRotate" value="0" />
+          <input type="hidden" id="exerciseVideoSpeed" value="1" />
+          <input type="checkbox" id="exerciseVideoFlip" hidden />
+        </div>
+        <div class="inline-actions exercise-video-actions" style="margin-top:10px;">
+          <button type="button" id="exercisePreviewEdit" class="btn btn-secondary btn-sm">Pré-visualizar trecho</button>
+          <button type="button" id="exerciseApplyEdit" class="btn btn-secondary btn-sm">Aplicar corte/compressão</button>
+          <button type="button" id="exerciseDiscardDraft" class="btn btn-secondary btn-sm">Descartar</button>
+        </div>
+      </div>
+      <p id="exerciseVideoStatus" aria-live="polite"></p>
+      <div class="inline-actions exercise-video-actions">
+        <button type="button" id="exerciseSaveVideo" class="btn btn-primary hidden">Aprovar e salvar vídeo</button>
+        <button type="button" id="exerciseRemoveVideo" class="btn btn-danger btn-sm hidden">Remover vídeo cadastrado</button>
+      </div>
+    </section>
+  </dialog>
+
+  <dialog id="debtPayModal" aria-labelledby="debtPayTitle">
+    <div class="modal-content" style="max-width:460px;">
+      <div class="panel-header">
+        <h2 id="debtPayTitle" style="margin:0;">Receber saldo pendente (fiado)</h2>
+        <button type="button" id="btnCloseDebtPayModal" class="btn btn-secondary btn-sm">Fechar</button>
+      </div>
+      <p id="debtPayInfo" class="muted" style="margin:8px 0 12px;"></p>
+      <form id="debtPayForm" class="form-stack">
+        <input type="hidden" id="debtPayId" />
+        <label>Valor a receber agora (R$)
+          <input type="number" min="0.01" step="0.01" id="debtPayAmount" required />
+        </label>
+        <label>Forma de Pagamento (como o aluno está pagando agora)
+          <select id="debtPayMethod"></select>
+        </label>
+        <label>Observação (opcional)
+          <input type="text" id="debtPayNotes" maxlength="120" placeholder="Ex.: Pagou restante na recepção" />
+        </label>
+        <button type="submit" class="btn btn-primary">Confirmar recebimento da pendência</button>
+      </form>
+    </div>
+  </dialog>
+  <div id="newEnrollmentModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="newEnrollmentModalTitle">
+    <div class="modal-content modal-lg" style="max-height:90vh;overflow-y:auto;">
+      <div class="panel-header" style="margin-bottom:14px;">
+        <div>
+          <span class="eyebrow">Matrícula do Aluno</span>
+          <h2 id="newEnrollmentModalTitle" style="margin:4px 0 0;">Nova Matrícula</h2>
+        </div>
+        <button type="button" id="btnCloseNewEnrollment" class="btn btn-secondary btn-sm">Fechar</button>
+      </div>
+
+      <div id="newEnrollmentActiveWarn" class="new-enr-warn hidden">
+        Este cadastro já possui uma matrícula ativa. Ao confirmar, o plano será atualizado.
+      </div>
+
+      <div id="newEnrollmentStep1">
+        <div class="new-enr-section-label">Filtre por modalidade</div>
+        <div id="newEnrModalityPills" class="modality-pills" style="margin-bottom:16px;"></div>
+
+        <div class="new-enr-section-label">Selecione um plano</div>
+        <div id="newEnrPlanCards" class="plan-cards-grid"></div>
+
+        <div class="inline-actions" style="margin-top:16px;justify-content:space-between;">
+          <button type="button" id="btnRemoveNewEnrollment" class="btn btn-danger btn-sm hidden">Remover plano atual</button>
+          <span></span>
+        </div>
+      </div>
+
+      <div id="newEnrollmentStep2" class="hidden">
+        <div id="newEnrSelectedHeader" class="new-enr-step2-header"></div>
+
+        <div class="form-grid" style="margin-top:14px;">
+          <label>Data da matrícula <input type="date" id="newEnrStartDate" /></label>
+          <div class="new-enr-due-box">
+            <span class="muted" style="font-size:12px;">Vencimento calculado</span>
+            <strong id="newEnrDuePreview" style="font-size:15px;color:var(--cyan);">—</strong>
+          </div>
+        </div>
+
+        <div id="newEnrAccessPreview" class="new-enr-rules-card"></div>
+
+        <div class="inline-actions" style="margin-top:16px;justify-content:space-between;">
+          <div class="inline-actions">
+            <button type="button" id="btnConfirmNewEnrollment" class="btn btn-primary">✓ Confirmar Matrícula</button>
+            <button type="button" id="btnBackNewEnrollment" class="btn btn-secondary">← Voltar</button>
+          </div>
+          <button type="button" id="btnCancelNewEnrollment" class="btn btn-secondary">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="workspaceCommands" class="workspace-commands" aria-labelledby="workspaceCommandsTitle">
+    <div class="panel-header">
+      <h2 id="workspaceCommandsTitle">Buscar no painel</h2>
+      <form method="dialog"><button type="submit" class="btn btn-secondary btn-sm">Fechar</button></form>
+    </div>
+    <form id="workspaceCommandForm" class="workspace-command-form">
+      <label for="workspaceCommandInput">Página, nome, CPF ou telefone</label>
+      <input id="workspaceCommandInput" type="search" autocomplete="off" autofocus />
+    </form>
+    <ul id="workspaceCommandResults" class="workspace-command-results"></ul>
+  </dialog>
+  <script src="/exercises.js?v=20261114.2"></script>
+  <script src="/exercise-catalog.js?v=20261114.5"></script>
+  <script src="/receipt-print.js?v=20261115.14"></script>
+  <script src="/app.js?v=20261115.14"></script>
+</body>
+</html>

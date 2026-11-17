@@ -1,0 +1,21 @@
+{
+  "name": "controle-acesso-catraca",
+  "version": "1.0.0",
+  "description": "Sistema local de controle de acesso facial (Control iD + Toletus) e pagamentos para recepcao",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "restart": "reiniciar.bat",
+    "test": "node --test tests"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "sql.js": "^1.12.0"
+  }
+}

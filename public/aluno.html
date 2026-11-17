@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="pt-BR" class="student-root" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#07080b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Portal Oxigênio" />
+  <title>Portal do Aluno — Academia Oxigênio</title>
+  <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css?v=20261115.14" />
+  <link rel="stylesheet" href="/aluno.css?v=20261115.7" />
+</head>
+<body class="student-page">
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <!-- TELA DE LOGIN DO ALUNO -->
+  <main id="studentLoginView" class="student-shell hidden">
+    <aside class="student-login-feature">
+      <div class="student-brand">
+        <img src="/oxigenio.jpg" alt="" width="48" height="48" />
+        <span><strong>Oxigênio</strong><small>Academia</small></span>
+      </div>
+      <div class="student-login-feature-copy">
+        <p>Acompanhe seu treino</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg> Acesse suas fichas de treino.</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 15v-4m5 4V8m5 7V4"/></svg> Acompanhe sua evolução.</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg> Consulte e renove sua matrícula.</li>
+        </ul>
+      </div>
+    </aside>
+    <section class="panel login-card">
+      <div class="student-login-brand">
+        <h1>Portal do Aluno</h1>
+        <p id="stLoginGymName" class="muted">Academia Oxigênio</p>
+      </div>
+      <form id="studentLoginForm" class="form-stack">
+        <label>CPF ou WhatsApp cadastrado
+          <input type="text" id="stLoginIdentifier" autocomplete="username" enterkeyhint="next" required />
+        </label>
+        <div class="password-field">
+          <label for="stLoginSecret">Senha ou código de convite</label>
+          <div class="password-input-wrap">
+            <input type="password" id="stLoginSecret" autocomplete="current-password" enterkeyhint="go" required />
+            <button type="button" class="btn btn-secondary btn-sm password-toggle-btn" data-toggle-password="stLoginSecret" aria-label="Mostrar ou ocultar senha">Mostrar</button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Entrar no Portal</button>
+      </form>
+
+      <details id="stFirstAccessGuide" class="first-access-guide">
+        <summary>Primeiro acesso? Veja como entrar</summary>
+        <ol class="first-access-steps">
+          <li><strong>Identificação:</strong> informe seu <strong>CPF</strong> ou <strong>WhatsApp</strong> cadastrado na academia.</li>
+          <li><strong>Senha inicial:</strong> no primeiro acesso, digite o <strong>código de convite</strong> entregue pela recepção.</li>
+          <li><strong>Próximos acessos:</strong> após entrar, abra a aba <strong>Perfil</strong> para criar sua senha pessoal.</li>
+        </ol>
+      </details>
+
+      <div id="stLoginInstallWrap" class="install-app-login hidden">
+        <button type="button" id="btnLoginInstallApp" class="btn btn-secondary install-app-btn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+          Transformar em app
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- PORTAL AUTENTICADO DO ALUNO -->
+  <div id="studentPortalView" class="student-shell hidden">
+    <aside class="student-rail">
+      <div class="student-brand">
+        <img src="/oxigenio.jpg" alt="" width="48" height="48" />
+        <span><strong>Oxigênio</strong><small>Portal do Aluno</small></span>
+      </div>
+      <nav class="student-tabs" role="tablist" aria-label="Navegação do portal">
+      <button type="button" id="stNavWorkouts" class="student-tab-btn active" role="tab" data-st-tab="workouts" aria-selected="true" aria-controls="stTabWorkouts">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg>Treinos
+      </button>
+      <button type="button" id="stNavProgress" class="student-tab-btn" role="tab" data-st-tab="progress" aria-selected="false" aria-controls="stTabProgress">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 15v-4m5 4V8m5 7V4"/></svg>Progresso
+      </button>
+      <button type="button" id="stNavPayments" class="student-tab-btn" role="tab" data-st-tab="payments" aria-selected="false" aria-controls="stTabPayments">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg>Pagamentos
+      </button>
+      <button type="button" id="stNavProfile" class="student-tab-btn" role="tab" data-st-tab="profile" aria-selected="false" aria-controls="stTabProfile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a7 7 0 0 1 14 0v1"/></svg>Perfil
+      </button>
+      </nav>
+    </aside>
+    <div class="student-content">
+    <header class="student-header">
+      <div class="student-user">
+        <img id="stHeaderAvatar" class="student-avatar hidden" alt="Foto de perfil" />
+        <div id="stHeaderInitials" class="student-avatar">A</div>
+        <div class="student-identity">
+          <div class="inline-actions student-name-row">
+            <h1 id="stMemberName">Aluno</h1>
+            <span id="stStatusBadge" class="badge badge-pending">-</span>
+          </div>
+          <p id="stPlanSummary" class="muted"></p>
+        </div>
+      </div>
+      <div class="inline-actions student-header-actions">
+        <button type="button" id="btnStThemeToggle" class="btn btn-secondary btn-sm" aria-label="Ativar tema escuro" title="Ativar tema escuro">
+          <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.3A8.8 8.8 0 0 1 9.7 3.5a9 9 0 1 0 10.8 10.8Z"/></svg>
+          <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
+        </button>
+        <button type="button" id="btnInstallApp" class="btn btn-secondary btn-sm install-app-btn hidden">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+          Transformar em app
+        </button>
+        <button type="button" id="btnStudentLogout" class="btn btn-secondary btn-sm">Sair</button>
+      </div>
+    </header>
+
+    <section id="stQuickSummary" class="student-quick-summary" aria-label="Resumo rápido do aluno">
+      <div class="student-stat-card" id="stSummaryValidityCard">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-11 5 2 2 4-4"/></svg>
+        <span class="student-stat-label">Matrícula</span>
+        <strong id="stSummaryValidityValue">-</strong>
+        <small id="stSummaryValiditySub" class="muted"></small>
+      </div>
+      <div class="student-stat-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/></svg>
+        <span class="student-stat-label">Meta da Semana</span>
+        <strong id="stSummaryWeekValue">-</strong>
+        <small id="stSummaryWeekSub" class="muted"></small>
+      </div>
+      <div class="student-stat-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V5a2 2 0 0 1 2-2h8v18m5 0H3m5-10h9m-3-3 3 3-3 3"/></svg>
+        <span class="student-stat-label">Acesso Catraca</span>
+        <strong id="stSummaryFaceValue">-</strong>
+        <small id="stSummaryFaceSub" class="muted"></small>
+      </div>
+    </section>
+
+    <section id="stFirstAccessBanner" class="first-access-banner hidden" role="region" aria-label="Dica de primeiro acesso">
+      <div class="first-access-banner-body">
+        <strong>Bem-vindo(a) ao seu Portal!</strong>
+        <p>Você entrou com o código de convite. Crie sua senha pessoal na aba <strong>Perfil</strong> para facilitar os próximos acessos.</p>
+      </div>
+      <div class="inline-actions">
+        <button type="button" id="btnGoToPassword" class="btn btn-primary btn-sm">Criar senha</button>
+        <button type="button" id="btnDismissFirstAccess" class="celebration-close" aria-label="Fechar dica">&times;</button>
+      </div>
+    </section>
+
+    <section id="stCelebrationBanner" class="celebration-banner hidden" role="region" aria-label="Homenagem ao aluno">
+      <div class="celebration-icon" id="stCelebrationIcon" aria-hidden="true">🎉</div>
+      <div class="celebration-body">
+        <strong id="stCelebrationTitle"></strong>
+        <p id="stCelebrationMessage"></p>
+      </div>
+      <button type="button" id="btnDismissCelebration" class="celebration-close" aria-label="Fechar homenagem">&times;</button>
+    </section>
+
+    <main>
+    <section id="stTabWorkouts" class="panel" role="tabpanel" aria-labelledby="stNavWorkouts">
+      <div class="panel-header">
+        <h2>Meus Treinos</h2>
+        <span id="stWorkoutMeta" class="muted"></span>
+      </div>
+      <div id="stWorkoutPills" class="workout-pills"></div>
+      <p id="stWorkoutNotes" class="muted"></p>
+      <div id="stWorkoutProgressWrap" class="workout-progress-wrap hidden">
+        <div class="workout-progress-top">
+          <p id="stWorkoutChecklist" class="student-checklist" role="status"></p>
+          <div class="inline-actions">
+            <button type="button" id="btnNextPendingExercise" class="btn btn-secondary btn-sm hidden">Próximo exercício</button>
+            <button type="button" id="btnResetWorkoutCheck" class="btn btn-secondary btn-sm hidden">Limpar dia</button>
+          </div>
+        </div>
+        <div class="workout-progress-track" aria-hidden="true">
+          <div id="stWorkoutProgressFill" class="workout-progress-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div id="stExercisesGrid" class="exercise-grid"></div>
+      <button type="button" id="stCompleteWorkout" class="btn btn-primary fitness-complete hidden">Concluir treino de hoje</button>
+    </section>
+
+    <div id="stFloatingRestBar" class="floating-rest-bar hidden" role="region" aria-label="Cronômetro de descanso ativo">
+      <div class="floating-rest-info">
+        <span class="floating-rest-label">Descanso em andamento</span>
+        <strong id="stFloatingRestTime">00:00</strong>
+      </div>
+      <div class="inline-actions">
+        <button type="button" id="btnRestMinus15" class="btn btn-secondary btn-sm">-15s</button>
+        <button type="button" id="btnRestPlus15" class="btn btn-secondary btn-sm">+15s</button>
+        <button type="button" id="btnRestSkip" class="btn btn-primary btn-sm">Pular</button>
+      </div>
+    </div>
+
+    <section id="stTabProgress" class="panel hidden" role="tabpanel" aria-labelledby="stNavProgress">
+      <div class="panel-header">
+        <h2>Meu Progresso</h2>
+        <span id="stFitnessPeriod" class="muted"></span>
+      </div>
+      <div class="fitness-grid">
+        <section>
+          <div class="inline-actions" style="justify-content:space-between;align-items:center;">
+            <h3 style="margin:0;">Meta semanal</h3>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin:0;">
+              Meta:
+              <select id="stGoalSelect" style="width:auto;min-height:34px;padding:4px 8px;font-size:13px;">
+                <option value="1">1x/sem</option>
+                <option value="2">2x/sem</option>
+                <option value="3">3x/sem</option>
+                <option value="4">4x/sem</option>
+                <option value="5">5x/sem</option>
+                <option value="6">6x/sem</option>
+                <option value="7">7x/sem</option>
+              </select>
+            </label>
+          </div>
+          <p id="stFitnessVisits"></p>
+          <progress id="stFitnessGoal" aria-label="Progresso da meta semanal"></progress>
+          <p id="stFitnessDays" class="muted"></p>
+          <p id="stFitnessWorkouts"></p>
+        </section>
+        <section>
+          <h3>Conquistas</h3>
+          <ul id="stFitnessAchievements" class="simple-list"></ul>
+        </section>
+        <section>
+          <h3>Ranking da semana</h3>
+          <ol id="stFitnessRanking" class="fitness-ranking-list"></ol>
+          <p id="stFitnessRankingEmpty" class="muted">Ainda não há visitas no ranking desta semana.</p>
+          <form id="stFitnessAliasForm" class="form-stack">
+            <label>Seu apelido no ranking <input id="stFitnessAlias" maxlength="24" autocomplete="off" /></label>
+            <p class="muted">O Top 3 aparece na tela da catraca. Deixe em branco para sair do ranking.</p>
+            <button type="submit" class="btn btn-secondary btn-sm">Salvar participação</button>
+          </form>
+        </section>
+        <section>
+          <h3>Desafio mensal da academia</h3>
+          <p id="stFitnessChallengeLabel"></p>
+          <progress id="stFitnessChallenge" aria-label="Progresso do desafio mensal"></progress>
+          <p class="muted">Cada aluno contribui com até um treino concluído por dia.</p>
+        </section>
+        <section id="stGamificationCard">
+          <h3>Gamificação &amp; Medalhas</h3>
+          <p id="stGamificationStats" class="muted">Carregando...</p>
+          <ul id="stGamificationBadges" class="simple-list"></ul>
+        </section>
+      </div>
+
+      <section style="margin-top:20px;">
+        <h3>Avaliação Física &amp; Evolução</h3>
+        <div id="stAssessmentComparison" class="assessment-comparison-grid hidden"></div>
+        <ul id="stAssessmentsList" class="simple-list">
+          <li class="muted">Carregando avaliações...</li>
+        </ul>
+      </section>
+
+      <section style="margin-top:20px;">
+        <h3>Agenda de Turmas</h3>
+        <form id="stBookingForm" class="form-grid" style="margin-bottom:12px;align-items:end;">
+          <label>Turma
+            <select id="stBookingClass" required></select>
+          </label>
+          <label>Data
+            <input type="date" id="stBookingDate" required />
+          </label>
+          <label>Repetição
+            <select id="stBookingWeeks">
+              <option value="1">Apenas nesta data</option>
+              <option value="4">Próximas 4 semanas</option>
+            </select>
+          </label>
+          <button type="submit" class="btn btn-primary btn-sm">Reservar vaga</button>
+        </form>
+        <ul id="stBookingsList" class="simple-list">
+          <li class="muted">Nenhuma reserva registrada.</li>
+        </ul>
+      </section>
+
+      <section style="margin-top:20px;">
+        <h3>Últimos Acessos na Catraca</h3>
+        <ul id="stRecentCheckinsList" class="simple-list">
+          <li class="muted">Nenhum acesso registrado recentemente.</li>
+        </ul>
+      </section>
+    </section>
+
+    <!-- ABA PAGAMENTOS -->
+    <section id="stTabPayments" class="panel hidden" role="tabpanel" aria-labelledby="stNavPayments">
+      <h2>Pagamentos e Renovação</h2>
+      <p id="stPayStatusLine" class="muted" style="margin-bottom:12px;"></p>
+      <div id="stFinancialCards" class="student-financial-grid"></div>
+      <div id="stStaticPixBox" class="pix-box hidden" style="margin-bottom:14px;">
+        <div class="inline-actions" style="justify-content:space-between;align-items:center;">
+          <div>
+            <strong id="stStaticPixTitle">Chave Pix da Academia</strong>
+            <p id="stStaticPixKeyText" class="muted" style="margin:2px 0 0;font-size:13px;"></p>
+          </div>
+          <button type="button" id="btnStCopyStaticPix" class="btn btn-secondary btn-sm">Copiar chave Pix</button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>Escolha o plano para renovar
+          <select id="stPayPlan"></select>
+        </label>
+        <label>E-mail (para assinatura no cartão)
+          <input type="email" id="stPayEmail" autocomplete="email" />
+        </label>
+      </div>
+      <div class="student-action-grid">
+        <button type="button" id="btnStGeneratePix" class="btn btn-primary">Pagar com Pix</button>
+        <button type="button" id="btnStCheckout" class="btn btn-secondary" data-mp-checkout-cta="checkout-pro">Pagar online com Mercado Pago</button>
+        <button type="button" id="btnStSubscribeCard" class="btn btn-secondary">Assinar no cartão</button>
+      </div>
+
+      <div id="stCheckoutBox" class="pix-box hidden" aria-live="polite">
+        <p id="stCheckoutAmount"></p>
+        <div class="student-action-grid">
+          <a id="stCheckoutLink" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Abrir pagamento</a>
+          <button type="button" id="btnStCheckCheckout" class="btn btn-secondary">Verificar pagamento</button>
+        </div>
+      </div>
+
+      <div id="stPixBox" class="pix-box hidden">
+        <h3 style="margin-top:0;">Pix gerado</h3>
+        <p id="stPixInfo" class="muted"></p>
+        <img id="stPixQr" class="pix-qr hidden" alt="QR Code Pix" />
+        <label>Pix Copia e Cola
+          <input type="text" id="stPixCode" readonly />
+        </label>
+        <div class="student-action-grid">
+          <button type="button" id="btnStCopyPix" class="btn btn-secondary btn-sm">Copiar código Pix</button>
+          <button type="button" id="btnStCheckPix" class="btn btn-primary btn-sm">Já paguei (Verificar)</button>
+        </div>
+      </div>
+
+      <div id="stSubBox" class="pix-box hidden">
+        <h3 style="margin-top:0;">Assinatura Recorrente</h3>
+        <p id="stSubInfo" class="muted"></p>
+        <a id="stSubLink" href="#" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Abrir checkout Mercado Pago</a>
+      </div>
+
+      <h3 style="margin-top:20px;">Histórico de Pagamentos</h3>
+      <ul id="stPaymentsList" class="simple-list"></ul>
+    </section>
+
+    <!-- ABA PERFIL & FOTO -->
+    <section id="stTabProfile" class="panel hidden" role="tabpanel" aria-labelledby="stNavProfile">
+      <h2>Meu Perfil</h2>
+      <div class="grid-2">
+        <div class="panel" style="margin:0;">
+          <h3>Foto de Perfil do Portal</h3>
+          <p class="muted">Esta foto é usada apenas no Portal do Aluno.</p>
+          <div class="student-photo-actions">
+            <img id="stProfilePhotoPreview" class="student-avatar hidden" alt="Prévia da foto de perfil" />
+            <div id="stProfilePhotoEmpty" class="student-avatar">A</div>
+            <div class="form-stack">
+              <button type="button" id="btnStChoosePhoto" class="btn btn-primary btn-sm">Escolher foto</button>
+              <input type="file" id="stPhotoInput" accept="image/*" hidden />
+              <button type="button" id="btnStRemovePhoto" class="btn btn-secondary btn-sm">Remover Foto</button>
+            </div>
+          </div>
+
+          <h3>Dados Cadastrais</h3>
+          <ul id="stMemberDetailsList" class="simple-list"></ul>
+
+          <hr style="margin:18px 0;border:0;border-top:1px solid var(--border);" />
+          <h3>Atualizar Meus Contatos</h3>
+          <form id="stContactForm" class="form-stack">
+            <label>WhatsApp / Telefone
+              <input type="tel" id="stContactPhone" maxlength="30" placeholder="(00) 00000-0000" />
+            </label>
+            <label>E-mail
+              <input type="email" id="stContactEmail" maxlength="120" placeholder="seu@email.com" />
+            </label>
+            <label>Contato de emergência
+              <input type="text" id="stContactEmergency" maxlength="120" placeholder="Nome e telefone" />
+            </label>
+            <button type="submit" class="btn btn-secondary btn-sm">Salvar contatos</button>
+          </form>
+        </div>
+
+        <div class="panel" style="margin:0;">
+          <h3>Senha do Portal</h3>
+          <p id="stPasswordHint" class="muted" style="margin-bottom:10px;"></p>
+          <form id="stPasswordForm" class="form-stack">
+            <label id="stCurrentPassWrap" class="hidden">Senha atual
+              <input type="password" id="stCurrentPassword" autocomplete="current-password" />
+            </label>
+            <label>Nova senha (mín. 8 caracteres)
+              <div class="password-input-wrap">
+                <input type="password" id="stNewPassword" autocomplete="new-password" minlength="8" maxlength="128" required />
+                <button type="button" class="btn btn-secondary btn-sm password-toggle-btn" data-toggle-password="stNewPassword" aria-label="Mostrar ou ocultar nova senha">Mostrar</button>
+              </div>
+            </label>
+            <button type="submit" class="btn btn-primary">Salvar senha</button>
+          </form>
+
+          <hr style="margin:18px 0;border:0;border-top:1px solid var(--border);" />
+          <h3>PAR-Q &amp; Contrato Digital</h3>
+          <p id="stContractStatus" class="muted"></p>
+          <form id="stContractForm" class="form-stack hidden">
+            <label style="display:flex;align-items:flex-start;gap:8px;font-weight:400;">
+              <input type="checkbox" id="stParqAgree" required style="width:auto;min-height:auto;margin-top:4px;" />
+              <span>Declaro que respondi ao PAR-Q e estou apto(a) para a prática de atividades físicas, concordando com os termos da academia.</span>
+            </label>
+            <label>Assinatura digital (nome completo)
+              <input type="text" id="stContractSignature" minlength="3" maxlength="120" required />
+            </label>
+            <button type="submit" class="btn btn-primary btn-sm">Assinar PAR-Q e Contrato</button>
+          </form>
+        </div>
+      </div>
+    </section>
+    </main>
+    </div>
+  </div>
+
+  <!-- MODAL DE ANIMAÇÃO AMPLIADA DO EXERCÍCIO -->
+  <dialog id="stExerciseModal" aria-labelledby="stExModalTitle">
+    <div class="modal-content">
+      <div class="panel-header">
+        <div>
+          <h2 id="stExModalTitle" style="margin:0;">Exercício</h2>
+          <p id="stExModalSub" class="muted" style="margin:4px 0 0;"></p>
+        </div>
+        <button type="button" id="btnCloseStExModal" class="btn btn-secondary btn-sm" autofocus>Fechar</button>
+      </div>
+      <div id="stExModalAnim" style="display:flex;justify-content:center;margin:12px 0;"></div>
+      <div id="stExAnimationControls" class="inline-actions" style="justify-content:center;margin-bottom:12px;">
+        <button type="button" id="btnExTogglePause" class="btn btn-secondary btn-sm">Pausar</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-ex-speed="0.75">0.75x</button>
+        <button type="button" class="btn btn-primary btn-sm" data-ex-speed="1">1x</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-ex-speed="1.5">1.5x</button>
+      </div>
+      <p id="stExModalTips" class="muted"></p>
+    </div>
+  </dialog>
+
+  <!-- MODAL DE INSTALAÇÃO DO APP NO CELULAR -->
+  <dialog id="stInstallModal" aria-labelledby="stInstallModalTitle">
+    <div class="modal-content">
+      <div class="panel-header">
+        <div>
+          <h2 id="stInstallModalTitle" style="margin:0;">Transformar em app</h2>
+          <p class="muted" style="margin:4px 0 0;">Acesse seu treino direto da tela inicial do celular</p>
+        </div>
+        <button type="button" id="btnCloseStInstallModal" class="btn btn-secondary btn-sm" autofocus>Fechar</button>
+      </div>
+      <div id="stInstallStepsIos" class="install-steps hidden">
+        <p><strong>No iPhone ou iPad (Safari):</strong></p>
+        <ol class="first-access-steps">
+          <li>Toque no ícone de <strong>Compartilhar</strong> (quadrado com seta para cima) na barra do navegador.</li>
+          <li>Role as opções e toque em <strong>“Adicionar à Tela de Início”</strong>.</li>
+          <li>Toque em <strong>Adicionar</strong> no canto superior direito.</li>
+        </ol>
+      </div>
+      <div id="stInstallStepsAndroid" class="install-steps hidden">
+        <p><strong>No Android (Chrome ou outro navegador):</strong></p>
+        <ol class="first-access-steps">
+          <li>Toque no menu <strong>⋮</strong> (três pontinhos) no canto superior direito do navegador.</li>
+          <li>Toque em <strong>“Instalar aplicativo”</strong> ou <strong>“Adicionar à tela inicial”</strong>.</li>
+          <li>Confirme em <strong>Instalar</strong> para criar o atalho na tela inicial.</li>
+        </ol>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/exercises.js?v=20261115.1" defer></script>
+  <script src="/aluno.js?v=20261115.3" defer></script>
+</body>
+</html>

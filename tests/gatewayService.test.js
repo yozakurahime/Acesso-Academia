@@ -1,0 +1,290 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DatabaseStore } from '../src/db.js';
+import { ControlIdClient } from '../src/services/controlIdClient.js';
+import { AccessService } from '../src/services/accessService.js';
+import { GatewayService } from '../src/services/gatewayService.js';
+
+test('GatewayService gera Pix no Mercado Pago e dá baixa via webhook sem duplicar', async () => {
+  const store = await DatabaseStore.create(null);
+  const controlId = new ControlIdClient(() => store.getSettings());
+  const accessService = new AccessService(store, controlId);
+
+  store.updateSettings({ mp_access_token: 'APP_USR_TEST' });
+  const plan = accessService.listPlans().find((p) => p.price_cents === 12000);
+  const member = await accessService.createMember({ name: 'Lucas MP', document: '52998224725', plan_id: plan.id });
+  const installment = accessService.createMembershipCharge(member.id, { due: '2020-01-01', amount: 12000 });
+
+  const mockFetch = async (url, opts = {}) => {
+    if (url.endsWith('/v1/payments') && opts.method === 'POST') {
+      return {
+        ok: true,
+        status: 201,
+        async json() {
+          return {
+            id: 987654321,
+            point_of_interaction: {
+              transaction_data: {
+                qr_code: '00020101021226890014br.gov.bcb.pix...',
+                qr_code_base64: 'iVBORw0KGgo=',
+                ticket_url: 'https://mpago.la/test',
+              },
+            },
+          };
+        },
+      };
+    }
+    if (url.endsWith('/v1/payments/987654321')) {
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { id: 987654321, status: 'approved', transaction_amount: 120 };
+        },
+      };
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const gw = new GatewayService(store, accessService, { fetchFn: mockFetch });
+  const charge = await gw.createPixCharge({ member_id: member.id });
+  assert.equal(charge.provider, 'mercadopago');
+  assert.equal(charge.external_id, '987654321');
+  assert.equal(charge.membership_charge_id, installment.id);
+  assert.equal(charge.qr_code, '00020101021226890014br.gov.bcb.pix...');
+
+  const [res1, concurrent] = await Promise.all([
+    gw.handleWebhook('mercadopago', { type: 'payment', data: { id: '987654321' } }),
+    gw.handleWebhook('mercadopago', { type: 'payment', data: { id: '987654321' } }),
+  ]);
+  assert.equal(res1.paid, true);
+  assert.equal(concurrent.paid, true);
+  assert.equal(res1.alreadyPaid, false);
+
+  // Segunda chamada de webhook é idempotente
+  const res2 = await gw.handleWebhook('mercadopago', { type: 'payment', data: { id: '987654321' } });
+  assert.equal(res2.paid, true);
+  assert.equal(store.all('SELECT id FROM payments WHERE member_id = ?', [member.id]).length, 1);
+  assert.ok(store.get('SELECT payment_id FROM membership_charges WHERE id = ?', [installment.id]).payment_id);
+  assert.equal(store.get('SELECT status FROM members WHERE id = ?', [member.id]).status, 'active');
+});
+
+test('Checkout do portal e WhatsApp reutilizam a cobrança mais antiga e dão baixa uma vez', async () => {
+  const store = await DatabaseStore.create(null);
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  store.updateSettings({ mp_access_token: 'APP_USR_TEST' });
+  const [plan, otherPlan] = access.listPlans();
+  const member = await access.createMember({ name: 'Aluno Checkout', document: '52998224725', phone: '11987654321', plan_id: plan.id });
+  const oldest = access.createMembershipCharge(member.id, { due: '2024-01-01', amount: 9500 });
+  const next = access.createMembershipCharge(member.id, { due: '2024-02-01', amount: 11000 });
+  let preference;
+  let created = 0;
+  let paidAmount = 95;
+  const gateway = new GatewayService(store, access, { fetchFn: async (url, options) => {
+    if (url.endsWith('/checkout/preferences')) {
+      preference = JSON.parse(options.body);
+      created++;
+      return { ok: true, json: async () => ({ id: 'pref-a', init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-a' }) };
+    }
+    assert.match(url, /\/v1\/payments\/(search\?|1$)/);
+    const payment = { id: 1, currency_id: 'BRL', status: 'approved', transaction_amount: paidAmount,
+      external_reference: preference.external_reference, payment_type_id: 'credit_card' };
+    return { ok: true, json: async () => url.includes('/search?') ? { results: [payment] } : payment };
+  } });
+  const [online, shared] = await Promise.all([
+    gateway.createCheckoutCharge({ member_id: member.id, plan_id: otherPlan.id }),
+    gateway.createWhatsAppCheckout(member.id),
+  ]);
+  assert.equal(created, 1);
+  assert.equal(online.membership_charge_id, oldest.id);
+  assert.equal(preference.items[0].unit_price, 95);
+  assert.equal(online.id, shared.charge.id);
+  const link = new URL(shared.whatsapp_url);
+  assert.equal(link.pathname, '/5511987654321');
+  assert.ok(link.searchParams.get('text').includes(online.payment_url));
+  paidAmount = 10;
+  await assert.rejects(gateway.checkChargeStatus(online.id), /não corresponde/);
+  paidAmount = 95;
+  const [webhook, checked] = await Promise.all([
+    gateway.handleWebhook('mercadopago', { type: 'payment', data: { id: 1 } }),
+    gateway.checkChargeStatus(online.id),
+  ]);
+  assert.equal(webhook.paid, true);
+  assert.equal(checked.paid, true);
+  assert.equal(store.get('SELECT COUNT(*) AS total FROM payments WHERE member_id = ?', [member.id]).total, 1);
+  assert.equal(store.get('SELECT method FROM payments WHERE member_id = ?', [member.id]).method, 'credit');
+  assert.equal(store.get('SELECT payment_id FROM membership_charges WHERE id = ?', [next.id]).payment_id, null);
+});
+
+test('Mercado Pago Assinatura Recorrente: cria link, sincroniza/webhook dá baixa idempotente e cancela', async () => {
+  const store = await DatabaseStore.create(null);
+  const controlId = new ControlIdClient(() => store.getSettings());
+  const accessService = new AccessService(store, controlId);
+  store.updateSettings({ mp_access_token: 'APP_USR_SUB' });
+
+  const plan = accessService.listPlans().find((p) => p.price_cents === 12000) || accessService.listPlans()[0];
+  const member = await accessService.createMember({
+    name: 'Mariana MP Recorrente',
+    document: '11144477735',
+    email: 'mariana@oxigenio.com',
+    plan_id: plan.id,
+  });
+
+  let preStatus = 'pending';
+  let capturedExtRef = null;
+  const fetchMock = async (url, opts = {}) => {
+    const method = opts.method || 'GET';
+    if (url.endsWith('/preapproval') && method === 'POST') {
+      const body = JSON.parse(opts.body);
+      capturedExtRef = body.external_reference;
+      assert.equal(body.auto_recurring.frequency, 1);
+      assert.equal(body.auto_recurring.frequency_type, 'months');
+      assert.equal(body.auto_recurring.transaction_amount, 120);
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({
+          id: 'pre_mp_001',
+          status: 'pending',
+          init_point: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=pre_mp_001',
+        }),
+      };
+    }
+    if (url.endsWith('/preapproval/pre_mp_001') && method === 'GET') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'pre_mp_001', status: preStatus, next_payment_date: '2026-12-14T00:00:00Z' }),
+      };
+    }
+    if (url.includes('/v1/payments/search')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          results: [
+            {
+              id: 555001,
+              status: 'approved',
+              transaction_amount: 120,
+              payment_type_id: 'credit_card',
+              external_reference: capturedExtRef,
+            },
+          ],
+        }),
+      };
+    }
+    if (url.endsWith('/v1/payments/555001') && method === 'GET') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 555001,
+          status: 'approved',
+          transaction_amount: 120,
+          payment_type_id: 'credit_card',
+          external_reference: capturedExtRef,
+        }),
+      };
+    }
+    if (url.endsWith('/preapproval/pre_mp_001') && method === 'PUT') {
+      preStatus = 'cancelled';
+      return { ok: true, status: 200, json: async () => ({ id: 'pre_mp_001', status: 'cancelled' }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  const gw = new GatewayService(store, accessService, { fetchFn: fetchMock });
+
+  const sub = await gw.createMpSubscription({ member_id: member.id, plan_id: plan.id, cycle: 'MONTHLY' });
+  assert.equal(sub.preapproval_id, 'pre_mp_001');
+  assert.equal(sub.status, 'pending');
+  assert.ok(sub.init_point.includes('pre_mp_001'));
+
+  // Webhook de pagamento da assinatura dá baixa e ativa aluno
+  preStatus = 'authorized';
+  const wh = await gw.handleWebhook('mercadopago', { type: 'payment', data: { id: '555001' } });
+  assert.equal(wh.paid, true);
+  assert.equal(wh.alreadyPaid, false);
+  assert.equal(store.get('SELECT status FROM members WHERE id = ?', [member.id]).status, 'active');
+
+  // Sync manual atualiza status para active e não duplica pagamento
+  const syncRes = await gw.syncMpSubscription(sub.id);
+  assert.equal(syncRes.settledCount, 0);
+  assert.equal(syncRes.subscription.status, 'active');
+
+  // Cancelamento
+  const cancelRes = await gw.cancelMpSubscription(sub.id);
+  assert.equal(cancelRes.subscription.status, 'canceled');
+});
+
+test('Mercado Pago Point Smart: lista terminais, envia cobrança, dá baixa via webhook/check e cancela', async () => {
+  const store = await DatabaseStore.create(null);
+  const controlId = new ControlIdClient(() => store.getSettings());
+  const accessService = new AccessService(store, controlId);
+  store.updateSettings({ mp_access_token: 'APP_USR_POINT', mp_point_terminal_id: 'PAX_A910__SMART01' });
+
+  const plan = accessService.listPlans().find((p) => p.price_cents === 12000) || accessService.listPlans()[0];
+  const member = await accessService.createMember({ name: 'Carlos Point', document: '39053344705', plan_id: plan.id });
+
+  let orderStatus = 'created';
+  let capturedOrderBody = null;
+  const fetchMock = async (url, opts = {}) => {
+    const method = opts.method || 'GET';
+    if (url.endsWith('/terminals/v1/list')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { terminals: [{ id: 'PAX_A910__SMART01', operating_mode: 'PDV' }] } }),
+      };
+    }
+    if (url.endsWith('/terminals/v1/setup') && method === 'PATCH') {
+      return { ok: true, status: 200, json: async () => ({ terminals: [{ id: 'PAX_A910__SMART01', operating_mode: 'PDV' }] }) };
+    }
+    if (url.endsWith('/v1/orders') && method === 'POST') {
+      capturedOrderBody = JSON.parse(opts.body);
+      return { ok: true, status: 201, json: async () => ({ id: 'ORD_MP_01', status: 'created' }) };
+    }
+    if (url.endsWith('/v1/orders/ORD_MP_01') && method === 'GET') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'ORD_MP_01',
+          status: orderStatus,
+          transactions: { payments: [{ status: orderStatus, amount: '120.00', payment_method: { type: 'debit_card' } }] },
+        }),
+      };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  const gw = new GatewayService(store, accessService, { fetchFn: fetchMock });
+
+  const terminals = await gw.listPointTerminals();
+  assert.equal(terminals.length, 1);
+  assert.equal(terminals[0].id, 'PAX_A910__SMART01');
+
+  const pdvRes = await gw.setPointTerminalMode('PAX_A910__SMART01', 'PDV');
+  assert.equal(pdvRes.operatingMode, 'PDV');
+
+  const order = await gw.createPointOrder({ member_id: member.id, plan_id: plan.id });
+  assert.equal(order.order_id, 'ORD_MP_01');
+  assert.equal(capturedOrderBody.type, 'point');
+  assert.equal(capturedOrderBody.config.point.terminal_id, 'PAX_A910__SMART01');
+  assert.equal(capturedOrderBody.transactions.payments[0].amount, '120.00');
+
+  const pendingCheck = await gw.checkPointOrder(order.id);
+  assert.equal(pendingCheck.paid, false);
+
+  orderStatus = 'processed';
+  const wh = await gw.handleWebhook('mercadopago', { type: 'order', data: { id: 'ORD_MP_01' } });
+  assert.equal(wh.paid, true);
+  assert.equal(wh.alreadyPaid, false);
+  assert.equal(wh.order.payment_method, 'debit');
+  assert.equal(store.get('SELECT status FROM members WHERE id = ?', [member.id]).status, 'active');
+
+  const secondCheck = await gw.checkPointOrder(order.id);
+  assert.equal(secondCheck.paid, true);
+  assert.equal(secondCheck.alreadyPaid, true);
+});
