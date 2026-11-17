@@ -21,5 +21,7 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R ":%PORT% .*LISTENING"') do
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='cloudflared.exe'\" | Where-Object { $_.CommandLine -like '*academia-oxigenio*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 timeout /t 2 /nobreak >nul
+echo Atualizando codigo (se houver internet)...
+git pull --ff-only origin main 2>nul
 echo Iniciando servidor novamente...
 npm start
