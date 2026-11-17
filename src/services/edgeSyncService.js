@@ -79,8 +79,15 @@ export class EdgeCloudHub {
           [edgeEventId],
         );
         if (exists) continue;
-        this.store.run(
-          `INSERT INTO access_logs (
+        if (item.controlid_log_id != null) {
+          const dupCid = this.store.get(
+            'SELECT id FROM access_logs WHERE controlid_log_id = ?',
+            [Number(item.controlid_log_id)],
+          );
+          if (dupCid) continue;
+        }
+        const ins = this.store.run(
+          `INSERT OR IGNORE INTO access_logs (
             controlid_log_id, controlid_user_id, member_id, member_name,
             event_code, event_label, occurred_at, edge_event_id, edge_synced
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
@@ -95,10 +102,34 @@ export class EdgeCloudHub {
             edgeEventId,
           ],
         );
-        inserted += 1;
+        if (ins.changes > 0) inserted += 1;
       }
     });
     return { inserted };
+  }
+
+  ingestControlIdLinks(links = []) {
+    this.markEdgeSeen();
+    if (!Array.isArray(links) || links.length === 0) return { updated: 0 };
+    let updated = 0;
+    this.store.transaction(() => {
+      for (const item of links) {
+        const id = Number(item?.id);
+        if (!Number.isInteger(id) || id <= 0) continue;
+        this.store.run(
+          `UPDATE members
+           SET controlid_user_id = ?, face_registered = ?, updated_at = datetime('now', 'localtime')
+           WHERE id = ?`,
+          [
+            item.controlid_user_id != null ? Number(item.controlid_user_id) : null,
+            Number(item.face_registered || 0),
+            id,
+          ],
+        );
+        updated += 1;
+      }
+    });
+    return { updated };
   }
 
   enqueueCommand(type, payload = {}) {
@@ -151,6 +182,7 @@ export class EdgeSyncClient {
   constructor({
     store,
     accessService,
+    importService = null,
     cloudUrl,
     token,
     fetchFn = fetch,
@@ -159,6 +191,7 @@ export class EdgeSyncClient {
   }) {
     this.store = store;
     this.accessService = accessService;
+    this.importService = importService;
     this.cloudUrl = String(cloudUrl || '').replace(/\/+$/, '');
     this.token = String(token || '').trim();
     this.fetchFn = fetchFn;
@@ -401,6 +434,25 @@ export class EdgeSyncClient {
       await this.syncOnce();
       if (typeof this.accessService?.syncAllReaders === 'function') {
         await this.accessService.syncAllReaders().catch(() => {});
+      }
+      return;
+    }
+    if (cmd.type === 'import_controlid') {
+      if (typeof this.importService?.syncUsersFromControlId === 'function') {
+        try {
+          await this.importService.syncUsersFromControlId();
+          const links = this.store.all(
+            'SELECT id, controlid_user_id, face_registered FROM members WHERE controlid_user_id IS NOT NULL OR face_registered = 1',
+          );
+          await this.fetchFn(`${this.cloudUrl}/api/edge/controlid-users`, {
+            method: 'POST',
+            headers: this._headers({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ links }),
+            signal: AbortSignal.timeout(15000),
+          });
+        } catch (err) {
+          this.lastError = `Erro ao importar Control iD: ${err.message}`;
+        }
       }
     }
   }

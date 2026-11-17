@@ -330,6 +330,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(edgeHub.ingestLogs(req.body?.logs || []));
   });
 
+  router.post('/edge/controlid-users', requireEdgeToken, (req, res) => {
+    res.json(edgeHub.ingestControlIdLinks(req.body?.links || []));
+  });
+
   router.post('/edge/commands/ack', requireEdgeToken, (req, res) => {
     res.json({ ok: edgeHub.ackCommand(req.body?.id) });
   });
@@ -1291,6 +1295,16 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/import/controlid',
     requireAdmin,
     handle(async (_req, res) => {
+      if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+        edgeHub.enqueueCommand('import_controlid', {});
+        return res.json({
+          queuedForEdge: true,
+          linked: 0,
+          imported: 0,
+          conflicts: 0,
+          message: 'Solicitação enviada para a catraca local puxar os IDs e cadastros faciais.',
+        });
+      }
       res.json(await importService.syncUsersFromControlId());
     }),
   );

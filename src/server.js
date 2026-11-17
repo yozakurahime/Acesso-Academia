@@ -258,6 +258,7 @@ async function start() {
       edgeSyncClient = new EdgeSyncClient({
         store,
         accessService,
+        importService,
         cloudUrl: process.env.EDGE_CLOUD_URL,
         token: process.env.EDGE_SYNC_TOKEN,
       });

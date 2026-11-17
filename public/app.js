@@ -5603,7 +5603,7 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
   await withLoading(e.currentTarget, async () => {
     try {
       const res = await api('/api/import/controlid', { method: 'POST' });
-      const msg = res.mock
+      const msg = (res.mock || res.queuedForEdge)
         ? res.message
         : `Control iD: ${res.linked} vinculado(s), ${res.imported} novo(s), ${res.conflicts ?? 0} divergência(s) para conferir.`;
       document.getElementById('importResult').textContent = msg;
