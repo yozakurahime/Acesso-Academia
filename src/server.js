@@ -235,6 +235,7 @@ async function start() {
   let tunnelHandle = { stop() {} };
   let desktopNotifier = { stop() {} };
   let unsubscribeDesktopNotifier = () => {};
+  let unsubscribeDesktopDenied = () => {};
   let edgeSyncClient = null;
   const mainServer = app.listen(port, '0.0.0.0', () => {
     console.log(`Sistema de Academia rodando em http://localhost:${port} (modo: ${edgeRole})`);
@@ -243,6 +244,12 @@ async function start() {
     desktopNotifier = createDesktopNotifier({ rootDir, port });
     unsubscribeDesktopNotifier = accessService.onTurnstileRelease((event) => {
       desktopNotifier.notifyTurnstileRelease(event);
+      if (edgeSyncClient) {
+        edgeSyncClient.pushPendingLogs().catch(() => {});
+      }
+    });
+    unsubscribeDesktopDenied = accessService.onTurnstileDenied((event) => {
+      desktopNotifier.notifyTurnstileDenied(event);
       if (edgeSyncClient) {
         edgeSyncClient.pushPendingLogs().catch(() => {});
       }
@@ -328,6 +335,7 @@ async function start() {
   const shutdown = () => {
     try { edgeSyncClient?.stop(); } catch {}
     try { unsubscribeDesktopNotifier(); } catch {}
+    try { unsubscribeDesktopDenied(); } catch {}
     try { desktopNotifier.stop(); } catch {}
     try { tunnelHandle.stop(); } catch {}
     try { store.save(); } catch {}

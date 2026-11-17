@@ -22,6 +22,25 @@ export function formatTurnstileReleaseNotification(event = {}) {
   };
 }
 
+export function formatTurnstileDeniedNotification(event = {}) {
+  const name = String(event?.memberName || '').trim() || 'Não identificado';
+  const reason = String(event?.reason || '').trim() || 'Acesso negado';
+  const occurredAt = event?.occurredAt ? new Date(event.occurredAt) : new Date();
+  const validDate = Number.isNaN(occurredAt.getTime()) ? new Date() : occurredAt;
+  const timeText = validDate.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  return {
+    title: `Acesso bloqueado · ${timeText}`,
+    body: `${name}\n${reason}`,
+    level: 'error',
+    timeoutMs: 7000,
+  };
+}
+
 /**
  * Exibe notificações nativas na área de trabalho do Windows (independente do navegador)
  * usando um processo PowerShell persistente com NotifyIcon.
@@ -38,6 +57,7 @@ export function createDesktopNotifier({
       isActive: () => false,
       notify: () => false,
       notifyTurnstileRelease: () => false,
+      notifyTurnstileDenied: () => false,
       stop: () => {},
     };
   }
@@ -49,6 +69,7 @@ export function createDesktopNotifier({
       isActive: () => false,
       notify: () => false,
       notifyTurnstileRelease: () => false,
+      notifyTurnstileDenied: () => false,
       stop: () => {},
     };
   }
@@ -85,6 +106,7 @@ export function createDesktopNotifier({
       isActive: () => false,
       notify: () => false,
       notifyTurnstileRelease: () => false,
+      notifyTurnstileDenied: () => false,
       stop: () => {},
     };
   }
@@ -118,6 +140,7 @@ export function createDesktopNotifier({
   };
 
   const notifyTurnstileRelease = (event) => notify(formatTurnstileReleaseNotification(event));
+  const notifyTurnstileDenied = (event) => notify(formatTurnstileDeniedNotification(event));
 
   const stop = () => {
     if (stopped) return;
@@ -142,6 +165,7 @@ export function createDesktopNotifier({
     isActive,
     notify,
     notifyTurnstileRelease,
+    notifyTurnstileDenied,
     stop,
   };
 }

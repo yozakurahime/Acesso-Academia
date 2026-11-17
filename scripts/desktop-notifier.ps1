@@ -152,7 +152,8 @@ function Show-DesktopToast {
   param(
     [string]$Title,
     [string]$Body,
-    [int]$TimeoutMs = 6000
+    [int]$TimeoutMs = 6000,
+    [string]$Level = 'info'
   )
 
   while ($activePopups.Count -ge 4) {
@@ -161,11 +162,15 @@ function Show-DesktopToast {
     try { $oldest.Close(); $oldest.Dispose() } catch {}
   }
 
+  $isError = ($Level -eq 'error')
+  $accentColor = if ($isError) { [System.Drawing.Color]::FromArgb(239, 68, 68) } else { [System.Drawing.Color]::FromArgb(16, 185, 129) }
+  $titleColor = if ($isError) { [System.Drawing.Color]::FromArgb(248, 113, 113) } else { [System.Drawing.Color]::FromArgb(52, 211, 153) }
+
   $popup = New-Object ToastPopupForm
   $popup.ApplyRoundedCorners(12)
 
   $accent = New-Object System.Windows.Forms.Panel
-  $accent.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
+  $accent.BackColor = $accentColor
   $accent.Dock = [System.Windows.Forms.DockStyle]::Left
   $accent.Width = 5
   $popup.Controls.Add($accent)
@@ -189,7 +194,7 @@ function Show-DesktopToast {
 
   $lblTitle = New-Object System.Windows.Forms.Label
   $lblTitle.Text = $Title
-  $lblTitle.ForeColor = [System.Drawing.Color]::FromArgb(52, 211, 153)
+  $lblTitle.ForeColor = $titleColor
   $lblTitle.Font = New-Object System.Drawing.Font('Segoe UI', 8.5, [System.Drawing.FontStyle]::Bold)
   $lblTitle.Location = New-Object System.Drawing.Point($textLeft, 12)
   $lblTitle.Size = New-Object System.Drawing.Size((330 - $textLeft), 16)
@@ -283,7 +288,8 @@ $timer.add_Tick({
       if (-not $title) { $title = 'Academia Oxigenio' }
       if (-not $body) { $body = 'Evento registrado.' }
       $timeoutMs = if ($payload.timeoutMs) { [int]$payload.timeoutMs } else { 6000 }
-      Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs
+      $level = if ($payload.level) { [string]$payload.level } else { 'info' }
+      Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs -Level $level
     } catch {
     }
   }

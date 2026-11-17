@@ -43,6 +43,7 @@ export class AccessService {
     this.turnstileDisplayId = 0;
     this.faceMirrorState = null;
     this._turnstileListeners = new Set();
+    this._turnstileDeniedListeners = new Set();
     this._faceInFlight = new Map();
     this._verifiedDeviceUsers = new Map();
     this._capacityLock = Promise.resolve();
@@ -220,6 +221,12 @@ export class AccessService {
     return () => this._turnstileListeners.delete(listener);
   }
 
+  onTurnstileDenied(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this._turnstileDeniedListeners.add(listener);
+    return () => this._turnstileDeniedListeners.delete(listener);
+  }
+
   publishTurnstileDisplay(outcome, { member = null, reason = null, preview = false, progress = null, occupancy = null, source = null } = {}) {
     const today = fitnessToday();
     const maxCap = Number(this.store.getSettings()?.max_capacity || 0);
@@ -260,6 +267,24 @@ export class AccessService {
           listener(releaseEvent);
         } catch {
           // Listener failure must not break turnstile release.
+        }
+      }
+    }
+
+    if (outcome === 'denied' && !preview && this._turnstileDeniedListeners.size > 0) {
+      const deniedEvent = {
+        id: display.id,
+        memberId: member?.id || null,
+        memberName: member?.name || 'Não identificado',
+        reason: reason || 'Acesso negado',
+        source: source || 'FaceID',
+        occurredAt: new Date().toISOString(),
+      };
+      for (const listener of this._turnstileDeniedListeners) {
+        try {
+          listener(deniedEvent);
+        } catch {
+          // Listener failure must not break turnstile denial.
         }
       }
     }

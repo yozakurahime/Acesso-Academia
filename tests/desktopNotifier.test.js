@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createDesktopNotifier, formatTurnstileReleaseNotification } from '../src/services/desktopNotifier.js';
+import { createDesktopNotifier, formatTurnstileDeniedNotification, formatTurnstileReleaseNotification } from '../src/services/desktopNotifier.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -20,6 +20,19 @@ test('formatTurnstileReleaseNotification formata aluno, origem, horario e aniver
   assert.equal(payload.body, 'Maria Silva\nFaceID · 🎂 Aniversariante');
   assert.equal(payload.level, 'info');
   assert.equal(payload.timeoutMs, 6000);
+});
+
+test('formatTurnstileDeniedNotification formata aluno bloqueado e motivo', () => {
+  const payload = formatTurnstileDeniedNotification({
+    memberName: 'Pedro Souza',
+    reason: 'Mensalidade vencida',
+    occurredAt: '2026-11-17T19:55:00-03:00',
+  });
+
+  assert.match(payload.title, /^Acesso bloqueado · \d{2}:\d{2}:\d{2}$/);
+  assert.equal(payload.body, 'Pedro Souza\nMensalidade vencida');
+  assert.equal(payload.level, 'error');
+  assert.equal(payload.timeoutMs, 7000);
 });
 
 test('formatTurnstileReleaseNotification usa fallback para liberacao manual', () => {
