@@ -355,6 +355,9 @@ export class EdgeSyncClient {
     if (this._syncing) return;
     this._syncing = true;
     try {
+      if (typeof this.accessService?.syncLogsFromControlId === 'function') {
+        await this.accessService.syncLogsFromControlId().catch(() => {});
+      }
       await this.pushPendingLogs();
       await this.pullSnapshot();
     } catch (err) {

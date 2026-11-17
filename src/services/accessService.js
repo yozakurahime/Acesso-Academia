@@ -1572,6 +1572,11 @@ export class AccessService {
       ? this.store.get('SELECT * FROM readers WHERE turnstile_id = ? AND active = 1 ORDER BY id ASC LIMIT 1', [turnstile.id])
       : null;
     const res = await this.controlId.releaseTurnstile(linkedReader);
+    this.store.run(
+      `INSERT INTO access_logs (member_name, event_code, event_label, occurred_at)
+       VALUES (?, ?, ?, datetime('now', 'localtime'))`,
+      ['Recepção', 12, `Liberação manual Control iD (${turnstile?.name || 'Principal'} · ${dirLabel})`],
+    );
     this.publishTurnstileDisplay('allowed', { source: `Liberação manual (${dirLabel})` });
     return { driver: 'controlid', turnstile_id: turnstile?.id || null, direction: effectiveDir, ...res };
   }
@@ -1648,8 +1653,8 @@ export class AccessService {
       if (!verified || current.length !== 1 || current[0].id !== member.id ||
           current[0].name !== member.name || current[0].document !== member.document) {
         this._verifiedDeviceUsers.delete(userId);
-        this.store.run(`INSERT INTO access_logs (controlid_user_id, event_code, event_label, occurred_at)
-          VALUES (?, 6, 'Acesso negado (vínculo facial não confirmado)', datetime('now', 'localtime'))`, [userId]);
+        this.store.run(`INSERT INTO access_logs (controlid_user_id, member_id, member_name, event_code, event_label, occurred_at)
+          VALUES (?, ?, ?, 6, 'Acesso negado (vínculo facial não confirmado)', datetime('now', 'localtime'))`, [userId, member.id, member.name]);
         this.publishTurnstileDisplay('denied', { reason: 'Vínculo facial não confirmado' });
         return { allowed: false, event: 6, message: 'Vínculo facial não confirmado' };
       }
