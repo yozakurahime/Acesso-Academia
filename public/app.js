@@ -167,6 +167,13 @@ function showTurnstileReleaseNotification(ev) {
     stack.firstElementChild?.remove();
   }
 
+  const liveSub = document.getElementById('sidebarLiveSubtitle');
+  if (liveSub) {
+    const shortName = String(name).trim().split(/\s+/).slice(0, 2).join(' ');
+    liveSub.textContent = `Último: ${shortName} · ${timeText.slice(0, 5)}`;
+  }
+  api('/api/occupancy').then((occ) => updateSidebarLiveOccupancy(occ)).catch(() => {});
+
   if (typeof window.Notification === 'function' && Notification.permission === 'granted') {
     try {
       new Notification('Catraca liberada', {
@@ -697,11 +704,31 @@ document.getElementById('quickSearchForm').addEventListener('submit', async (eve
 });
 
 // --- Dashboard ---
+function updateSidebarLiveOccupancy(occupancy, lastLog = null) {
+  const titleEl = document.getElementById('sidebarLiveTitle');
+  if (titleEl && occupancy) {
+    titleEl.textContent = occupancy.maxCapacity > 0
+      ? `Na academia: ${occupancy.count} / ${occupancy.maxCapacity}`
+      : `Na academia: ${occupancy.count} aluno(s)`;
+  }
+  const subEl = document.getElementById('sidebarLiveSubtitle');
+  if (subEl && lastLog) {
+    const shortName = String(lastLog.member_name || 'Recepção').trim().split(/\s+/).slice(0, 2).join(' ');
+    const timePart = String(lastLog.occurred_at || '').match(/(\d{2}:\d{2})/)?.[1] || '';
+    subEl.textContent = timePart ? `Último: ${shortName} · ${timePart}` : `Último: ${shortName}`;
+  }
+}
+
+document.getElementById('sidebarLiveWidget')?.addEventListener('click', () => {
+  switchTab('logs');
+});
+
 async function loadDashboard() {
   const [data, occupancy] = await Promise.all([
     api('/api/dashboard'),
     api('/api/occupancy').catch(() => null),
   ]);
+  updateSidebarLiveOccupancy(occupancy, data.recentLogs?.[0] || null);
   const occEl = document.getElementById('statOccupancy');
   if (occEl) {
     occEl.textContent = occupancy

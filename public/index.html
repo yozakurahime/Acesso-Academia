@@ -91,13 +91,13 @@
 
       <div class="sidebar-footer">
         <small id="demoBadge" class="demo-badge hidden">Demonstração · use dados fictícios</small>
-        <div class="hime-pro-badge">
+        <button type="button" id="sidebarLiveWidget" class="hime-pro-badge" style="width:100%;text-align:left;cursor:pointer;" title="Ver controle de acesso">
           <div class="hime-pro-badge-head">
-            <svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg>
-            <span>Oxigênio Liquid Pro</span>
+            <svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg>
+            <span id="sidebarLiveTitle">Na academia: —</span>
           </div>
-          <p>Catraca, IA &amp; Recepção ativos</p>
-        </div>
+          <p id="sidebarLiveSubtitle">Aguardando passagens...</p>
+        </button>
         <div class="release-controls">
           <select id="releaseTurnstileId" aria-label="Catraca para liberar" class="hidden" style="width:100%;padding:6px 8px;border-radius:6px;"></select>
           <select id="releaseDirection" aria-label="Direção da liberação" style="width:100%;padding:6px 8px;border-radius:6px;">
