@@ -60,7 +60,7 @@ function escapeText(str) {
             <h3>${escapeText(cleanName)}</h3>
             <div class="plan-price">R$ ${escapeText(priceStr)} <span>/ ${escapeText(unit)}</span></div>
             <p class="plan-desc">Sem taxa de matrícula e sem fidelidade.</p>
-            <a class="btn ${isFeatured ? 'btn-primary' : 'btn-secondary'}" href="https://wa.me/5562984211039?text=${waText}" target="_blank" rel="noopener">Matricular pelo WhatsApp</a>
+            <a class="btn ${isFeatured ? 'btn-primary' : 'btn-secondary'}" href="https://wa.me/5562981020169?text=${waText}" target="_blank" rel="noopener">Matricular pelo WhatsApp</a>
           </article>
         `;
       }).join('');
