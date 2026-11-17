@@ -64,7 +64,14 @@ export class GymService {
     const inGrace = Boolean(planEnrollment?.plan_name && planEnrollment.ends_on >= cutoff && planEnrollment.ends_on < today);
     const { portal_password_hash, portal_invite_hash, portal_invite_expires_at, ...profileMember } = member;
     const weeklyGoal = this.store.get('SELECT weekly_goal FROM student_fitness_preferences WHERE member_id = ?', [id])?.weekly_goal ?? 3;
-    return { member: { ...profileMember, has_portal_password: Boolean(portal_password_hash) }, payments, logs, classes, modalities, planEnrollment, inGrace, weeklyGoal };
+    const openCharges = this.store.all(
+      `SELECT id, member_id, due, amount
+       FROM membership_charges
+       WHERE member_id = ? AND payment_id IS NULL
+       ORDER BY due ASC, id ASC`,
+      [id],
+    );
+    return { member: { ...profileMember, has_portal_password: Boolean(portal_password_hash) }, payments, logs, classes, modalities, planEnrollment, inGrace, weeklyGoal, openCharges };
   }
 
   updateMember(memberId, data) {

@@ -2064,6 +2064,7 @@ window.openProfile = async (id) => {
     const m = data.member;
     state.selectedProfileName = m.name;
     state.selectedProfileMember = m;
+    state.selectedProfileOpenCharges = data.openCharges || [];
     document.getElementById('faceLinkDeviceId').value = m.controlid_user_id || '';
     document.getElementById('profFaceLinkStatus').textContent = m.controlid_user_id
       ? `ID vinculado no leitor: ${m.controlid_user_id}.` : 'Nenhum ID vinculado ao leitor.';
@@ -7474,31 +7475,55 @@ async function loadMemberOpenDebts(memberId) {
   if (!listEl) return;
   try {
     const debts = await api(`/api/members/${memberId}/debts?status=open`);
+    const charges = state.selectedProfileOpenCharges || [];
     state.selectedProfileDebts = debts;
-    const totalCents = debts.reduce((sum, d) => sum + Number(d.remaining_cents || 0), 0);
+    const totalCents = debts.reduce((sum, d) => sum + Number(d.remaining_cents || 0), 0)
+      + charges.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+    const openCount = debts.length + charges.length;
     if (totalEl) totalEl.textContent = fmtMoney(totalCents);
     if (kpiDebtEl) kpiDebtEl.textContent = fmtMoney(totalCents);
     if (badgeEl) {
-      badgeEl.textContent = String(debts.length);
-      badgeEl.classList.toggle('hidden', debts.length === 0);
+      badgeEl.textContent = String(openCount);
+      badgeEl.classList.toggle('hidden', openCount === 0);
     }
-    listEl.innerHTML = debts.length
-      ? debts.map((d) => `
-          <li style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div>
-              <strong>${fmtMoney(d.remaining_cents)}</strong>
-              <span class="muted">${d.due_date ? ` · Venc. ${escapeHtml(fmtDate(d.due_date))}` : ''}${d.notes ? ` · ${escapeHtml(d.notes)}` : ''}</span>
-            </div>
-            <button type="button" class="btn btn-primary btn-sm" data-prof-pay-debt="${d.id}">Receber</button>
-          </li>
-        `).join('')
-      : '<li class="muted">Nenhuma conta em aberto.</li>';
+    const chargesHtml = charges.map((c) => `
+      <li style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div>
+          <strong>${fmtMoney(c.amount)}</strong>
+          <span class="badge badge-pending" style="margin-left:6px;">Em aberto</span>
+          <span class="muted"> · Mensalidade do plano · Venc. ${escapeHtml(fmtDate(c.due))}</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-prof-pay-charge="${c.id}">Receber</button>
+      </li>
+    `).join('');
+    const debtsHtml = debts.map((d) => `
+      <li style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div>
+          <strong>${fmtMoney(d.remaining_cents)}</strong>
+          <span class="muted">${d.due_date ? ` · Venc. ${escapeHtml(fmtDate(d.due_date))}` : ''}${d.notes ? ` · ${escapeHtml(d.notes)}` : ''}</span>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" data-prof-pay-debt="${d.id}">Receber</button>
+      </li>
+    `).join('');
+    listEl.innerHTML = (chargesHtml + debtsHtml) || '<li class="muted">Nenhuma conta em aberto.</li>';
   } catch (err) {
     listEl.innerHTML = `<li class="muted">${escapeHtml(err.message)}</li>`;
   }
 }
 
-document.getElementById('profOpenDebtsList')?.addEventListener('click', (e) => {
+document.getElementById('profOpenDebtsList')?.addEventListener('click', async (e) => {
+  const chargeBtn = e.target.closest('[data-prof-pay-charge]');
+  if (chargeBtn) {
+    const member = state.selectedProfileMember || state.allMembers.find((m) => Number(m.id) === Number(state.selectedProfileId));
+    closeProfileModal(false);
+    document.querySelector('.tab[data-tab="billing"]')?.click();
+    await loadTab('billing');
+    if (member) {
+      const fullMember = state.allMembers.find((m) => Number(m.id) === Number(member.id)) || member;
+      selectBillingMember(fullMember);
+    }
+    return;
+  }
   const btn = e.target.closest('[data-prof-pay-debt]');
   if (!btn) return;
   const id = Number(btn.dataset.profPayDebt);
