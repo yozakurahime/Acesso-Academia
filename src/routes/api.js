@@ -12,6 +12,7 @@ import { FinanceService } from '../services/financeService.js';
 import { BackupService } from '../services/backupService.js';
 import { GoogleDriveBackupService } from '../services/googleDriveBackupService.js';
 import { AuditService } from '../services/auditService.js';
+import { EdgeCloudHub } from '../services/edgeSyncService.js';
 
 const SECRET_SETTING_KEYS = [
   'controlid_password',
@@ -202,7 +203,7 @@ const handle = (fn) => (req, res, next) => {
   });
 };
 
-export function createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, receiptService, gatewayService, authService = null, studentPortalService = null, googleDriveBackupService = null, hotkeyToken, exerciseVideos, dataDir = null }) {
+export function createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, receiptService, gatewayService, authService = null, studentPortalService = null, googleDriveBackupService = null, hotkeyToken, exerciseVideos, dataDir = null, edgeCloudHub = null, edgeSyncToken = process.env.EDGE_SYNC_TOKEN || '' }) {
   const router = Router();
   const portalService = studentPortalService || new StudentPortalService(store, gymService);
   const partnerService = new PartnerService(store);
@@ -211,6 +212,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   const backupService = new BackupService(store, path.join(dataDir || './data', 'backups'));
   const gdriveBackup = googleDriveBackupService || new GoogleDriveBackupService(store);
   const auditService = new AuditService(store);
+  const edgeHub = edgeCloudHub || new EdgeCloudHub(store);
   const requireAdmin = authService ? authService.requireRole('admin') : (_req, _res, next) => next();
   const requireReception = authService ? authService.requireRole('admin', 'reception') : (_req, _res, next) => next();
   const requireInstructor = authService ? authService.requireRole('admin', 'instructor') : (_req, _res, next) => next();
@@ -286,14 +288,67 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.set('Cache-Control', 'no-store').json({ ranking });
   }));
 
+  const requireEdgeToken = (req, res, next) => {
+    const expected = String(edgeSyncToken || store.getSettings()?.edge_sync_token || '').trim();
+    const authHeader = String(req.get('authorization') || '');
+    const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+    const provided = String(req.get('x-edge-token') || bearer || '').trim();
+    if (!expected || !equalSecret(provided, expected)) {
+      return res.status(401).json({ error: 'Token de sincronização edge inválido.' });
+    }
+    return next();
+  };
+
   if (authService) {
     const requireAuth = authService.middleware();
     router.use((req, res, next) => {
+      if (req.path.startsWith('/edge/') && req.path !== '/edge/status') return next();
       if (req.method === 'POST' && req.path === '/device/release' && isLocalDeviceRequest(req) &&
           equalSecret(req.get('x-oxigenio-hotkey'), hotkeyToken)) return next();
       requireAuth(req, res, next);
     });
   }
+
+  router.get('/edge/status', requireAdmin, (_req, res) => {
+    res.json(edgeHub.getStatus());
+  });
+
+  router.get('/edge/snapshot', requireEdgeToken, (_req, res) => {
+    res.json(edgeHub.getSnapshot());
+  });
+
+  router.post('/edge/logs', requireEdgeToken, (req, res) => {
+    res.json(edgeHub.ingestLogs(req.body?.logs || []));
+  });
+
+  router.post('/edge/commands/ack', requireEdgeToken, (req, res) => {
+    res.json({ ok: edgeHub.ackCommand(req.body?.id) });
+  });
+
+  router.get('/edge/commands', requireEdgeToken, (req, res) => {
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders?.();
+    res.write(': connected\n\n');
+
+    const unsubscribe = edgeHub.subscribeCommands((cmd) => {
+      res.write(`event: command\ndata: ${JSON.stringify(cmd)}\n\n`);
+    });
+
+    const keepAlive = setInterval(() => {
+      res.write(': ping\n\n');
+    }, 25000);
+    keepAlive.unref?.();
+
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      unsubscribe();
+    });
+  });
 
   router.post('/turnstile/preview', handle(async (req, res) => {
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
@@ -594,7 +649,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     handle(async (req, res) => {
       const direction = req.body?.direction || null;
       const turnstileId = req.body?.turnstile_id ? Number(req.body.turnstile_id) : null;
-      const result = await accessService.releaseTurnstile(direction, 'LIBERADO', { turnstileId });
+      const isCloudRole = String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud';
+      const result = isCloudRole
+        ? { queuedForEdge: true, command: edgeHub.enqueueCommand('release', { direction, turnstileId }) }
+        : await accessService.releaseTurnstile(direction, 'LIBERADO', { turnstileId });
       auditService.log({
         actorUser: req.authUser || 'hotkey',
         actorRole: req.authRole || 'system',

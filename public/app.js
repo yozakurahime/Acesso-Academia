@@ -131,41 +131,13 @@ function showToast(msg, isError = false) {
 
 let turnstileEventSource = null;
 
-function showTurnstileReleaseNotification(ev) {
-  const stack = document.getElementById('turnstileNotifStack');
-  if (!stack || !ev) return;
+function handleTurnstileReleaseEvent(ev) {
+  if (!ev) return;
 
   const name = ev.memberName || 'Liberação manual';
-  const source = ev.source || 'Catraca';
   const timeText = ev.occurredAt
     ? new Date(ev.occurredAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const birthdayTag = ev.isBirthday ? ' · 🎂 Aniversariante' : '';
-
-  const card = document.createElement('div');
-  card.className = 'turnstile-notif';
-  card.setAttribute('role', 'status');
-  card.innerHTML = `
-    <div>
-      <div class="turnstile-notif-badge"><span class="turnstile-notif-dot"></span><span>Catraca liberada · ${escapeHtml(timeText)}</span></div>
-      <div class="turnstile-notif-name">${escapeHtml(name)}</div>
-      <div class="turnstile-notif-meta">${escapeHtml(source)}${escapeHtml(birthdayTag)}</div>
-    </div>
-    <button type="button" class="turnstile-notif-close" aria-label="Fechar notificação">&times;</button>
-  `;
-
-  const removeCard = () => {
-    clearTimeout(card._timer);
-    card.remove();
-  };
-  card.querySelector('.turnstile-notif-close')?.addEventListener('click', removeCard);
-  card._timer = setTimeout(removeCard, 6000);
-
-  stack.appendChild(card);
-  while (stack.children.length > 4) {
-    clearTimeout(stack.firstElementChild?._timer);
-    stack.firstElementChild?.remove();
-  }
 
   const liveSub = document.getElementById('sidebarLiveSubtitle');
   if (liveSub) {
@@ -173,18 +145,6 @@ function showTurnstileReleaseNotification(ev) {
     liveSub.textContent = `Último: ${shortName} · ${timeText.slice(0, 5)}`;
   }
   api('/api/occupancy').then((occ) => updateSidebarLiveOccupancy(occ)).catch(() => {});
-
-  if (typeof window.Notification === 'function' && Notification.permission === 'granted') {
-    try {
-      new Notification('Catraca liberada', {
-        body: `${name} (${source})`,
-        silent: true,
-        tag: `turnstile-release-${ev.id || Date.now()}`,
-      });
-    } catch {
-      // Ignora caso o navegador bloqueie Notification fora de contexto seguro.
-    }
-  }
 }
 
 function stopTurnstileEventsStream() {
@@ -192,8 +152,6 @@ function stopTurnstileEventsStream() {
     turnstileEventSource.close();
     turnstileEventSource = null;
   }
-  const stack = document.getElementById('turnstileNotifStack');
-  if (stack) stack.innerHTML = '';
 }
 
 function startTurnstileEventsStream() {
@@ -202,7 +160,7 @@ function startTurnstileEventsStream() {
   es.addEventListener('release', (msg) => {
     try {
       const data = JSON.parse(msg.data);
-      showTurnstileReleaseNotification(data);
+      handleTurnstileReleaseEvent(data);
     } catch {
       // Ignora payload malformado.
     }

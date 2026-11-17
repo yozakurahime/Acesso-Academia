@@ -13,11 +13,13 @@ import { AccessService } from './services/accessService.js';
 import { GymService } from './services/gymService.js';
 import { ImportService } from './services/importService.js';
 import { WhatsappService } from './services/whatsappService.js';
+import { WhatsappBotService } from './services/whatsappBotService.js';
 import { ReceiptService } from './services/receiptService.js';
 import { GatewayService } from './services/gatewayService.js';
 import { AuthService } from './services/authService.js';
 import { StudentPortalService } from './services/studentPortalService.js';
 import { startGlobalHotkey } from './services/globalHotkey.js';
+import { createDesktopNotifier } from './services/desktopNotifier.js';
 import { startCloudflareTunnel } from './services/tunnelService.js';
 import { createApiRouter } from './routes/api.js';
 import { ExerciseVideos } from './services/exerciseVideos.js';
@@ -25,6 +27,7 @@ import { DeviceService } from './services/deviceService.js';
 import { FinanceService } from './services/financeService.js';
 import { BackupService } from './services/backupService.js';
 import { GoogleDriveBackupService } from './services/googleDriveBackupService.js';
+import { EdgeCloudHub, EdgeSyncClient } from './services/edgeSyncService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -40,6 +43,7 @@ async function start() {
   const gymService = new GymService(store);
   const importService = new ImportService(store, controlId);
   const whatsappService = new WhatsappService(store, { authDir: path.join(dataDir, 'whatsapp-auth') });
+  const whatsappBotService = new WhatsappBotService(store);
   const receiptService = new ReceiptService(store, accessService, { whatsappService });
   const gatewayService = new GatewayService(store, accessService, { whatsappService });
   const authService = new AuthService(store);
@@ -47,7 +51,10 @@ async function start() {
   const financeService = new FinanceService(store);
   const backupService = new BackupService(store, path.join(dataDir, 'backups'));
   const googleDriveBackupService = new GoogleDriveBackupService(store);
+  const edgeRole = String(process.env.EDGE_ROLE || 'standalone').trim().toLowerCase();
+  const edgeCloudHub = new EdgeCloudHub(store);
   whatsappService.setReceiptHandler((payload) => receiptService.processReceipt(payload));
+  whatsappService.setBotHandler(whatsappBotService);
 
   const app = express();
   app.disable('x-powered-by');
@@ -155,7 +162,7 @@ async function start() {
     if (req.method === 'POST') req.url = `/api${req.path}`;
     next();
   });
-  app.use('/api', createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, receiptService, gatewayService, authService, studentPortalService, googleDriveBackupService, hotkeyToken, exerciseVideos, dataDir }));
+  app.use('/api', createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, receiptService, gatewayService, authService, studentPortalService, googleDriveBackupService, hotkeyToken, exerciseVideos, dataDir, edgeCloudHub }));
   app.use(express.static(path.join(rootDir, 'public'), {
     setHeaders(res, filePath) {
       if (/\.(html|js|css)$/i.test(filePath)) {
@@ -225,10 +232,30 @@ async function start() {
   }
 
   let tunnelHandle = { stop() {} };
+  let desktopNotifier = { stop() {} };
+  let unsubscribeDesktopNotifier = () => {};
+  let edgeSyncClient = null;
   const mainServer = app.listen(port, '0.0.0.0', () => {
-    console.log(`Sistema de Academia rodando em http://localhost:${port}`);
+    console.log(`Sistema de Academia rodando em http://localhost:${port} (modo: ${edgeRole})`);
     console.log(`Banco de dados local: ${dbPath}`);
     startGlobalHotkey(rootDir, port, hotkeyToken);
+    desktopNotifier = createDesktopNotifier({ rootDir, port });
+    unsubscribeDesktopNotifier = accessService.onTurnstileRelease((event) => {
+      desktopNotifier.notifyTurnstileRelease(event);
+      if (edgeSyncClient) {
+        edgeSyncClient.pushPendingLogs().catch(() => {});
+      }
+    });
+    if (edgeRole === 'edge' && process.env.EDGE_CLOUD_URL && process.env.EDGE_SYNC_TOKEN) {
+      edgeSyncClient = new EdgeSyncClient({
+        store,
+        accessService,
+        cloudUrl: process.env.EDGE_CLOUD_URL,
+        token: process.env.EDGE_SYNC_TOKEN,
+      });
+      edgeSyncClient.start();
+      console.log(`[EDGE SYNC] Conectado ao servidor cloud: ${process.env.EDGE_CLOUD_URL}`);
+    }
     tunnelHandle = startCloudflareTunnel();
     if (process.platform === 'win32' && process.env.OXIGENIO_ABRIR_TELAS === '1') {
       const launcher = spawn('powershell.exe', [
@@ -298,6 +325,9 @@ async function start() {
   }
 
   const shutdown = () => {
+    try { edgeSyncClient?.stop(); } catch {}
+    try { unsubscribeDesktopNotifier(); } catch {}
+    try { desktopNotifier.stop(); } catch {}
     try { tunnelHandle.stop(); } catch {}
     try { store.save(); } catch {}
     whatsappService.disconnect({ clearSession: false }).catch(() => {});

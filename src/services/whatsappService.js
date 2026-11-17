@@ -91,11 +91,12 @@ function localDateIso(offsetDays = 0, now = new Date()) {
 }
 
 export class WhatsappService {
-  constructor(store, { authDir, sleepFn = sleep, onReceiptMedia = null } = {}) {
+  constructor(store, { authDir, sleepFn = sleep, onReceiptMedia = null, onBotMessage = null } = {}) {
     this.store = store;
     this.authDir = authDir || null;
     this.sleep = sleepFn;
     this.onReceiptMedia = onReceiptMedia;
+    this.onBotMessage = onBotMessage;
     this.sock = null;
     this.status = 'disconnected';
     this.qrDataUrl = null;
@@ -106,10 +107,15 @@ export class WhatsappService {
     this.queueRunning = false;
     this._queueCancel = null;
     this._seenMediaIds = new Set();
+    this._sentBotMessageIds = new Set();
   }
 
   setReceiptHandler(handler) {
     this.onReceiptMedia = handler;
+  }
+
+  setBotHandler(handler) {
+    this.onBotMessage = handler;
   }
 
   hasSavedSession() {
@@ -229,10 +235,22 @@ export class WhatsappService {
       if (type !== 'notify') return;
       const settings = this.store.getSettings();
       const allowReceipts = Boolean(this.onReceiptMedia) && settings.whatsapp_receipt_enabled === '1' && Boolean(settings.gemini_api_key);
+      const allowBot = Boolean(this.onBotMessage) && settings.whatsapp_bot_enabled === '1' && Boolean(settings.gemini_api_key || process.env.GEMINI_API_KEY);
       for (const msg of messages || []) {
         try {
-          if (msg.key?.fromMe) continue;
           const msgId = msg.key?.id;
+          const jid = msg.key?.remoteJid || '';
+          if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast') continue;
+          const senderPhone = jid.split('@')[0];
+
+          if (msg.key?.fromMe) {
+            if (msgId && this._sentBotMessageIds.has(msgId)) continue;
+            if (allowBot && typeof this.onBotMessage?.markHumanTakeover === 'function') {
+              this.onBotMessage.markHumanTakeover(senderPhone);
+            }
+            continue;
+          }
+
           if (msgId) {
             if (this._seenMediaIds.has(msgId)) continue;
             this._seenMediaIds.add(msgId);
@@ -240,13 +258,37 @@ export class WhatsappService {
               this._seenMediaIds.delete(this._seenMediaIds.values().next().value);
             }
           }
-          const jid = msg.key?.remoteJid || '';
-          if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast') continue;
-          const senderPhone = jid.split('@')[0];
           const content = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
           const incomingText = content?.conversation || content?.extendedTextMessage?.text || '';
-          if (incomingText) {
-            this.handleIncomingText(senderPhone, incomingText);
+          const handledOptCommand = incomingText ? this.handleIncomingText(senderPhone, incomingText) : false;
+
+          if (!handledOptCommand && allowBot) {
+            const audioMsg = content?.audioMessage;
+            let audioBuffer = null;
+            let audioMimeType = '';
+            if (!incomingText && audioMsg && Number(audioMsg.fileLength || 0) <= 4 * 1024 * 1024) {
+              audioBuffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: SILENT_LOGGER, reuploadRequest: sock.updateMediaMessage });
+              audioMimeType = audioMsg.mimetype || 'audio/ogg';
+            }
+            if (incomingText || audioBuffer?.length) {
+              const botResult = await this.onBotMessage.handleIncomingMessage({
+                phone: senderPhone,
+                text: incomingText,
+                audioBuffer,
+                audioMimeType,
+                pushName: msg.pushName || '',
+              });
+              if (botResult?.reply) {
+                const sent = await sock.sendMessage(jid, { text: botResult.reply });
+                const sentId = sent?.key?.id;
+                if (sentId) {
+                  this._sentBotMessageIds.add(sentId);
+                  if (this._sentBotMessageIds.size > 500) {
+                    this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+                  }
+                }
+              }
+            }
           }
 
           if (!allowReceipts) continue;

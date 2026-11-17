@@ -713,6 +713,11 @@ export class DatabaseStore {
       checkout_ref: 'TEXT',
     });
     this.ensureColumns('point_orders', { membership_charge_id: 'INTEGER REFERENCES membership_charges(id)' });
+    this.ensureColumns('access_logs', {
+      edge_event_id: 'TEXT',
+      edge_synced: 'INTEGER NOT NULL DEFAULT 0',
+    });
+    this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_logs_edge_event_id ON access_logs(edge_event_id)');
 
     // Mantém os importadores e chamadas legadas de plano em compatibilidade.
     this.db.run(`
