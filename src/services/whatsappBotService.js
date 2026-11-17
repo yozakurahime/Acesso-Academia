@@ -69,6 +69,12 @@ export class WhatsappBotService {
   isPaused(phone, nowMs = Date.now()) {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return false;
+    try {
+      const row = this.store.get('SELECT bot_paused FROM whatsapp_chats WHERE phone = ?', [normalized]);
+      if (Number(row?.bot_paused) === 1) return true;
+    } catch {
+      // ignore if table not present
+    }
     const until = this._pausedUntil.get(normalized);
     if (!until) return false;
     if (nowMs >= until) {
@@ -82,16 +88,127 @@ export class WhatsappBotService {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return;
     this._pausedUntil.set(normalized, nowMs + Math.max(1000, Number(durationMs) || this.humanPauseMs));
+    try {
+      this.store.run(
+        `INSERT INTO whatsapp_chats (phone, bot_paused, last_message_at)
+         VALUES (?, 1, datetime('now', 'localtime'))
+         ON CONFLICT(phone) DO UPDATE SET bot_paused = 1`,
+        [normalized],
+      );
+    } catch {}
   }
 
   resumeContact(phone) {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return;
     this._pausedUntil.delete(normalized);
+    try {
+      this.store.run(
+        'UPDATE whatsapp_chats SET bot_paused = 0, needs_human = 0 WHERE phone = ?',
+        [normalized],
+      );
+    } catch {}
   }
 
   markHumanTakeover(phone, nowMs = Date.now()) {
     this.pauseContact(phone, this.ownerTakeoverPauseMs, nowMs);
+  }
+
+  _findMemberForPhone(normalizedPhone) {
+    if (!normalizedPhone) return null;
+    try {
+      return this.store.get(
+        `SELECT id, name FROM members
+         WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?
+         ORDER BY id DESC LIMIT 1`,
+        [normalizedPhone.slice(-8)],
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  recordChatMessage({ phone, direction = 'in', senderType = 'customer', body = '', contactName = null, needsHuman = false } = {}) {
+    const normalized = normalizeBrPhone(phone);
+    const cleanBody = String(body || '').trim();
+    if (!normalized || !cleanBody) return null;
+
+    const member = this._findMemberForPhone(normalized);
+    const resolvedName = member?.name || (contactName ? String(contactName).trim() : null);
+    const unreadDelta = direction === 'in' ? 1 : 0;
+    const pausedFlag = needsHuman ? 1 : 0;
+    const humanFlag = needsHuman ? 1 : 0;
+
+    try {
+      this.store.run(
+        `INSERT INTO whatsapp_chats (phone, contact_name, member_id, bot_paused, needs_human, unread_count, last_message, last_message_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+         ON CONFLICT(phone) DO UPDATE SET
+           contact_name = COALESCE(excluded.contact_name, whatsapp_chats.contact_name),
+           member_id = COALESCE(excluded.member_id, whatsapp_chats.member_id),
+           bot_paused = CASE WHEN excluded.bot_paused = 1 THEN 1 ELSE whatsapp_chats.bot_paused END,
+           needs_human = CASE WHEN excluded.needs_human = 1 THEN 1 ELSE whatsapp_chats.needs_human END,
+           unread_count = CASE WHEN ? > 0 THEN whatsapp_chats.unread_count + 1 ELSE 0 END,
+           last_message = excluded.last_message,
+           last_message_at = datetime('now', 'localtime')`,
+        [normalized, resolvedName, member?.id || null, pausedFlag, humanFlag, unreadDelta, cleanBody.slice(0, 240), unreadDelta],
+      );
+      this.store.run(
+        `INSERT INTO whatsapp_chat_messages (phone, direction, sender_type, body)
+         VALUES (?, ?, ?, ?)`,
+        [normalized, direction, senderType, cleanBody],
+      );
+    } catch {
+      return null;
+    }
+    return { phone: normalized };
+  }
+
+  listChats() {
+    const items = this.store.all(
+      `SELECT c.phone, c.contact_name, c.member_id, c.bot_paused, c.needs_human,
+              c.unread_count, c.last_message, c.last_message_at,
+              m.name AS member_name, m.status AS member_status, m.valid_until AS member_valid_until
+       FROM whatsapp_chats c
+       LEFT JOIN members m ON m.id = c.member_id
+       ORDER BY c.needs_human DESC, c.last_message_at DESC
+       LIMIT 100`,
+    );
+    const needsHumanCount = items.filter((i) => Number(i.needs_human) === 1).length;
+    const unreadTotal = items.reduce((acc, i) => acc + Number(i.unread_count || 0), 0);
+    return { items, needsHumanCount, unreadTotal };
+  }
+
+  getChatMessages(phone, { markRead = true } = {}) {
+    const normalized = normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
+    if (!normalized) return { chat: null, messages: [] };
+    if (markRead) {
+      try {
+        this.store.run('UPDATE whatsapp_chats SET unread_count = 0 WHERE phone = ?', [normalized]);
+      } catch {}
+    }
+    const chat = this.store.get(
+      `SELECT c.*, m.name AS member_name, m.status AS member_status, m.valid_until AS member_valid_until
+       FROM whatsapp_chats c
+       LEFT JOIN members m ON m.id = c.member_id
+       WHERE c.phone = ?`,
+      [normalized],
+    );
+    const messages = this.store.all(
+      `SELECT id, phone, direction, sender_type, body, created_at
+       FROM whatsapp_chat_messages
+       WHERE phone = ?
+       ORDER BY id ASC
+       LIMIT 200`,
+      [normalized],
+    );
+    return { chat: chat || null, messages };
+  }
+
+  setBotPaused(phone, paused) {
+    if (paused) this.pauseContact(phone, this.humanPauseMs);
+    else this.resumeContact(phone);
+    return { phone: normalizeBrPhone(phone) || phone, bot_paused: paused ? 1 : 0 };
   }
 
   _getHistory(phone, nowMs = Date.now()) {
@@ -261,8 +378,10 @@ export class WhatsappBotService {
 
     if (HUMAN_REQUEST_REGEX.test(userText)) {
       this.pauseContact(normalized, this.humanPauseMs);
+      const reply = 'Claro! Vou encaminhar sua conversa para nossa equipe de atendimento humano. Assim que possível alguém já te responde por aqui.';
+      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: reply, needsHuman: true });
       return {
-        reply: 'Claro! Vou encaminhar sua conversa para nossa equipe de atendimento humano. Assim que possível alguém já te responde por aqui.',
+        reply,
         requiresHuman: true,
         reason: 'human_request',
       };
@@ -284,8 +403,10 @@ export class WhatsappBotService {
     const rawReply = await this._callGemini({ apiKey, model, contents });
     if (rawReply.includes(CONTEXT_MISSING_HANDOFF_MARKER)) {
       this.pauseContact(normalized, this.humanPauseMs);
+      const reply = 'Vou confirmar essa informação certinha com nossa equipe de atendimento humano e já te respondemos por aqui!';
+      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: reply, needsHuman: true });
       return {
-        reply: 'Vou confirmar essa informação certinha com nossa equipe de atendimento humano e já te respondemos por aqui!',
+        reply,
         requiresHuman: true,
         reason: 'context_missing',
       };
@@ -296,6 +417,7 @@ export class WhatsappBotService {
 
     this._appendHistory(normalized, 'user', userText);
     this._appendHistory(normalized, 'model', cleanReply);
+    this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: cleanReply, needsHuman: false });
 
     return {
       reply: cleanReply,

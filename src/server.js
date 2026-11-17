@@ -162,7 +162,7 @@ async function start() {
     if (req.method === 'POST') req.url = `/api${req.path}`;
     next();
   });
-  app.use('/api', createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, receiptService, gatewayService, authService, studentPortalService, googleDriveBackupService, hotkeyToken, exerciseVideos, dataDir, edgeCloudHub }));
+  app.use('/api', createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, whatsappBotService, receiptService, gatewayService, authService, studentPortalService, googleDriveBackupService, hotkeyToken, exerciseVideos, dataDir, edgeCloudHub }));
   app.use(express.static(path.join(rootDir, 'public'), {
     setHeaders(res, filePath) {
       if (/\.(html|js|css)$/i.test(filePath)) {

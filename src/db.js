@@ -504,6 +504,27 @@ export class DatabaseStore {
         created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
       );
 
+      CREATE TABLE IF NOT EXISTS whatsapp_chats (
+        phone TEXT PRIMARY KEY,
+        contact_name TEXT,
+        member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+        bot_paused INTEGER NOT NULL DEFAULT 0,
+        needs_human INTEGER NOT NULL DEFAULT 0,
+        unread_count INTEGER NOT NULL DEFAULT 0,
+        last_message TEXT,
+        last_message_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+
+      CREATE TABLE IF NOT EXISTS whatsapp_chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        sender_type TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_wa_chat_msgs_phone ON whatsapp_chat_messages(phone, id);
+
       CREATE TABLE IF NOT EXISTS turnstiles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,

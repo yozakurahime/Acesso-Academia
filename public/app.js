@@ -350,6 +350,7 @@ const tabLoaders = {
   classes: () => loadOnce(loadGymStructure),
   workouts: () => Promise.all([loadWorkoutTemplates(), loadExerciseCatalog()]),
   staff: () => Promise.all([loadOnce(loadStaff), loadOnce(loadMembers), loadOnce(loadGymStructure)]),
+  chat: loadChats,
   logs: loadLogs,
   reports: () => Promise.all([loadOnce(loadMembers), loadReports()]),
   settings: () => Promise.all([
@@ -7499,4 +7500,151 @@ document.getElementById('btnQuickAddTemplate')?.addEventListener('click', async 
   const form = document.getElementById('workoutForm');
   form.classList.remove('hidden');
   form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+// ---- Atendimento / Chat WhatsApp ----
+let chatItemsCache = [];
+let activeChatPhone = null;
+let chatPollTimer = null;
+
+function updateChatNavBadge(data) {
+  const badge = document.getElementById('chatNavBadge');
+  if (!badge) return;
+  const count = Number(data?.needsHumanCount || 0) || Number(data?.unreadTotal || 0);
+  if (count > 0) {
+    badge.textContent = String(count);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function renderChatList() {
+  const listEl = document.getElementById('chatList');
+  if (!listEl) return;
+  const q = String(document.getElementById('chatSearchInput')?.value || '').trim().toLowerCase();
+  const filtered = chatItemsCache.filter((c) => {
+    if (!q) return true;
+    const name = String(c.member_name || c.contact_name || '').toLowerCase();
+    return name.includes(q) || String(c.phone || '').includes(q);
+  });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div class="muted" style="padding:12px;">Nenhuma conversa registrada ainda.</div>';
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((c) => {
+    const title = c.member_name || c.contact_name || c.phone;
+    const activeClass = c.phone === activeChatPhone ? ' active' : '';
+    const humanTag = Number(c.needs_human) === 1
+      ? '<span class="badge badge-pending">Atendente</span>'
+      : (Number(c.unread_count) > 0 ? `<span class="badge badge-active">${Number(c.unread_count)}</span>` : '');
+    return `
+      <button type="button" class="chat-item${activeClass}" data-chat-phone="${escapeHtml(c.phone)}">
+        <div class="chat-item-top">
+          <strong>${escapeHtml(title)}</strong>
+          ${humanTag}
+        </div>
+        <div class="chat-item-preview">${escapeHtml(c.last_message || '')}</div>
+      </button>
+    `;
+  }).join('');
+}
+
+async function openChat(phone) {
+  if (!phone) return;
+  activeChatPhone = phone;
+  renderChatList();
+  const data = await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/messages`);
+  const chat = data.chat || { phone };
+  const title = chat.member_name || chat.contact_name || chat.phone;
+  const paused = Number(chat.bot_paused) === 1;
+  const headerEl = document.getElementById('chatHeader');
+  if (headerEl) {
+    headerEl.innerHTML = `
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}</div>
+      </div>
+      <div class="inline-actions">
+        <button type="button" id="btnToggleChatBot" class="btn btn-secondary btn-sm">${paused ? 'Retomar bot' : 'Pausar bot'}</button>
+      </div>
+    `;
+    document.getElementById('btnToggleChatBot')?.addEventListener('click', async () => {
+      try {
+        await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/bot`, {
+          method: 'POST',
+          body: JSON.stringify({ paused: !paused }),
+        });
+        showToast(paused ? 'Bot retomado para este contato.' : 'Bot pausado para este contato.');
+        await Promise.all([openChat(phone), loadChats({ skipActiveReload: true })]);
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+
+  const msgsEl = document.getElementById('chatMessages');
+  if (msgsEl) {
+    msgsEl.innerHTML = (data.messages || []).map((m) => {
+      const cls = m.direction === 'in' ? 'in' : 'out';
+      const who = m.sender_type === 'bot' ? 'Bot IA' : (m.sender_type === 'human' ? 'Atendente' : 'Cliente');
+      const time = String(m.created_at || '').slice(11, 16);
+      return `
+        <div class="chat-bubble ${cls}">
+          <div>${escapeHtml(m.body)}</div>
+          <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>
+        </div>
+      `;
+    }).join('');
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  document.getElementById('chatReplyForm')?.classList.remove('hidden');
+}
+
+async function loadChats({ skipActiveReload = false } = {}) {
+  const data = await api('/api/whatsapp/chats');
+  chatItemsCache = data.items || [];
+  updateChatNavBadge(data);
+  renderChatList();
+  if (!skipActiveReload && activeChatPhone) {
+    await openChat(activeChatPhone);
+  }
+  clearTimeout(chatPollTimer);
+  if (state.activeTab === 'chat' && !document.hidden) {
+    chatPollTimer = setTimeout(() => {
+      if (state.activeTab === 'chat' && !document.hidden) {
+        loadChats().catch(() => {});
+      }
+    }, 5000);
+  }
+}
+
+document.getElementById('btnRefreshChats')?.addEventListener('click', () => {
+  loadChats().catch((err) => showToast(err.message, true));
+});
+document.getElementById('chatSearchInput')?.addEventListener('input', renderChatList);
+document.getElementById('chatList')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-chat-phone]');
+  if (!btn) return;
+  openChat(btn.dataset.chatPhone).catch((err) => showToast(err.message, true));
+});
+document.getElementById('chatReplyForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!activeChatPhone) return;
+  const input = document.getElementById('chatReplyInput');
+  const text = String(input?.value || '').trim();
+  if (!text) return;
+  try {
+    await api(`/api/whatsapp/chats/${encodeURIComponent(activeChatPhone)}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    input.value = '';
+    await Promise.all([openChat(activeChatPhone), loadChats({ skipActiveReload: true })]);
+  } catch (err) {
+    showToast(err.message, true);
+  }
 });

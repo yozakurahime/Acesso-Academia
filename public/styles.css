@@ -2571,3 +2571,114 @@ input.is-cpf-error {
 .new-enr-day-row.is-off {
   opacity: 0.45;
 }
+
+/* Chat / Atendimento WhatsApp */
+.chat-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+  min-height: 540px;
+}
+.chat-sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  max-height: 640px;
+}
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+.chat-item {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chat-item:hover,
+.chat-item.active {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+.chat-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.chat-item-preview {
+  font-size: 12px;
+  color: var(--muted, #94a3b8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  max-height: 640px;
+}
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 4px;
+}
+.chat-bubble {
+  max-width: 78%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-bubble.in {
+  align-self: flex-start;
+  background: rgba(148, 163, 184, 0.14);
+}
+.chat-bubble.out {
+  align-self: flex-end;
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.chat-bubble-meta {
+  font-size: 11px;
+  color: var(--muted, #94a3b8);
+  margin-top: 4px;
+}
+.chat-reply-form {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+}
+.chat-reply-form input {
+  flex: 1;
+}
+@media (max-width: 900px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+}

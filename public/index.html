@@ -52,6 +52,7 @@
     <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3Z"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
   </svg>
   <div class="layout">
     <aside id="workspaceMenu" class="sidebar">
@@ -71,6 +72,7 @@
           <p>Recepção</p>
           <button class="tab active" data-tab="dashboard" aria-current="page" title="Visão geral"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Visão geral</span></button>
           <button class="tab" data-tab="members" title="Alunos"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span class="tab-label">Alunos</span></button>
+          <button class="tab" data-tab="chat" title="Atendimento WhatsApp"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span class="tab-label">Atendimento <span id="chatNavBadge" class="badge badge-pending hidden" style="margin-left:4px;">0</span></span></button>
           <button class="tab" data-tab="logs" title="Controle de acesso"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg><span class="tab-label">Controle de acesso</span></button>
         </div>
         <div class="nav-group">
@@ -532,6 +534,32 @@
             <button type="button" id="btnCreateSubscription" class="btn btn-primary btn-sm">Criar Assinatura Mercado Pago</button>
           </div>
           <div id="mpSubscriptionsList" class="billing-queue"></div>
+        </div>
+      </section>
+
+      <!-- ATENDIMENTO / CHAT WHATSAPP -->
+      <section id="tab-chat" class="tab-panel">
+        <div class="page-title">
+          <div><h2>Atendimento WhatsApp</h2></div>
+          <div class="inline-actions">
+            <button type="button" id="btnRefreshChats" class="btn btn-secondary"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-button-label>Atualizar</span></button>
+          </div>
+        </div>
+        <div class="chat-layout">
+          <aside class="card chat-sidebar">
+            <input id="chatSearchInput" type="search" placeholder="Buscar nome ou telefone..." style="margin-bottom:10px;" />
+            <div id="chatList" class="chat-list"></div>
+          </aside>
+          <div class="card chat-main">
+            <div id="chatHeader" class="chat-header">
+              <div class="muted">Selecione uma conversa ao lado para visualizar e responder.</div>
+            </div>
+            <div id="chatMessages" class="chat-messages"></div>
+            <form id="chatReplyForm" class="chat-reply-form hidden">
+              <input id="chatReplyInput" type="text" placeholder="Digite sua resposta para o WhatsApp..." autocomplete="off" required />
+              <button type="submit" class="btn btn-primary">Enviar</button>
+            </form>
+          </div>
         </div>
       </section>
 

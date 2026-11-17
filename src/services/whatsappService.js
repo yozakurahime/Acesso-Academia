@@ -118,6 +118,37 @@ export class WhatsappService {
     this.onBotMessage = handler;
   }
 
+  async sendChatMessage(phone, text) {
+    const normalized = normalizeBrPhone(phone);
+    const cleanText = String(text || '').trim();
+    if (!normalized) throw new Error('Telefone inválido.');
+    if (!cleanText) throw new Error('Mensagem vazia.');
+    if (!this.sock || this.status !== 'connected') {
+      throw new Error('WhatsApp não está conectado.');
+    }
+
+    const jid = `${normalized}@s.whatsapp.net`;
+    const sent = await this.sock.sendMessage(jid, { text: cleanText });
+    const sentId = sent?.key?.id;
+    if (sentId) {
+      this._sentBotMessageIds.add(sentId);
+      if (this._sentBotMessageIds.size > 500) {
+        this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+      }
+    }
+    if (this.onBotMessage) {
+      this.onBotMessage.markHumanTakeover(normalized);
+      this.onBotMessage.recordChatMessage({
+        phone: normalized,
+        direction: 'out',
+        senderType: 'human',
+        body: cleanText,
+        needsHuman: false,
+      });
+    }
+    return { ok: true, phone: normalized };
+  }
+
   hasSavedSession() {
     if (!this.authDir) return false;
     return fs.existsSync(path.join(this.authDir, 'creds.json'));
@@ -260,6 +291,15 @@ export class WhatsappService {
           }
           const content = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
           const incomingText = content?.conversation || content?.extendedTextMessage?.text || '';
+          if (incomingText && this.onBotMessage?.recordChatMessage) {
+            this.onBotMessage.recordChatMessage({
+              phone: senderPhone,
+              direction: 'in',
+              senderType: 'customer',
+              body: incomingText,
+              contactName: msg.pushName || null,
+            });
+          }
           const handledOptCommand = incomingText ? this.handleIncomingText(senderPhone, incomingText) : false;
 
           if (!handledOptCommand && allowBot) {

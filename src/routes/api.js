@@ -203,7 +203,7 @@ const handle = (fn) => (req, res, next) => {
   });
 };
 
-export function createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, receiptService, gatewayService, authService = null, studentPortalService = null, googleDriveBackupService = null, hotkeyToken, exerciseVideos, dataDir = null, edgeCloudHub = null, edgeSyncToken = process.env.EDGE_SYNC_TOKEN || '' }) {
+export function createApiRouter({ store, controlId, toletus, accessService, gymService, importService, whatsappService, whatsappBotService = null, receiptService, gatewayService, authService = null, studentPortalService = null, googleDriveBackupService = null, hotkeyToken, exerciseVideos, dataDir = null, edgeCloudHub = null, edgeSyncToken = process.env.EDGE_SYNC_TOKEN || '' }) {
   const router = Router();
   const portalService = studentPortalService || new StudentPortalService(store, gymService);
   const partnerService = new PartnerService(store);
@@ -1331,6 +1331,37 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (!whatsappService) return res.json([]);
     res.json(whatsappService.listLogs(req.query.limit || 40));
   });
+
+  router.get('/whatsapp/chats', requireReception, (_req, res) => {
+    if (!whatsappBotService) return res.json({ items: [], needsHumanCount: 0, unreadTotal: 0 });
+    res.json(whatsappBotService.listChats());
+  });
+
+  router.get('/whatsapp/chats/:phone/messages', requireReception, (req, res) => {
+    if (!whatsappBotService) return res.json({ chat: null, messages: [] });
+    res.json(whatsappBotService.getChatMessages(req.params.phone));
+  });
+
+  router.post(
+    '/whatsapp/chats/:phone/reply',
+    requireReception,
+    handle(async (req, res) => {
+      if (!whatsappService) throw new Error('Serviço WhatsApp não inicializado.');
+      const text = String(req.body?.text || '').trim();
+      if (!text) return res.status(400).json({ error: 'Informe a mensagem.' });
+      res.json(await whatsappService.sendChatMessage(req.params.phone, text));
+    }),
+  );
+
+  router.post(
+    '/whatsapp/chats/:phone/bot',
+    requireReception,
+    handle(async (req, res) => {
+      if (!whatsappBotService) throw new Error('Bot WhatsApp não inicializado.');
+      const paused = Boolean(req.body?.paused);
+      res.json(whatsappBotService.setBotPaused(req.params.phone, paused));
+    }),
+  );
 
   // Comprovantes Pix / IA (Gemini)
   router.get('/receipts', requireReception, (req, res) => {
