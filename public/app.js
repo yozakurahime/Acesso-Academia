@@ -7648,3 +7648,62 @@ document.getElementById('chatReplyForm')?.addEventListener('submit', async (e) =
     showToast(err.message, true);
   }
 });
+
+// ---- Subaba Contexto do Bot IA (WhatsApp & IA) ----
+async function loadWhatsappBotContext() {
+  try {
+    const data = await api('/api/whatsapp/bot-context');
+    const enabledEl = document.getElementById('waBotEnabled');
+    const textEl = document.getElementById('waBotContextText');
+    if (enabledEl) enabledEl.checked = Boolean(data.enabled);
+    if (textEl) textEl.value = data.context || '';
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+document.querySelectorAll('.wa-subtab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.waSubtab;
+    document.querySelectorAll('.wa-subtab-btn').forEach((b) => {
+      const active = b.dataset.waSubtab === target;
+      b.classList.toggle('btn-primary', active);
+      b.classList.toggle('btn-secondary', !active);
+      b.setAttribute('aria-selected', String(active));
+    });
+    document.getElementById('waSubtabRules')?.classList.toggle('hidden', target !== 'rules');
+    document.getElementById('waSubtabContext')?.classList.toggle('hidden', target !== 'context');
+    if (target === 'context') {
+      loadWhatsappBotContext();
+    }
+  });
+});
+
+document.getElementById('waBotContextForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    await api('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        whatsapp_bot_enabled: document.getElementById('waBotEnabled')?.checked ? '1' : '0',
+        whatsapp_bot_context: document.getElementById('waBotContextText')?.value || '',
+      }),
+    });
+    showToast('Contexto do Bot IA salvo com sucesso.');
+  } catch (err) {
+    showToast(err.message, true);
+  }
+});
+
+document.getElementById('btnWaBotContextReset')?.addEventListener('click', async () => {
+  try {
+    await api('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ whatsapp_bot_context: '' }),
+    });
+    await loadWhatsappBotContext();
+    showToast('Contexto restaurado para o padrão.');
+  } catch (err) {
+    showToast(err.message, true);
+  }
+});

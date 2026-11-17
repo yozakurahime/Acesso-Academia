@@ -1474,13 +1474,20 @@
             </div>
 
             <!-- CATEGORIA: WHATSAPP & IA -->
-            <section class="panel settings-card" id="settings-whatsapp" data-settings-cat="whatsapp" data-settings-keywords="whatsapp qr code mensagens anti-ban limite diario gemini comprovante pix ia">
+            <section class="panel settings-card" id="settings-whatsapp" data-settings-cat="whatsapp" data-settings-keywords="whatsapp qr code mensagens anti-ban limite diario gemini comprovante pix ia bot contexto">
               <div class="settings-card-head">
                 <div>
                   <h3>WhatsApp (QR Code, Automação &amp; IA)</h3>
-                  <p class="muted">Conexão do aparelho, regras anti-ban, modelos de mensagem e leitura automática de comprovantes Pix.</p>
+                  <p class="muted">Conexão do aparelho, regras anti-ban, modelos de mensagem, contexto do bot IA e leitura automática de comprovantes Pix.</p>
                 </div>
               </div>
+
+              <div class="inline-actions" style="margin: 10px 0 14px; border-bottom: 1px solid var(--border, rgba(148,163,184,0.2)); padding-bottom: 10px;" role="tablist" aria-label="Subabas WhatsApp e IA">
+                <button type="button" class="btn btn-primary btn-sm wa-subtab-btn" data-wa-subtab="rules" aria-selected="true">Conexão &amp; Regras</button>
+                <button type="button" class="btn btn-secondary btn-sm wa-subtab-btn" data-wa-subtab="context" aria-selected="false">Contexto do Bot IA</button>
+              </div>
+
+              <div id="waSubtabRules">
 
               <div class="wa-status-bar">
                 <div>
@@ -1582,6 +1589,22 @@
                   <thead><tr><th>Data/Hora</th><th>Aluno / Número</th><th>Tipo</th><th>Status</th></tr></thead>
                   <tbody id="waLogsBody"></tbody>
                 </table>
+              </div>
+              </div>
+
+              <div id="waSubtabContext" class="hidden">
+                <form id="waBotContextForm" class="settings-grouped-form">
+                  <div class="settings-subblock">
+                    <h4>Atendimento Automático &amp; Base de Conhecimento (Bot IA)</h4>
+                    <label class="checkbox-label" style="margin-bottom:10px;"><input type="checkbox" id="waBotEnabled" /> Ativar respostas automáticas do Bot IA no WhatsApp</label>
+                    <p class="muted" style="margin:0 0 10px;font-size:12px;">Edite abaixo todas as informações da academia (planos, preços, horários, modalidades e regras de atendimento) que a IA usa para responder os alunos.</p>
+                    <textarea id="waBotContextText" rows="20" style="width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.45;" placeholder="Carregando contexto do bot..."></textarea>
+                  </div>
+                  <div class="settings-form-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="submit" class="btn btn-primary">Salvar contexto do bot</button>
+                    <button type="button" id="btnWaBotContextReset" class="btn btn-secondary">Restaurar padrão</button>
+                  </div>
+                </form>
               </div>
             </section>
 

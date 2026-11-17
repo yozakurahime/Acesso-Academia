@@ -1337,6 +1337,16 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(whatsappBotService.listChats());
   });
 
+  router.get('/whatsapp/bot-context', requireAdmin, (_req, res) => {
+    const s = store.getSettings();
+    const context = whatsappBotService ? whatsappBotService.loadBaseContext() : (s.whatsapp_bot_context || '');
+    res.json({
+      context,
+      isCustom: Boolean(String(s.whatsapp_bot_context || '').trim()),
+      enabled: s.whatsapp_bot_enabled === '1',
+    });
+  });
+
   router.get('/whatsapp/chats/:phone/messages', requireReception, (req, res) => {
     if (!whatsappBotService) return res.json({ chat: null, messages: [] });
     res.json(whatsappBotService.getChatMessages(req.params.phone));
