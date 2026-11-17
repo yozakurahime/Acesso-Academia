@@ -306,8 +306,10 @@
 .student-stat-card.is-warn { background: var(--alert-bg); border-color: var(--alert-border); }
 .student-stat-card.is-danger { background: var(--error-soft-bg); border-color: var(--danger); }
 .student-stat-label { color: var(--muted); font-size: 12px; font-weight: 650; }
-.student-stat-card strong { font-size: clamp(15px, 2.2vw, 22px); line-height: 1.18; letter-spacing: -.04em; }
-.student-stat-card small { font-size: 12px; }
+.student-stat-card strong { font-size: clamp(16px, 2.2vw, 22px); line-height: 1.18; letter-spacing: -.04em; }
+.student-stat-card small { font-size: 13px; }
+#stSummaryValidityCard strong { font-size: clamp(18px, 2.4vw, 24px); }
+#stSummaryValidityCard small { font-size: 14px; font-weight: 700; color: var(--text); }
 .student-quick-summary .student-stat-card {
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 3px 11px;
@@ -526,16 +528,34 @@
   .student-header::after { bottom: -95%; }
   .student-user { gap: 11px; }
   .student-header-actions { width: 100%; justify-content: flex-start; }
-  .student-quick-summary { gap: 7px; }
+  .student-quick-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
   .student-quick-summary .student-stat-card {
     grid-template-columns: minmax(0, 1fr);
-    padding: 9px 8px;
+    padding: 12px;
     gap: 4px;
-    border-radius: 11px;
+    border-radius: 12px;
   }
-  .student-quick-summary .student-stat-card > svg { grid-row: auto; width: 26px; height: 26px; padding: 5px; border-radius: 7px; }
-  .student-quick-summary .student-stat-label, .student-quick-summary .student-stat-card small { font-size: 10px; }
-  .student-quick-summary .student-stat-card strong { font-size: 14px; letter-spacing: -.025em; }
+  .student-quick-summary #stSummaryValidityCard {
+    grid-column: 1 / -1;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 4px 12px;
+    padding: 14px 16px;
+  }
+  .student-quick-summary #stSummaryValidityCard > svg {
+    grid-row: 1 / span 3;
+    width: 36px;
+    height: 36px;
+    padding: 7px;
+    border-radius: 9px;
+  }
+  .student-quick-summary #stSummaryValidityCard strong { font-size: 20px; }
+  .student-quick-summary #stSummaryValidityCard small { font-size: 14px; }
+  .student-quick-summary .student-stat-card > svg { grid-row: auto; width: 28px; height: 28px; padding: 5px; border-radius: 8px; }
+  .student-quick-summary .student-stat-label, .student-quick-summary .student-stat-card small { font-size: 12px; }
+  .student-quick-summary .student-stat-card strong { font-size: 16px; letter-spacing: -.025em; }
   .student-page .panel-header { align-items: flex-start; }
   .student-page .fitness-complete { width: 100%; }
   .student-page .form-grid, #stTabProfile .grid-2 { grid-template-columns: minmax(0, 1fr); }
