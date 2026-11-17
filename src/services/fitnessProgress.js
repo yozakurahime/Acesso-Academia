@@ -45,6 +45,74 @@ export function fitnessRanking(store, date = fitnessToday(), limit = 10) {
   [weekStart(date), addDays(date, 1), limit]);
 }
 
+function shortRankingName(fullName) {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'Aluno';
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
+}
+
+export function consecutiveDaysRanking(store, date = fitnessToday(), limit = 5) {
+  const lookbackStart = addDays(date, -90);
+  const nextDay = addDays(date, 1);
+  const rows = store.all(
+    `SELECT m.id AS member_id, m.name AS member_name, f.ranking_alias AS ranking_alias,
+            substr(l.occurred_at, 1, 10) AS visit_day
+     FROM access_logs l
+     JOIN members m ON m.id = l.member_id
+     LEFT JOIN student_fitness_preferences f ON f.member_id = m.id
+     WHERE m.access_role = 'student' AND m.status = 'active'
+       AND ${VISIT_FILTER}
+       AND l.occurred_at >= ? AND l.occurred_at < ?
+     GROUP BY m.id, visit_day
+     ORDER BY m.id ASC, visit_day DESC`,
+    [lookbackStart, nextDay],
+  );
+
+  const byMember = new Map();
+  for (const row of rows) {
+    let entry = byMember.get(row.member_id);
+    if (!entry) {
+      entry = {
+        memberId: row.member_id,
+        alias: (row.ranking_alias && String(row.ranking_alias).trim()) || shortRankingName(row.member_name),
+        days: new Set(),
+      };
+      byMember.set(row.member_id, entry);
+    }
+    if (row.visit_day) entry.days.add(row.visit_day);
+  }
+
+  const yesterday = addDays(date, -1);
+  const ranked = [];
+  for (const entry of byMember.values()) {
+    let cursor = entry.days.has(date) ? date : (entry.days.has(yesterday) ? yesterday : null);
+    if (!cursor) continue;
+    let streak = 0;
+    while (entry.days.has(cursor)) {
+      streak += 1;
+      cursor = addDays(cursor, -1);
+    }
+    if (streak > 0) {
+      ranked.push({
+        memberId: entry.memberId,
+        alias: entry.alias,
+        streak,
+        totalVisits: entry.days.size,
+      });
+    }
+  }
+
+  ranked.sort((a, b) =>
+    b.streak - a.streak ||
+    b.totalVisits - a.totalVisits ||
+    a.alias.localeCompare(b.alias, 'pt-BR', { sensitivity: 'base' }) ||
+    a.memberId - b.memberId,
+  );
+
+  return ranked.slice(0, limit);
+}
+
 export function monthlyFitnessChallenge(store, date = fitnessToday()) {
   const completed = store.get('SELECT COUNT(DISTINCT member_id || \':\' || completed_on) AS count FROM student_workout_completions WHERE completed_on BETWEEN ? AND ?',
     [date.slice(0, 7) + '-01', date]).count;

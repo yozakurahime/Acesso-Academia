@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 import { StudentPortalService } from '../services/studentPortalService.js';
 import { PartnerService } from '../services/partnerService.js';
-import { completeFitnessWorkout, fitnessRanking, receptionFitnessSummary, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
+import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, receptionFitnessSummary, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
 import { listExerciseCatalog, saveCatalogExercise } from '../services/exerciseCatalog.js';
 import { MAX_EXERCISE_VIDEO } from '../services/exerciseVideos.js';
 import { DeviceService } from '../services/deviceService.js';
@@ -285,8 +285,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (req.query?.rich === '1') {
       const occ = typeof accessService?.getCurrentOccupancy === 'function' ? accessService.getCurrentOccupancy() : null;
       const summary = receptionFitnessSummary(store);
+      const streakRanking = consecutiveDaysRanking(store, undefined, 5);
       return res.set('Cache-Control', 'no-store').json({
         ranking,
+        streakRanking,
         occupancy: occ ? { count: occ.count, maxCapacity: occ.maxCapacity } : null,
         challenge: summary?.challenge || null,
         gymName: store.getSettings()?.gym_name || 'Academia Oxigênio',

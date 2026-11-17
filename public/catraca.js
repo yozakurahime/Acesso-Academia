@@ -283,15 +283,25 @@ async function pollRanking() {
       challengeCount.textContent = `${challengeData.completed} / ${challengeData.target} treinos (${pct}%)`;
       challengeFill.style.width = `${pct}%`;
     }
-    const entries = (data?.ranking || []).slice(0, 3).map(({ alias, visits }, index) => {
+    const rawList = (data?.streakRanking && data.streakRanking.length) ? data.streakRanking : (data?.ranking || []);
+    const entries = rawList.slice(0, 5).map((entry, index) => {
       const item = document.createElement('li');
+      if (index === 0) item.classList.add('is-top1');
+      else if (index === 1) item.classList.add('is-top2');
+      else if (index === 2) item.classList.add('is-top3');
       const position = document.createElement('span');
       const name = document.createElement('strong');
       const count = document.createElement('span');
       position.className = 'turnstile-rank-position';
-      position.textContent = `${index + 1}º`;
-      name.textContent = alias;
-      count.textContent = `${visits} ${visits === 1 ? 'visita' : 'visitas'}`;
+      position.textContent = index === 0 ? '🥇 1º' : index === 1 ? '🥈 2º' : index === 2 ? '🥉 3º' : `${index + 1}º`;
+      name.textContent = entry.alias;
+      count.className = 'turnstile-rank-streak';
+      if (typeof entry.streak === 'number') {
+        count.textContent = `${entry.streak} ${entry.streak === 1 ? 'dia seguido' : 'dias seguidos'}`;
+      } else {
+        const visits = Number(entry.visits || 0);
+        count.textContent = `${visits} ${visits === 1 ? 'visita' : 'visitas'}`;
+      }
       item.append(position, name, count);
       return item;
     });

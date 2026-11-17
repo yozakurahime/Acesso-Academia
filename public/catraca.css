@@ -563,6 +563,25 @@ body:has(#display:is([data-state="unrecognized"], [data-state="offline"]))::afte
   min-height: clamp(2.5rem, 6svh, 3.8rem);
 }
 
+.turnstile-ranking li.is-top1 {
+  border-color: rgba(255, 106, 0, 0.65);
+  background: linear-gradient(90deg, rgba(255, 106, 0, 0.22), rgba(255, 255, 255, 0.04));
+  box-shadow: 0 6px 20px rgba(255, 106, 0, 0.16);
+}
+
+.turnstile-ranking li.is-top2,
+.turnstile-ranking li.is-top3 {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.turnstile-rank-streak {
+  font-size: clamp(0.8rem, 1.55vmin, 1.1rem);
+  font-weight: 700;
+  color: #fdba74;
+  white-space: nowrap;
+}
+
 .turnstile-ranking strong {
   font-size: clamp(0.88rem, 1.85vmin, 1.35rem);
   color: #f8fafc;
