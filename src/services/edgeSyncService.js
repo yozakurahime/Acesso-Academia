@@ -386,6 +386,19 @@ export class EdgeSyncClient {
     }
     if (cmd.type === 'sync_needed') {
       await this.syncOnce();
+      if (cmd.payload?.memberId && typeof this.accessService?.getMember === 'function') {
+        const m = this.accessService.getMember(cmd.payload.memberId);
+        if (m) {
+          await this.accessService.trySyncMemberToDevice(m).catch(() => {});
+        }
+      }
+      return;
+    }
+    if (cmd.type === 'sync_all_readers') {
+      await this.syncOnce();
+      if (typeof this.accessService?.syncAllReaders === 'function') {
+        await this.accessService.syncAllReaders().catch(() => {});
+      }
     }
   }
 

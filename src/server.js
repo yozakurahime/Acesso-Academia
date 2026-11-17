@@ -53,6 +53,7 @@ async function start() {
   const googleDriveBackupService = new GoogleDriveBackupService(store);
   const edgeRole = String(process.env.EDGE_ROLE || 'standalone').trim().toLowerCase();
   const edgeCloudHub = new EdgeCloudHub(store);
+  accessService.setEdgeCloudHub(edgeCloudHub);
   whatsappService.setReceiptHandler((payload) => receiptService.processReceipt(payload));
   whatsappService.setBotHandler(whatsappBotService);
 

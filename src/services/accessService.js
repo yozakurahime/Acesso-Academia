@@ -523,7 +523,15 @@ export class AccessService {
     return this.getMember(memberId);
   }
 
+  setEdgeCloudHub(hub) {
+    this.edgeCloudHub = hub || null;
+  }
+
   async trySyncMemberToDevice(member) {
+    if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+      this.edgeCloudHub?.enqueueCommand('sync_needed', { memberId: member?.id || null });
+      return { synced: true, deferredToEdge: true };
+    }
     const allowed = !this.getAccessDenial(member);
     try {
       const deviceId = member.controlid_user_id || member.id;
@@ -2220,6 +2228,10 @@ export class AccessService {
   }
 
   async syncAllReaders() {
+    if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+      this.edgeCloudHub?.enqueueCommand('sync_all_readers', {});
+      return { queuedForEdge: true, totalSynced: 0, totalErrors: 0, readers: [] };
+    }
     const readers = this.store.all('SELECT * FROM readers WHERE active = 1 ORDER BY id ASC');
     const members = this.store.all('SELECT * FROM members WHERE face_registered = 1 ORDER BY id ASC');
     const readerResults = [];
