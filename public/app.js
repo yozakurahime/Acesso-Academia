@@ -1438,6 +1438,11 @@ function selectBillingMember(member) {
     optionsPanel.hidden = false;
   }
   selectMemberPlan(member);
+  if (!member.plan_id && member.modality_name) {
+    state.billingPickerModality = member.modality_name;
+    renderBillingModalityPills();
+    renderBillingPlanPicker();
+  }
   const firstCard = document.querySelector('#pMethodCards .billing-method-card.active, #pMethodCards .billing-method-card');
   if (firstCard) firstCard.focus();
   else document.getElementById('pMethod').focus();
@@ -1452,11 +1457,19 @@ function renderBillingQueue(showAll = false) {
 
   const nearbyDue = state.allMembers
     .filter((member) => !member.access_role || member.access_role === 'student')
-    .map((member) => ({ member, due: member.next_charge?.due || member.valid_until }))
-    .filter(({ due }) => due && due >= minDate && due <= maxDate)
-    .sort((a, b) => a.due.localeCompare(b.due) || a.member.id - b.member.id);
+    .map((member) => ({
+      member,
+      due: member.next_charge?.due || member.valid_until,
+      isPendingFirst: !member.next_charge?.due && !member.valid_until && member.status === 'pending' && Boolean(member.modality_id || member.plan_id),
+    }))
+    .filter(({ due, isPendingFirst }) => isPendingFirst || (due && due >= minDate && due <= maxDate))
+    .sort((a, b) => {
+      if (a.isPendingFirst !== b.isPendingFirst) return a.isPendingFirst ? -1 : 1;
+      return String(a.due || '').localeCompare(String(b.due || '')) || a.member.id - b.member.id;
+    });
 
-  const dueTag = (due) => {
+  const dueTag = (due, isPendingFirst) => {
+    if (isPendingFirst || !due) return '<span class="billing-due-tag upcoming">Aguardando 1º pag.</span>';
     if (due === today) return '<span class="billing-due-tag today">Vence hoje</span>';
     const [y, m, d] = due.split('-').map(Number);
     const diffDays = Math.round((new Date(y, m - 1, d) - todayMidnight) / 86400000);
@@ -1466,18 +1479,19 @@ function renderBillingQueue(showAll = false) {
 
   const BILLING_QUEUE_LIMIT = 80;
   const visible = showAll ? nearbyDue : nearbyDue.slice(0, BILLING_QUEUE_LIMIT);
-  const rowsHtml = visible.map(({ member, due }) => {
+  const rowsHtml = visible.map(({ member, due, isPendingFirst }) => {
     const memberPlan = state.plans.find((p) => Number(p.id) === Number(member.plan_id));
-    const planLabel = member.plan_name || memberPlan?.name || 'Sem plano';
+    const planLabel = member.plan_name || memberPlan?.name || member.modality_name || 'Sem plano';
     const amountLabel = member.next_charge?.amount
       ? fmtMoney(member.next_charge.amount)
       : memberPlan
         ? fmtMoney(memberPlan.price_cents)
         : '';
+    const dateLabel = due ? fmtDate(due) : '1º pagamento';
     return `<button type="button" class="billing-member" data-id="${member.id}">
       <div class="billing-member-main">
-        <strong>${escapeHtml(member.name)} ${dueTag(due)}</strong>
-        <span class="billing-member-meta">#${member.id} · ${escapeHtml(fmtDate(due))} · ${escapeHtml(planLabel)}</span>
+        <strong>${escapeHtml(member.name)} ${dueTag(due, isPendingFirst)}</strong>
+        <span class="billing-member-meta">#${member.id} · ${escapeHtml(dateLabel)} · ${escapeHtml(planLabel)}</span>
       </div>
       <div class="billing-member-cta">
         ${amountLabel ? `<strong class="billing-member-price">${escapeHtml(amountLabel)}</strong>` : ''}
@@ -2600,7 +2614,8 @@ function renderProfileEnrollments(data) {
   const rows = data.modalities.map((entry) => `<li class="enrollment-row">
     <div><strong>${escapeHtml(entry.name)}</strong><div class="muted">${entry.classes.length
       ? entry.classes.map((cls) => escapeHtml(`${cls.name} · ${cls.schedule}`)).join('<br>') : 'Sem turma'}</div></div>
-    <div class="inline-actions"><button class="btn btn-secondary btn-sm" data-edit="${entry.id}" aria-label="Editar matrícula em ${escapeHtml(entry.name)}">Editar</button>
+    <div class="inline-actions"><button type="button" class="btn btn-primary btn-sm" data-receive-modality="${escapeHtml(entry.name)}">Receber</button>
+    <button class="btn btn-secondary btn-sm" data-edit="${entry.id}" aria-label="Editar matrícula em ${escapeHtml(entry.name)}">Editar</button>
     <button class="btn btn-secondary btn-sm" data-remove="${entry.id}" aria-label="Remover matrícula em ${escapeHtml(entry.name)}">Remover</button></div>
   </li>`);
   if (!rows.length) rows.push('<li class="muted">Sem matrícula em modalidades.</li>');
@@ -2950,6 +2965,21 @@ async function refreshEnrollmentProfile(data) {
 }
 
 document.getElementById('profClassesList').addEventListener('click', async (event) => {
+  const receive = event.target.closest('button[data-receive-modality]');
+  if (receive) {
+    const member = state.selectedProfileMember || state.allMembers.find((m) => Number(m.id) === Number(state.selectedProfileId));
+    const modName = receive.dataset.receiveModality || '';
+    closeProfileModal(false);
+    document.querySelector('.tab[data-tab="billing"]')?.click();
+    await loadTab('billing');
+    if (modName) {
+      state.billingPickerModality = modName;
+      renderBillingModalityPills();
+      renderBillingPlanPicker();
+    }
+    if (member) selectBillingMember(member);
+    return;
+  }
   const edit = event.target.closest('button[data-edit]');
   if (edit) {
     openEnrollmentForm(state.profileEnrollments.find((entry) => entry.id === Number(edit.dataset.edit)));
