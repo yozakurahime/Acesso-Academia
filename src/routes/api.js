@@ -265,6 +265,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     message: 'Muitas solicitações em sequência. Aguarde alguns minutos.',
     keyFn: (req) => (req.studentMemberId ? `st:${req.studentMemberId}` : req.socket?.remoteAddress || req.ip || 'unknown'),
   });
+  router.get('/public/plans', (_req, res) => {
+    const plans = store.all(
+      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
+    );
+    res.set('Cache-Control', 'no-cache').json({ plans });
+  });
+
   router.get('/turnstile/display', (req, res) => {
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
     const payload = req.query?.rich === '1' && typeof accessService.getTurnstileKioskDisplay === 'function'
@@ -569,13 +576,6 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.get('/health', (_req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() });
-  });
-
-  router.get('/public/plans', (_req, res) => {
-    const plans = store.all(
-      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
-    );
-    res.set('Cache-Control', 'no-cache').json({ plans });
   });
 
   router.get(
