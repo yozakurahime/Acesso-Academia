@@ -571,6 +571,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json({ ok: true, timestamp: new Date().toISOString() });
   });
 
+  router.get('/public/plans', (_req, res) => {
+    const plans = store.all(
+      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
+    );
+    res.set('Cache-Control', 'no-cache').json({ plans });
+  });
+
   router.get(
     '/dashboard',
     handle(async (_req, res) => {

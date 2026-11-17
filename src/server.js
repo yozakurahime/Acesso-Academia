@@ -148,7 +148,7 @@ async function start() {
       const landingFile = path.join(rootDir, 'public', 'landing.html');
       return res.sendFile(fs.existsSync(landingFile) ? landingFile : path.join(rootDir, 'public', 'aluno.html'));
     }
-    if (req.path.startsWith('/api/student/') || req.path === '/api/health' || /^\/api\/exercise-catalog\/[^/]+\/video$/.test(req.path)) {
+    if (req.path.startsWith('/api/student/') || req.path === '/api/health' || req.path === '/api/public/plans' || /^\/api\/exercise-catalog\/[^/]+\/video$/.test(req.path)) {
       return next();
     }
     if (req.method === 'GET' && (STUDENT_HOST_ASSETS.has(req.path) || req.path.startsWith('/landing-assets/') || req.path.startsWith('/icons/'))) {

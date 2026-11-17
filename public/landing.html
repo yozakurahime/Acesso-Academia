@@ -105,7 +105,13 @@
             <h2>Planos e Mensalidades</h2>
             <p>Valores transparentes, sem taxa de adesão e sem multa de cancelamento.</p>
           </div>
-          <div class="plans-grid">
+          <div id="plansFilter" class="hero-ctas" style="margin-bottom:18px;" hidden>
+            <button type="button" class="btn btn-primary btn-sm" data-plan-filter="all">Todos</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-plan-filter="mensal">Mensais</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-plan-filter="pacote">Bimestral / Trimestral</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-plan-filter="anual">Anual</button>
+          </div>
+          <div id="plansGrid" class="plans-grid">
             <article class="plan-card">
               <span class="plan-tag">Essencial</span>
               <h3>Musculação Básico</h3>
@@ -238,5 +244,6 @@
     <a class="wa-float" href="https://wa.me/5562984211039?text=Ol%C3%A1!%20Gostaria%20de%20informa%C3%A7%C3%B5es%20sobre%20a%20Academia%20Oxig%C3%AAnio." target="_blank" rel="noopener" aria-label="Conversar no WhatsApp">
       💬 WhatsApp
     </a>
+    <script type="module" src="/landing-assets/landing.js?v=20261117"></script>
   </body>
 </html>
