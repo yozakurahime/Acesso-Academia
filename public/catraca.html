@@ -6,7 +6,7 @@
   <title>Academia Oxigênio | Tela da catraca</title>
   <link rel="icon" href="/oxigenio.jpg" />
   <meta name="theme-color" content="#07080b" />
-  <link rel="stylesheet" href="/catraca.css?v=20261118.1" />
+  <link rel="stylesheet" href="/catraca.css?v=20261118.2" />
 </head>
 <body class="turnstile">
   <div id="displayTimerBar" class="turnstile-timer-bar" aria-hidden="true" hidden>
@@ -21,6 +21,7 @@
       </div>
     </div>
     <div class="turnstile-header-right">
+      <span id="displayWeather" class="turnstile-weather-badge" hidden></span>
       <span id="displayOccupancy" class="turnstile-occ-badge" hidden></span>
       <div class="turnstile-time">
         <span id="displayClock" class="turnstile-clock"></span>
@@ -67,6 +68,19 @@
           <div id="displayChallengeFill" class="turnstile-challenge-fill" style="width:0%"></div>
         </div>
       </section>
+      <section id="displayPortalQr" class="turnstile-portal-qr" aria-labelledby="displayPortalQrTitle" hidden>
+        <div class="turnstile-portal-qr-frame">
+          <img src="/api/turnstile/portal-qr.svg" width="112" height="112" alt="QR Code para o Portal do Aluno" />
+        </div>
+        <div class="turnstile-portal-qr-copy">
+          <h2 id="displayPortalQrTitle">📱 Portal do Aluno</h2>
+          <p>Aponte a câmera para ver seu treino, frequência e mensalidade.</p>
+        </div>
+      </section>
+      <section id="displayQuote" class="turnstile-quote" aria-labelledby="displayQuoteTitle" hidden>
+        <h2 id="displayQuoteTitle">💡 Frase do dia</h2>
+        <p id="displayQuoteText"></p>
+      </section>
     </aside>
   </main>
   <section id="faceMirrorOverlay" class="turnstile-face-mirror" aria-live="polite" hidden>
@@ -80,6 +94,6 @@
       </div>
     </div>
   </section>
-  <script src="/catraca.js?v=20261118.1" defer></script>
+  <script src="/catraca.js?v=20261118.2" defer></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
+import QRCode from 'qrcode';
 import { StudentPortalService } from '../services/studentPortalService.js';
 import { PartnerService } from '../services/partnerService.js';
 import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, receptionFitnessSummary, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
@@ -614,6 +615,21 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
     accessService.previewTurnstileDisplay(req.body?.outcome);
     res.json({ ok: true });
+  }));
+
+  let cachedPortalQrSvg = null;
+  router.get('/turnstile/portal-qr.svg', handle(async (_req, res) => {
+    if (!cachedPortalQrSvg) {
+      cachedPortalQrSvg = await QRCode.toString('https://academiaoxigenio.com/aluno', {
+        type: 'svg',
+        margin: 1,
+        width: 180,
+        color: { dark: '#100f0e', light: '#fff8f1' },
+      });
+    }
+    res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(cachedPortalQrSvg);
   }));
 
   router.post('/turnstile/face-mirror', requireReception, (req, res) => {

@@ -153,9 +153,16 @@ body {
 .turnstile-display[data-state="idle"] h1 { font-size: clamp(44px, 5vw, 104px); }
 .turnstile-display[data-state="idle"] .turnstile-status { font-size: clamp(23px, 2.1vw, 40px); }
 .turnstile-display[data-state="idle"] .turnstile-icon { font-size: clamp(70px, 9vw, 165px); }
-.turnstile-idle-widgets { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
+.turnstile-idle-widgets { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
 .turnstile-idle-widgets:not(:has(section:not([hidden]))) { display: none; }
-.turnstile-ranking, .turnstile-challenge { min-width: 0; padding: clamp(16px, 2vw, 30px); border: 1px solid #69503c; border-radius: 16px; background: #1d1814; }
+.turnstile-ranking, .turnstile-challenge, .turnstile-portal-qr, .turnstile-quote { min-width: 0; padding: clamp(16px, 2vw, 30px); border: 1px solid #69503c; border-radius: 16px; background: #1d1814; }
+.turnstile-portal-qr { display: flex; align-items: center; gap: 16px; }
+.turnstile-portal-qr-frame { flex: 0 0 auto; padding: 6px; border-radius: 12px; background: #fff8f1; line-height: 0; }
+.turnstile-portal-qr-frame img { display: block; width: clamp(84px, 7.5vw, 128px); height: clamp(84px, 7.5vw, 128px); }
+.turnstile-portal-qr-copy { min-width: 0; }
+.turnstile-portal-qr-copy p, .turnstile-quote p { margin: 10px 0 0; color: var(--quiet); font-size: clamp(18px, 1.55vw, 28px); line-height: 1.28; }
+.turnstile-quote p { color: #fff5ec; font-weight: 600; }
+.turnstile-weather-badge { padding: 6px 12px; border: 1px solid #69503c; border-radius: 999px; background: #1d1814; color: #fff5ec; font-size: clamp(16px, 1.4vw, 24px); font-weight: 700; white-space: nowrap; }
 .turnstile-idle-widgets h2 { margin: 0; color: #ffb87f; font-size: clamp(22px, 2.1vw, 40px); letter-spacing: -.025em; }
 .turnstile-ranking ol { display: grid; gap: 6px; padding: 0; margin: 12px 0 0; list-style: none; }
 .turnstile-ranking li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 10px; border-bottom: 1px solid #4d3b2d; font-size: clamp(21px, 2vw, 38px); }

@@ -20,6 +20,10 @@ const challengeCount = document.getElementById('displayChallengeCount');
 const challengeFill = document.getElementById('displayChallengeFill');
 const occupancyBadge = document.getElementById('displayOccupancy');
 const birthdayBanner = document.getElementById('displayBirthday');
+const weatherBadge = document.getElementById('displayWeather');
+const portalQrBox = document.getElementById('displayPortalQr');
+const quoteBox = document.getElementById('displayQuote');
+const quoteTextEl = document.getElementById('displayQuoteText');
 const clockEl = document.getElementById('displayClock');
 const dateEl = document.getElementById('displayDate');
 const gymNameEl = document.getElementById('displayGymName');
@@ -245,6 +249,57 @@ function updateIdleWidgetsVisibility() {
   if (challengeBox) {
     challengeBox.hidden = !isIdle || !challengeData || !challengeData.target;
   }
+  if (portalQrBox) portalQrBox.hidden = !isIdle;
+  if (quoteBox) quoteBox.hidden = !isIdle;
+}
+
+const DAILY_QUOTES = [
+  'Disciplina é fazer hoje o que você prometeu a si mesmo ontem.',
+  'O treino de hoje é a energia e a saúde do seu amanhã.',
+  'Constância vence intensidade: apareça e dê o seu melhor.',
+  'Cada série concluída te deixa mais forte do que quando entrou.',
+  'Não espere motivação — comece o treino que a motivação vem.',
+  'Seu único limite é desistir antes de tentar mais uma repetição.',
+  'Pequenos passos todos os dias constroem grandes resultados.',
+  'Cuide do seu corpo: é o único lugar onde você vive todos os dias.',
+  'A força não vem da vitória, vem do esforço que você não pula.',
+  'Mais um dia pago! Foco no movimento, na respiração e no seu ritmo.',
+];
+
+let quoteIndex = Math.floor(Date.now() / 86_400_000) % DAILY_QUOTES.length;
+function renderDailyQuote(advance = false) {
+  if (!quoteTextEl) return;
+  if (advance) quoteIndex = (quoteIndex + 1) % DAILY_QUOTES.length;
+  quoteTextEl.textContent = `“${DAILY_QUOTES[quoteIndex]}”`;
+}
+
+function weatherIconForCode(code) {
+  const n = Number(code);
+  if (n === 0) return '☀️';
+  if (n <= 3) return '⛅';
+  if (n === 45 || n === 48) return '🌫️';
+  if (n <= 67 || (n >= 80 && n <= 82)) return '🌧️';
+  if (n >= 95) return '⛈️';
+  return '🌤️';
+}
+
+async function refreshWeather() {
+  if (!weatherBadge || document.hidden) return;
+  try {
+    const res = await fetchWithTimeout(
+      'https://api.open-meteo.com/v1/forecast?latitude=-16.6869&longitude=-49.2648&current=temperature_2m,weather_code&timezone=America%2FSao_Paulo',
+      4000,
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const temp = data?.current?.temperature_2m;
+    if (temp == null || Number.isNaN(Number(temp))) return;
+    const iconChar = weatherIconForCode(data?.current?.weather_code);
+    weatherBadge.textContent = `${iconChar} ${Math.round(Number(temp))}°C`;
+    weatherBadge.hidden = false;
+  } catch {
+    // Offline ou sem resposta externa: mantém oculto sem afetar a catraca.
+  }
 }
 
 async function fetchWithTimeout(url, ms = 3000, externalSignal = null) {
@@ -423,6 +478,10 @@ if (document.fullscreenEnabled) {
 
 updateClock();
 setInterval(updateClock, 1000);
+renderDailyQuote(false);
+setInterval(() => renderDailyQuote(true), 45000);
+refreshWeather();
+setInterval(refreshWeather, 30 * 60 * 1000);
 requestKioskWakeLock();
 pollDisplay();
 pollRanking();
