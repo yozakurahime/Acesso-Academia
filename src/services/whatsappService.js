@@ -272,7 +272,9 @@ export class WhatsappService {
           const msgId = msg.key?.id;
           const jid = msg.key?.remoteJid || '';
           if (!jid || jid.endsWith('@g.us') || jid === 'status@broadcast') continue;
-          const senderPhone = jid.split('@')[0];
+          const altJid = msg.key?.remoteJidAlt || msg.key?.participantAlt || '';
+          const phoneSource = (jid.endsWith('@lid') && altJid) ? altJid : jid;
+          const senderPhone = phoneSource.split('@')[0];
 
           if (msg.key?.fromMe) {
             if (msgId && this._sentBotMessageIds.has(msgId)) continue;
