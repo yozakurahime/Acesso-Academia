@@ -7644,8 +7644,10 @@ async function openChat(phone) {
   if (msgsEl) {
     msgsEl.innerHTML = (data.messages || []).map((m) => {
       const cls = m.direction === 'in' ? 'in' : 'out';
+      const roleCls = m.direction === 'out' ? (m.sender_type === 'bot' ? 'bot' : 'human') : '';
       const who = m.sender_type === 'bot' ? 'Bot IA' : (m.sender_type === 'human' ? 'Atendente' : 'Cliente');
-      const time = String(m.created_at || '').slice(11, 16);
+      const rawDate = String(m.created_at || '');
+      const time = rawDate.length >= 16 ? `${rawDate.slice(8, 10)}/${rawDate.slice(5, 7)} ${rawDate.slice(11, 16)}` : rawDate;
       let mediaHtml = '';
       if (m.media_url) {
         if (m.media_type === 'image') {
@@ -7656,9 +7658,10 @@ async function openChat(phone) {
           mediaHtml = `<audio controls preload="none" src="${escapeHtml(m.media_url)}" style="max-width:240px;height:36px;display:block;margin-bottom:6px;"></audio>`;
         }
       }
-      const bodyHtml = m.body ? `<div>${escapeHtml(m.body)}</div>` : '';
+      const cleanText = String(m.body || '').replace(/^\[ts=\d+\]\s*/i, '');
+      const bodyHtml = cleanText ? `<div>${escapeHtml(cleanText)}</div>` : '';
       return `
-        <div class="chat-bubble ${cls}">
+        <div class="chat-bubble ${cls} ${roleCls}">
           ${mediaHtml}${bodyHtml}
           <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>
         </div>
