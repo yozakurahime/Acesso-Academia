@@ -3877,6 +3877,17 @@ document.getElementById('closeCashForm').addEventListener('submit', async (e) =>
   });
 });
 
+function finishPaymentAndReturnHome() {
+  const searchEl = document.getElementById('pMemberSearch');
+  const memberEl = document.getElementById('pMember');
+  const whatsappBox = document.getElementById('whatsappCheckoutBox');
+  if (searchEl) searchEl.value = '';
+  if (memberEl) memberEl.value = '';
+  if (whatsappBox) whatsappBox.classList.add('hidden');
+  renderPixChargeBox(null);
+  switchTab('dashboard');
+}
+
 document.getElementById('paymentForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const matched = resolveMemberFromInput(document.getElementById('pMemberSearch').value);
@@ -3956,17 +3967,13 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
         document.getElementById('pSplitToggle').checked = false;
         resetSplitBox();
       }
-      if (!charge) {
-        document.getElementById('pMemberSearch').value = '';
-        document.getElementById('pMember').value = '';
-        document.getElementById('whatsappCheckoutBox').classList.add('hidden');
-      }
       await Promise.all([loadPayments(), loadOpenDebts(), loadMembers(), loadDashboard(), tabRequests.has('cash') ? loadCash() : loadCurrentCash()]).catch(() => {
         showToast('Pagamento gravado. Recarregue a página para atualizar os dados.', true);
       });
       if (isAutoPrintReceiptEnabled() && res.payment) {
         openPaymentReceipt(res.payment, member);
       }
+      finishPaymentAndReturnHome();
     } catch (err) {
       if (err.code === 'CASH_CLOSED') await openCashFromBilling();
       else showToast(err.message, true);
@@ -4704,6 +4711,7 @@ function startPaymentAutoPoll({ type, id }) {
           showToast('Pix confirmado e mensalidade baixada!');
           await Promise.all([loadGatewayCharges(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
           if (res.payment) openPaymentReceipt(res.payment);
+          finishPaymentAndReturnHome();
           return;
         }
       } else if (type === 'point') {
@@ -4713,6 +4721,7 @@ function startPaymentAutoPoll({ type, id }) {
           showToast('Pagamento na Point Smart confirmado e baixado!');
           await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
           if (res.payment) openPaymentReceipt(res.payment);
+          finishPaymentAndReturnHome();
           return;
         }
         if (['canceled', 'failed', 'expired'].includes(res.status)) {
