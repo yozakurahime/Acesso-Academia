@@ -262,6 +262,104 @@ export class GatewayService {
     return this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [lastInsertRowid]);
   }
 
+  async createBatchPayment({ memberIds = [], mode = 'pix' } = {}) {
+    const uniqueIds = [...new Set((memberIds || []).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+    if (!uniqueIds.length) throw new Error('Selecione ao menos um aluno para gerar o pagamento.');
+
+    const settings = this.store.getSettings();
+    const resolved = uniqueIds.map((id) => {
+      const member = this.store.get('SELECT * FROM members WHERE id = ?', [id]);
+      if (!member) throw new Error(`Aluno #${id} não encontrado.`);
+      return { member, ...this.resolveBillableMember(member) };
+    });
+
+    const batchItems = resolved.map((r) => ({
+      member_id: r.member.id,
+      member_name: r.member.name,
+      plan_id: r.plan?.id || null,
+      plan_name: r.plan?.name || 'Mensalidade',
+      amount_cents: r.cents,
+      membership_charge_id: r.charge?.id ?? null,
+    }));
+    const totalCents = batchItems.reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+
+    if (batchItems.length === 1) {
+      const singleCharge = mode === 'checkout'
+        ? await this.createCheckoutCharge({ member_id: batchItems[0].member_id })
+        : await this.createPixCharge({ member_id: batchItems[0].member_id });
+      return { charge: singleCharge, items: batchItems, totalCents };
+    }
+
+    const firstMember = resolved[0].member;
+    const namesPreview = batchItems.map((i) => i.member_name.split(' ')[0]).join(', ');
+    if (mode === 'checkout') {
+      const reference = 'ox_checkout_' + crypto.randomUUID();
+      const now = Date.now();
+      const response = await this.fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: { ...this.getMpAuth(settings), 'X-Idempotency-Key': reference },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+          items: batchItems.map((i) => ({
+            id: String(i.plan_id || i.member_id),
+            title: `${i.plan_name} - ${i.member_name}`.slice(0, 120),
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: i.amount_cents / 100,
+          })),
+          external_reference: reference,
+          expires: true,
+          expiration_date_from: new Date(now - 60000).toISOString(),
+          expiration_date_to: new Date(now + 24 * 3600000).toISOString(),
+        }),
+      });
+      const data = await this.safeJson(response);
+      if (!response.ok || !data?.id || !data?.init_point) {
+        throw new Error(data?.message || 'Não foi possível gerar o link de pagamento.');
+      }
+      const url = new URL(data.init_point);
+      if (url.protocol !== 'https:' || !/(^|\.)mercadopago\.com(?:\.br)?$/i.test(url.hostname)) {
+        throw new Error('O Mercado Pago retornou um endereço de checkout inválido.');
+      }
+      const { lastInsertRowid } = this.store.run(
+        `INSERT INTO gateway_charges
+          (provider, external_id, member_id, plan_id, amount_cents, payment_url, membership_charge_id, checkout_ref, batch_items_json)
+         VALUES ('mercadopago', ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        [String(data.id), firstMember.id, batchItems[0].plan_id, totalCents, url.href, reference, JSON.stringify(batchItems)],
+      );
+      return {
+        charge: this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [lastInsertRowid]),
+        items: batchItems,
+        totalCents,
+      };
+    }
+
+    const description = `${settings.gym_name || 'Academia'} - Mensalidades (${namesPreview})`.slice(0, 120);
+    const windowBucket = Math.floor(Date.now() / (5 * 60 * 1000));
+    const idempotencyKey = `mp_pix_batch:${batchItems.map((i) => `${i.member_id}:${i.amount_cents}`).join(',')}:${windowBucket}`;
+    const created = await this.createMercadoPagoPix({ member: firstMember, amountCents: totalCents, description, settings, idempotencyKey });
+    const res = this.store.run(
+      `INSERT INTO gateway_charges
+        (provider, external_id, member_id, plan_id, amount_cents, status, qr_code, qr_base64, payment_url, membership_charge_id, batch_items_json)
+       VALUES ('mercadopago', ?, ?, ?, ?, 'pending', ?, ?, ?, NULL, ?)`,
+      [
+        String(created.externalId),
+        firstMember.id,
+        batchItems[0].plan_id,
+        totalCents,
+        created.qrCode || null,
+        created.qrBase64 || null,
+        created.paymentUrl || null,
+        JSON.stringify(batchItems),
+      ],
+    );
+    return {
+      charge: this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [res.lastInsertRowid]),
+      items: batchItems,
+      totalCents,
+    };
+  }
+
   async createMercadoPagoPix({ member, amountCents, description, settings, idempotencyKey = null }) {
     const headers = this.getMpAuth(settings);
     const parts = String(member.name || 'Aluno').trim().split(/\s+/);
@@ -363,6 +461,55 @@ export class GatewayService {
     const fresh = this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [charge.id]);
     if (!fresh || fresh.status === 'paid') {
       return { alreadyPaid: true, charge: fresh || charge };
+    }
+
+    let batchItems = null;
+    if (fresh.batch_items_json) {
+      try {
+        const parsed = JSON.parse(fresh.batch_items_json);
+        if (Array.isArray(parsed) && parsed.length > 0) batchItems = parsed;
+      } catch {
+        batchItems = null;
+      }
+    }
+
+    if (batchItems) {
+      const results = [];
+      let firstPaymentId = null;
+      for (const item of batchItems) {
+        const res = await this.accessService.recordPayment(
+          {
+            member_id: item.member_id,
+            plan_id: item.plan_id,
+            amount_cents: item.amount_cents,
+            method,
+            external_id: `mercadopago:${paymentId}:m${item.member_id}`,
+            charge_id: item.membership_charge_id,
+            notes: batchItems.length > 1 ? `${notes} · Lote (${batchItems.length} pessoas)` : notes,
+          },
+          {
+            reconcileOpenCharge: true,
+            exactCharge: Boolean(item.membership_charge_id),
+            onRecorded: (recordedId) => {
+              if (!firstPaymentId) firstPaymentId = recordedId;
+            },
+          },
+        );
+        results.push(res);
+        if (this.whatsappService && !res.alreadyRecorded) {
+          this.whatsappService.enqueuePaymentReceipt(res).catch(() => {});
+        }
+      }
+      this.store.run(
+        `UPDATE gateway_charges SET status = 'paid', payment_id = COALESCE(payment_id, ?), paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+        [firstPaymentId, fresh.id],
+      );
+      return {
+        alreadyPaid: results.every((r) => Boolean(r.alreadyRecorded)),
+        charge: this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [fresh.id]),
+        paymentResult: results[0],
+        paymentResults: results,
+      };
     }
 
     const paymentResult = await this.accessService.recordPayment(

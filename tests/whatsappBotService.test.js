@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseStore } from '../src/db.js';
+import { AccessService } from '../src/services/accessService.js';
+import { GatewayService } from '../src/services/gatewayService.js';
 import { CONTEXT_MISSING_HANDOFF_MARKER, WhatsappBotService } from '../src/services/whatsappBotService.js';
 
 test('WhatsappBotService responde duvidas com contexto, mantem historico e identifica aluno', async () => {
@@ -96,4 +98,75 @@ test('WhatsappBotService fica inativo quando whatsapp_bot_enabled != 1', async (
   const bot = new WhatsappBotService(store);
   const res = await bot.handleIncomingMessage({ phone: '5564999994444', text: 'Oi' });
   assert.equal(res, null);
+});
+
+test('WhatsappBotService guia pagamento Mercado Pago para 1 ou mais pessoas em lote e da baixa em todas', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'TEST-MP-TOKEN',
+  });
+  const p1 = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Mensal Teste', 30, 12000)").lastInsertRowid;
+  const p2 = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Kids Teste', 30, 9000)").lastInsertRowid;
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Carlos Pai', '11122233344', '5562999991111', 'blocked', '2026-10-01', ?)",
+    [p1],
+  );
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Lucas Filho', '55566677788', '5562988882222', 'blocked', '2026-10-01', ?)",
+    [p2],
+  );
+  store.run("INSERT INTO cash_sessions (status, opening_cents, opened_at) VALUES ('open', 0, datetime('now', 'localtime'))");
+
+  const accessService = new AccessService(store, null, null);
+  const mpCalls = [];
+  const fakeMpFetch = async (url, init = {}) => {
+    mpCalls.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null });
+    if (String(url).includes('/v1/payments') && (init.method || 'GET') === 'POST') {
+      const payload = {
+        id: 99887766,
+        status: 'pending',
+        point_of_interaction: {
+          transaction_data: {
+            qr_code: '000201010212PIX_LOTE_210_REAIS',
+            qr_code_base64: 'ZmFrZQ==',
+            ticket_url: 'https://mercadopago.com.br/pix/99887766',
+          },
+        },
+      };
+      return { ok: true, status: 201, json: async () => payload, text: async () => JSON.stringify(payload) };
+    }
+    const payload = { id: 99887766, status: 'approved', transaction_amount: 210 };
+    return { ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload) };
+  };
+
+  const gatewayService = new GatewayService(store, accessService, { fetchFn: fakeMpFetch });
+  const bot = new WhatsappBotService(store, { gatewayService });
+
+  const step1 = await bot.handleIncomingMessage({ phone: '5562999991111', text: 'Quero pagar minha mensalidade' });
+  assert.match(step1.reply, /Carlos Pai/);
+  assert.match(step1.reply, /120,00/);
+
+  const step2 = await bot.handleIncomingMessage({ phone: '5562999991111', text: '55566677788' });
+  assert.match(step2.reply, /Lucas Filho/);
+  assert.match(step2.reply, /210,00/);
+
+  const step3 = await bot.handleIncomingMessage({ phone: '5562999991111', text: '1' });
+  assert.match(step3.reply, /000201010212PIX_LOTE_210_REAIS/);
+  assert.equal(mpCalls[0].body.transaction_amount, 210);
+
+  const step4 = await bot.handleIncomingMessage({ phone: '5562999991111', text: 'Já paguei' });
+  assert.match(step4.reply, /Pagamento confirmado/);
+
+  const payments = store.all('SELECT member_id, amount_cents, method FROM payments ORDER BY member_id');
+  assert.equal(payments.length, 2);
+  assert.deepEqual(payments.map((p) => [p.member_id, p.amount_cents, p.method]), [
+    [1, 12000, 'pix'],
+    [2, 9000, 'pix'],
+  ]);
+  const m1 = store.get('SELECT status FROM members WHERE id = 1');
+  const m2 = store.get('SELECT status FROM members WHERE id = 2');
+  assert.equal(m1.status, 'active');
+  assert.equal(m2.status, 'active');
 });

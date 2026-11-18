@@ -814,6 +814,7 @@ export class DatabaseStore {
     this.ensureColumns('gateway_charges', {
       membership_charge_id: 'INTEGER REFERENCES membership_charges(id)',
       checkout_ref: 'TEXT',
+      batch_items_json: 'TEXT',
     });
     this.ensureColumns('point_orders', {
       membership_charge_id: 'INTEGER REFERENCES membership_charges(id)',
