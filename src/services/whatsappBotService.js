@@ -330,7 +330,7 @@ export class WhatsappBotService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents,
-        generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
+        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
       }),
       signal: AbortSignal.timeout(25000),
     });
@@ -340,7 +340,8 @@ export class WhatsappBotService {
       throw new Error(json?.error?.message || `Erro na API Gemini (${response.status})`);
     }
     const text = json?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text || '')
+      ?.filter((part) => !part?.thought)
+      .map((part) => part?.text || '')
       .join('\n')
       .trim();
     if (!text) {
