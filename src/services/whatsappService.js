@@ -291,9 +291,14 @@ export class WhatsappService {
               this._seenMediaIds.delete(this._seenMediaIds.values().next().value);
             }
           }
-          const content = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
+          const content = msg.message?.ephemeralMessage?.message
+            || msg.message?.viewOnceMessage?.message
+            || msg.message?.viewOnceMessageV2?.message
+            || msg.message?.viewOnceMessageV2Extension?.message
+            || msg.message?.documentWithCaptionMessage?.message
+            || msg.message;
           const imageMsg = content?.imageMessage;
-          const stickerMsg = content?.stickerMessage;
+          const stickerMsg = content?.stickerMessage || content?.lottieStickerMessage?.message?.stickerMessage;
           const audioMsg = content?.audioMessage;
           const incomingText = content?.conversation
             || content?.extendedTextMessage?.text
@@ -309,7 +314,7 @@ export class WhatsappService {
           const mediaTarget = imageMsg
             ? { type: 'image', obj: imageMsg, ext: 'jpg' }
             : stickerMsg
-              ? { type: 'sticker', obj: stickerMsg, ext: 'webp' }
+              ? { type: 'sticker', obj: stickerMsg, ext: stickerMsg.isLottie ? 'tgs' : 'webp' }
               : audioMsg
                 ? { type: 'audio', obj: audioMsg, ext: 'ogg' }
                 : null;
@@ -322,8 +327,10 @@ export class WhatsappService {
                 fs.mkdirSync(mediaDir, { recursive: true });
                 const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${mediaTarget.ext}`;
                 fs.writeFileSync(path.join(mediaDir, safeName), dlBuf);
-                mediaType = mediaTarget.type;
-                mediaUrl = `/api/whatsapp/media/${safeName}`;
+                if (mediaTarget.ext !== 'tgs') {
+                  mediaType = mediaTarget.type;
+                  mediaUrl = `/api/whatsapp/media/${safeName}`;
+                }
                 if (mediaTarget.type === 'audio') {
                   audioBuffer = dlBuf;
                   audioMimeType = audioMsg.mimetype || 'audio/ogg';
@@ -334,12 +341,16 @@ export class WhatsappService {
             }
           }
 
-          if ((incomingText || mediaUrl) && this.onBotMessage?.recordChatMessage) {
+          const fallbackText = !incomingText && !mediaUrl && mediaTarget
+            ? (mediaTarget.type === 'sticker' ? '[Figurinha animada]' : mediaTarget.type === 'image' ? '[Imagem]' : '[Áudio]')
+            : incomingText;
+
+          if ((fallbackText || mediaUrl) && this.onBotMessage?.recordChatMessage) {
             this.onBotMessage.recordChatMessage({
               phone: senderPhone,
               direction: 'in',
               senderType: 'customer',
-              body: incomingText,
+              body: fallbackText,
               mediaType,
               mediaUrl,
               contactName: msg.pushName || null,
