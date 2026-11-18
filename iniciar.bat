@@ -1,7 +1,5 @@
 @echo off
 cd /d "%~dp0"
-echo Atualizando codigo (se houver internet)...
-git pull --ff-only origin main || echo Aviso: nao foi possivel atualizar via git pull.
-echo Iniciando Sincronizador com Auto-Atualizacao...
-call npm run runner
-if errorlevel 1 pause
+git pull --ff-only origin main >nul 2>&1
+start "" powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\edge-tray.ps1"
+exit /b 0
