@@ -606,7 +606,9 @@ document.addEventListener('keydown', (event) => {
 
 function setMemberFormOpen(open) {
   const panel = document.getElementById('newMemberPanel');
+  const listPanel = document.getElementById('membersListPanel');
   panel.classList.toggle('hidden', !open);
+  if (listPanel) listPanel.classList.toggle('hidden', open);
   const button = document.getElementById('btnNewMember');
   button.setAttribute('aria-expanded', String(open));
   button.textContent = open ? 'Fechar cadastro' : 'Novo aluno';
