@@ -10,6 +10,7 @@
   const kidsWrap = document.getElementById('kidsWrap');
   const photoSection = document.getElementById('photoSection');
   const openCameraBtn = document.getElementById('openCameraBtn');
+  const uploadPhotoBtn = document.getElementById('uploadPhotoBtn');
   const captureBtn = document.getElementById('captureBtn');
   const photoFileInput = document.getElementById('photoFileInput');
   const cameraVideo = document.getElementById('cameraVideo');
@@ -63,7 +64,18 @@
     return canvas.toDataURL('image/jpeg', 0.84);
   }
 
+  function showFormError(msg) {
+    formError.hidden = false;
+    formError.textContent = msg;
+  }
+
+  function clearFormError() {
+    formError.hidden = true;
+    formError.textContent = '';
+  }
+
   function updateModeUI() {
+    clearFormError();
     const modId = Number(modalitySelect.value || 0);
     const mod = optionsData.modalities.find((m) => Number(m.id) === modId);
     const modClasses = optionsData.classes.filter((c) => Number(c.modality_id) === modId);
@@ -102,6 +114,7 @@
       modalityNotice.hidden = false;
       modalityNotice.textContent = 'Para Natação Infantil e Baby, a vaga precisa ser confirmada pela recepção/professor antes do pagamento.';
       planWrap.hidden = true;
+      planSelect.required = false;
       docWrap.hidden = true;
       docInput.required = false;
       kidsWrap.hidden = false;
@@ -112,13 +125,16 @@
       modalityNotice.hidden = false;
       modalityNotice.textContent = 'As turmas desta modalidade estão fechadas ou lotadas no momento. Fale com nossa recepção no WhatsApp (62) 98102-0169.';
       planWrap.hidden = true;
+      planSelect.required = false;
       docWrap.hidden = true;
+      docInput.required = false;
       kidsWrap.hidden = true;
       photoSection.hidden = true;
       submitBtn.disabled = true;
     } else {
       modalityNotice.hidden = true;
       planWrap.hidden = false;
+      planSelect.required = (optionsData.plans || []).length > 0;
       docWrap.hidden = false;
       docInput.required = true;
       kidsWrap.hidden = true;
@@ -131,6 +147,7 @@
   async function loadOptions() {
     try {
       const res = await fetch('/api/public/enrollment-options');
+      if (!res.ok) throw new Error('Falha ao carregar opções.');
       const data = await res.json();
       optionsData = data;
 
@@ -164,15 +181,25 @@
   classSelect.addEventListener('change', updateModeUI);
 
   openCameraBtn.addEventListener('click', async () => {
+    clearFormError();
+    stopCamera();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      showFormError('Seu navegador não suporta acesso à câmera. Use o botão "Enviar / Tirar Foto".');
+      return;
+    }
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
       cameraVideo.srcObject = mediaStream;
       cameraVideo.hidden = false;
       captureBtn.hidden = false;
     } catch {
-      formError.hidden = false;
-      formError.textContent = 'Não foi possível acessar a câmera. Use o botão "Enviar / Tirar Foto".';
+      showFormError('Não foi possível acessar a câmera. Use o botão "Enviar / Tirar Foto".');
     }
+  });
+
+  uploadPhotoBtn?.addEventListener('click', () => {
+    clearFormError();
+    photoFileInput.click();
   });
 
   captureBtn.addEventListener('click', () => {
@@ -185,14 +212,24 @@
   photoFileInput.addEventListener('change', () => {
     const file = photoFileInput.files?.[0];
     if (!file) return;
+    clearFormError();
     const reader = new FileReader();
+    reader.onerror = () => {
+      showFormError('Não foi possível ler o arquivo selecionado. Tente outra imagem.');
+      photoFileInput.value = '';
+    };
     reader.onload = () => {
       const img = new Image();
+      img.onerror = () => {
+        showFormError('Arquivo inválido. Selecione uma foto nos formatos JPG, PNG ou WEBP.');
+        photoFileInput.value = '';
+      };
       img.onload = () => {
         capturedBase64 = compressImageToBase64(img);
         photoPreview.src = capturedBase64;
         photoPreview.hidden = false;
         stopCamera();
+        photoFileInput.value = '';
       };
       img.src = String(reader.result || '');
     };
@@ -203,40 +240,99 @@
     try {
       await navigator.clipboard.writeText(pixCopy.textContent || '');
       copyPixBtn.textContent = 'Código PIX copiado!';
-    } catch {}
+      setTimeout(() => {
+        copyPixBtn.textContent = 'Copiar Código PIX';
+      }, 2500);
+    } catch {
+      copyPixBtn.textContent = 'Selecione e copie o código acima';
+    }
   });
 
   function startPixPolling(chargeId) {
     if (pixPollTimer) clearInterval(pixPollTimer);
+    let attempts = 0;
     pixPollTimer = setInterval(async () => {
+      attempts += 1;
+      if (attempts > 120) {
+        clearInterval(pixPollTimer);
+        pixPollTimer = null;
+        return;
+      }
       try {
         const res = await fetch(`/api/public/pix/${chargeId}/status`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.status === 'paid') {
           clearInterval(pixPollTimer);
+          pixPollTimer = null;
           pixStatusText.textContent = '✅ Pagamento confirmado! Seu acesso na catraca já está liberado.';
           pixStatusText.style.color = '#4ade80';
+        } else if (data.status === 'expired' || data.status === 'cancelled') {
+          clearInterval(pixPollTimer);
+          pixPollTimer = null;
+          pixStatusText.textContent = 'Cobrança PIX expirada ou cancelada. Recarregue a página para gerar um novo código.';
+          pixStatusText.style.color = '#f87171';
         }
       } catch {}
     }, 5000);
   }
 
+  window.addEventListener('pagehide', () => {
+    stopCamera();
+    if (pixPollTimer) {
+      clearInterval(pixPollTimer);
+      pixPollTimer = null;
+    }
+  });
+
   enrollForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    formError.hidden = true;
+    clearFormError();
+
+    const nameInput = document.getElementById('nameInput');
+    const phoneInput = document.getElementById('phoneInput');
+    const name = nameInput.value.trim();
+    const phone = phoneInput.value.trim();
+    const phoneDigits = phone.replace(/\D/g, '');
+    const docValue = docInput.value.trim();
+    const docDigits = docValue.replace(/\D/g, '');
+    const planId = !planWrap.hidden && planSelect.value ? Number(planSelect.value) : null;
+
+    if (name.length < 3) {
+      showFormError('Informe seu nome completo.');
+      nameInput.focus();
+      return;
+    }
+    if (phoneDigits.length < 10 || phoneDigits.length > 13) {
+      showFormError('Informe um WhatsApp válido com DDD.');
+      phoneInput.focus();
+      return;
+    }
+    if (!docWrap.hidden && docDigits.length !== 11) {
+      showFormError('Informe um CPF válido com 11 dígitos.');
+      docInput.focus();
+      return;
+    }
+    if (!planWrap.hidden && !planId) {
+      showFormError('Selecione um plano para continuar.');
+      planSelect.focus();
+      return;
+    }
+
+    const originalBtnText = submitBtn.textContent;
     submitBtn.disabled = true;
+    submitBtn.textContent = 'Enviando...';
 
     const mod = optionsData.modalities.find((m) => String(m.id) === modalitySelect.value);
     const payload = {
-      name: document.getElementById('nameInput').value.trim(),
-      phone: document.getElementById('phoneInput').value.trim(),
-      document: docInput.value.trim(),
+      name,
+      phone,
+      document: docValue,
       birth_date: document.getElementById('birthInput').value || null,
       modality_id: Number(modalitySelect.value) || null,
       modality_name: mod?.name || '',
       class_id: !classWrap.hidden && classSelect.value ? Number(classSelect.value) : null,
-      plan_id: !planWrap.hidden && planSelect.value ? Number(planSelect.value) : null,
+      plan_id: planId,
       child_age: document.getElementById('childAgeInput').value.trim() || null,
       preferred_schedule: document.getElementById('prefScheduleInput').value.trim() || null,
       photo_base64: !photoSection.hidden ? capturedBase64 : null,
@@ -249,9 +345,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erro ao enviar cadastro.');
 
+      stopCamera();
       enrollForm.hidden = true;
       resultCard.hidden = false;
       resultMessage.textContent = data.message || 'Concluído!';
@@ -268,10 +365,11 @@
         resultTitle.textContent = 'Matrícula Criada!';
         if (data.pixCharge && (data.pixCharge.qr_code || data.pixCharge.qr_code_base64)) {
           pixArea.hidden = false;
-          if (data.pixCharge.qr_code_base64) {
-            pixQrImg.src = data.pixCharge.qr_code_base64.startsWith('data:')
-              ? data.pixCharge.qr_code_base64
-              : `data:image/png;base64,${data.pixCharge.qr_code_base64}`;
+          const qrB64 = String(data.pixCharge.qr_code_base64 || '');
+          if (qrB64) {
+            pixQrImg.src = qrB64.startsWith('data:image/')
+              ? qrB64
+              : `data:image/png;base64,${qrB64}`;
             pixQrImg.hidden = false;
           }
           pixCopy.textContent = data.pixCharge.qr_code || '';
@@ -284,9 +382,9 @@
         }
       }
     } catch (err) {
-      formError.hidden = false;
-      formError.textContent = err.message;
+      showFormError(err.message || 'Erro ao enviar cadastro.');
       submitBtn.disabled = false;
+      submitBtn.textContent = originalBtnText;
     }
   });
 

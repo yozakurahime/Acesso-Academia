@@ -535,11 +535,16 @@ export class EdgeSyncClient {
             .split('\n')
             .find((l) => l.startsWith('data:'));
           if (dataLine) {
+            let cmd;
             try {
-              const cmd = JSON.parse(dataLine.slice(5).trim());
-              await this._handleCommand(cmd);
+              cmd = JSON.parse(dataLine.slice(5).trim());
             } catch {
-              // ignore malformed SSE frame
+              continue; // ignore malformed SSE frame
+            }
+            try {
+              await this._handleCommand(cmd);
+            } catch (err) {
+              this.lastError = `Erro ao processar comando (${cmd?.type || 'desconhecido'}): ${err.message}`;
             }
           }
         }
@@ -562,6 +567,7 @@ export class EdgeSyncClient {
 
   start() {
     if (!this.cloudUrl || !this.token) return;
+    this.stop();
     this._stopped = false;
     this.syncOnce();
     this._syncTimer = setInterval(() => {

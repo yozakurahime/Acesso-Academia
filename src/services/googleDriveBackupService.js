@@ -68,6 +68,7 @@ export class GoogleDriveBackupService {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
+      signal: AbortSignal.timeout(15000),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.refresh_token) {
@@ -120,6 +121,7 @@ export class GoogleDriveBackupService {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
+        signal: AbortSignal.timeout(15000),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.access_token) {
@@ -145,6 +147,7 @@ export class GoogleDriveBackupService {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
+      signal: AbortSignal.timeout(15000),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.access_token) {
@@ -208,6 +211,7 @@ export class GoogleDriveBackupService {
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
       body,
+      signal: AbortSignal.timeout(60000),
     });
     const uploaded = await uploadRes.json().catch(() => ({}));
     if (!uploadRes.ok || !uploaded.id) {
@@ -222,6 +226,7 @@ export class GoogleDriveBackupService {
       `&orderBy=createdTime desc&pageSize=100&fields=files(id,name,createdTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`;
     const listRes = await this.fetchImpl(listUrl, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15000),
     });
     if (listRes.ok) {
       const listData = await listRes.json().catch(() => ({}));
@@ -230,6 +235,7 @@ export class GoogleDriveBackupService {
         await this.fetchImpl(`${DRIVE_FILES_URL}/${encodeURIComponent(stale.id)}?supportsAllDrives=true`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(15000),
         }).catch(() => {});
       }
     }

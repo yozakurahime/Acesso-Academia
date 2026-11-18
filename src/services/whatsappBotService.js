@@ -89,6 +89,9 @@ export class WhatsappBotService {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return;
     this._pausedUntil.set(normalized, nowMs + Math.max(1000, Number(durationMs) || this.humanPauseMs));
+    if (this._pausedUntil.size > 1000) {
+      this._pausedUntil.delete(this._pausedUntil.keys().next().value);
+    }
     try {
       this.store.run(
         `INSERT INTO whatsapp_chats (phone, bot_paused, last_message_at)
@@ -243,6 +246,9 @@ export class WhatsappBotService {
     const maxItems = this.historyMaxTurns * 2;
     const trimmed = turns.length > maxItems ? turns.slice(turns.length - maxItems) : turns;
     this._histories.set(normalized, { updatedAt: nowMs, turns: trimmed });
+    if (this._histories.size > 1000) {
+      this._histories.delete(this._histories.keys().next().value);
+    }
   }
 
   loadBaseContext() {

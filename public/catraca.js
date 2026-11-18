@@ -34,7 +34,8 @@ let faceMirrorChannelActiveAt = 0;
 
 function updateFaceMirror(mirror) {
   if (!faceMirrorOverlay || !faceMirrorImg) return;
-  if (!mirror || !mirror.active || !mirror.frame) {
+  const validFrame = typeof mirror?.frame === 'string' && mirror.frame.startsWith('data:image/');
+  if (!mirror || !mirror.active || !validFrame) {
     clearTimeout(faceMirrorHideTimer);
     faceMirrorOverlay.hidden = true;
     faceMirrorImg.removeAttribute('src');
@@ -228,11 +229,14 @@ function render(state, event) {
 
   if (isNewEvent) {
     animateTimerBar(event.remainingMs, event.totalMs);
-  } else if (state === 'idle' && timerBar) {
+  } else if (!event && timerBar) {
     timerBar.hidden = true;
   }
 
-  if (event) resetTimer = setTimeout(() => render('idle'), event.remainingMs);
+  const remainingMs = Number(event?.remainingMs);
+  if (event && remainingMs > 0) {
+    resetTimer = setTimeout(() => render('idle'), remainingMs);
+  }
 }
 
 function updateIdleWidgetsVisibility() {

@@ -161,6 +161,7 @@ export class AuthService {
         if (!appUser.active) return null;
         const currentTv = Number(appUser.token_version ?? 1);
         if (data.tv !== undefined && Number(data.tv) !== currentTv) return null;
+        data.role = appUser.role || data.role;
       } else {
         const settings = this.store.getSettings();
         const expectedAdminUser = String(settings.auth_username || 'admin').trim().toLowerCase();
@@ -361,7 +362,7 @@ export class AuthService {
 
     if (
       Object.prototype.hasOwnProperty.call(existing, 'token_version') &&
-      (active !== undefined || (password && String(password).length > 0))
+      (role !== undefined || active !== undefined || (password && String(password).length > 0))
     ) {
       sets.push('token_version = COALESCE(token_version, 1) + 1');
     }
@@ -427,6 +428,9 @@ export class AuthService {
     return (req, res, next) => {
       if (!this.isEnabled()) {
         return next();
+      }
+      if (!req.authUser && !req.authRole) {
+        return res.status(401).json({ error: 'Autenticação necessária.', code: 'AUTH_REQUIRED' });
       }
       return requireRole(...roles)(req, res, next);
     };

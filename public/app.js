@@ -5634,10 +5634,12 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
 
 document.addEventListener('keydown', (e) => {
   const modal = document.querySelector('#loginOverlay:not(.hidden)') ||
+    document.querySelector('#newEnrollmentModal:not(.hidden)') ||
     document.querySelector('#receiptPreviewModal:not(.hidden)') ||
     document.querySelector('#faceModal:not(.hidden)') ||
     document.querySelector('#profileModal:not(.hidden)');
   if (e.key === 'Escape') {
+    if (modal?.id === 'newEnrollmentModal') closeNewEnrollmentModal();
     if (modal?.id === 'receiptPreviewModal') hideModal(modal.id);
     if (modal?.id === 'faceModal') closeFaceModal();
     if (modal?.id === 'profileModal') closeProfileModal();
@@ -7651,7 +7653,7 @@ async function openChat(phone) {
       let mediaHtml = '';
       if (m.media_url) {
         if (m.media_type === 'image') {
-          mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank')" />`;
+          mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank','noopener,noreferrer')" />`;
         } else if (m.media_type === 'sticker') {
           mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Figurinha" style="max-width:140px;display:block;margin-bottom:6px;" />`;
         } else if (m.media_type === 'audio') {

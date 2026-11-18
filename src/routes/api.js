@@ -1,4 +1,5 @@
 import { Router, raw } from 'express';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -125,8 +126,12 @@ function validateDeviceHost(value, label) {
     lower === '0.0.0.0' ||
     lower === '::' ||
     lower === '::1' ||
+    lower === '::ffff:0.0.0.0' ||
     lower.startsWith('127.') ||
     lower.startsWith('169.254.') ||
+    lower.startsWith('::ffff:127.') ||
+    lower.startsWith('::ffff:169.254.') ||
+    lower.startsWith('fe80:') ||
     lower.endsWith('.local')
   ) {
     throw Object.assign(new Error(`${label} não pode apontar para endereço local ou de metadados.`), { statusCode: 400 });
@@ -263,7 +268,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     max: 20,
     windowMs: 10 * 60 * 1000,
     message: 'Muitas solicitações em sequência. Aguarde alguns minutos.',
-    keyFn: (req) => (req.studentMemberId ? `st:${req.studentMemberId}` : req.socket?.remoteAddress || req.ip || 'unknown'),
+    keyFn: (req) => (req.studentMemberId ? `st:${req.studentMemberId}` : clientIpKey(req)),
   });
   router.get('/public/plans', (_req, res) => {
     const plans = store.all(
@@ -486,9 +491,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   if (authService) {
     const requireAuth = authService.middleware();
     router.use((req, res, next) => {
-      if (req.path.startsWith('/edge/') && req.path !== '/edge/status') return next();
+      const cleanPath = String(req.path || '').replace(/\/+$/, '') || '/';
+      if (cleanPath.startsWith('/edge/') && cleanPath !== '/edge/status') return next();
       if (req.method === 'POST' && req.path === '/device/release' && isLocalDeviceRequest(req) &&
-          equalSecret(req.get('x-oxigenio-hotkey'), hotkeyToken)) return next();
+          equalSecret(req.get('x-oxigenio-hotkey'), hotkeyToken)) {
+        req.authUser = 'hotkey';
+        req.authRole = 'reception';
+        return next();
+      }
       requireAuth(req, res, next);
     });
   }
@@ -772,6 +782,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.get(
     '/reports/analytics',
+    requireAdmin,
     handle(async (req, res) => {
       res.json(accessService.getAnalyticsReport(req.query.month));
     }),
@@ -821,6 +832,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/device/test',
+    requireAdmin,
     handle(async (_req, res) => {
       const result = await controlId.testConnection();
       res.json(result);
@@ -829,6 +841,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/device/test-toletus',
+    requireAdmin,
     handle(async (_req, res) => {
       const result = await toletus.testConnection();
       res.json(result);
@@ -894,6 +907,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/devices/turnstiles/:id/test',
+    requireAdmin,
     handle(async (req, res) => {
       const result = await deviceService.testTurnstile(req.params.id);
       res.json(result);
@@ -902,6 +916,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/devices/turnstiles/:id/apply',
+    requireAdmin,
     handle(async (req, res) => {
       const result = await deviceService.applyTurnstileConfig(req.params.id);
       res.json(result);
@@ -936,6 +951,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/devices/readers/:id/test',
+    requireAdmin,
     handle(async (req, res) => {
       const result = await deviceService.testReader(req.params.id);
       res.json(result);
@@ -970,6 +986,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/device/sync-logs',
+    requireReception,
     handle(async (_req, res) => {
       const result = await accessService.syncAccessLogs();
       res.json(result);
@@ -978,6 +995,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/device/check-expired',
+    requireAdmin,
     handle(async (_req, res) => {
       const blocked = await accessService.checkExpiredMembers();
       res.json({ blockedCount: blocked.length, blocked });
@@ -991,6 +1009,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/plans',
+    requireAdmin,
     handle(async (req, res) => {
       const plan = accessService.createPlan(req.body);
       res.status(201).json(plan);
@@ -999,6 +1018,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.put(
     '/plans/:id',
+    requireAdmin,
     handle(async (req, res) => {
       const plan = accessService.updatePlan(req.params.id, req.body);
       res.json(plan);
@@ -1030,6 +1050,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/members',
+    requireReception,
     handle(async (req, res) => {
       const member = await accessService.createMember(req.body);
       if (whatsappService && (!member.access_role || member.access_role === 'student') && member.phone) {
@@ -1041,6 +1062,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/members/:id/face',
+    requireReception,
     handle(async (req, res) => {
       const member = await accessService.registerFace(req.params.id, req.body.imageBase64);
       res.json(member);
@@ -1049,6 +1071,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/members/:id/cancel',
+    requireReception,
     handle(async (req, res) => {
       const result = await accessService.recordCancellation({
         member_id: req.params.id,
@@ -1059,11 +1082,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
-  router.get('/device/users/:id/identity', handle(async (req, res) => {
+  router.get('/device/users/:id/identity', requireReception, handle(async (req, res) => {
     res.json(await accessService.inspectDeviceLink(Number(req.params.id)));
   }));
 
-  router.put('/members/:id/face-link', handle(async (req, res) => {
+  router.put('/members/:id/face-link', requireReception, handle(async (req, res) => {
     res.json(await accessService.relinkDevice(req.params.id, req.body));
   }));
 
@@ -1080,6 +1103,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/members/:id/status',
+    requireReception,
     handle(async (req, res) => {
       const result = await accessService.setMemberStatus(req.params.id, req.body.status);
       res.json(result);
@@ -1111,7 +1135,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(result);
   }));
 
-  router.post('/members/:id/contract', handle(async (req, res) => {
+  router.post('/members/:id/contract', requireReception, handle(async (req, res) => {
     res.json(accessService.signMemberContract(req.params.id, req.body || {}));
   }));
 
@@ -1336,16 +1360,17 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.put(
     '/members/:id',
+    requireReception,
     handle(async (req, res) => {
       res.json(gymService.updateMember(req.params.id, req.body));
     }),
   );
 
-  router.put('/members/:id/enrollment', handle(async (req, res) => {
+  router.put('/members/:id/enrollment', requireReception, handle(async (req, res) => {
     res.json(gymService.saveEnrollment(req.params.id, req.body));
   }));
 
-  router.put('/members/:id/plan-enrollment', handle(async (req, res) => {
+  router.put('/members/:id/plan-enrollment', requireReception, handle(async (req, res) => {
     res.json(await accessService.savePlanEnrollment(req.params.id, req.body));
   }));
 
@@ -1362,7 +1387,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(result);
   }));
 
-  router.delete('/members/:id/enrollment/:modalityId', handle(async (req, res) => {
+  router.delete('/members/:id/enrollment/:modalityId', requireReception, handle(async (req, res) => {
     res.json(gymService.removeEnrollment(req.params.id, req.params.modalityId));
   }));
 
@@ -1370,10 +1395,12 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.get('/modalities', (_req, res) => res.json(gymService.listModalities()));
   router.post(
     '/modalities',
+    requireAdmin,
     handle(async (req, res) => res.status(201).json(gymService.createModality(req.body))),
   );
   router.put(
     '/modalities/:id',
+    requireAdmin,
     handle(async (req, res) => res.json(gymService.updateModality(req.params.id, req.body))),
   );
   router.delete(
@@ -1385,20 +1412,24 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.get('/instructors', (_req, res) => res.json(gymService.listInstructors()));
   router.post(
     '/instructors',
+    requireAdmin,
     handle(async (req, res) => res.status(201).json(gymService.createInstructor(req.body))),
   );
 
   router.get('/classes', (_req, res) => res.json(gymService.listClasses()));
   router.post(
     '/classes',
+    requireReception,
     handle(async (req, res) => res.status(201).json(gymService.createClass(req.body))),
   );
   router.put(
     '/classes/:id',
+    requireReception,
     handle(async (req, res) => res.json(gymService.updateClass(req.params.id, req.body))),
   );
   router.post(
     '/classes/:id/enroll',
+    requireReception,
     handle(async (req, res) => res.json(gymService.enrollMemberInClass(req.params.id, req.body.member_id))),
   );
 
@@ -1416,6 +1447,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.get('/staff', (_req, res) => res.json(gymService.listStaff()));
   router.post(
     '/staff',
+    requireAdmin,
     handle(async (req, res) => res.status(201).json(gymService.createStaff(req.body))),
   );
 
@@ -1423,10 +1455,12 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.get('/payment-methods', (_req, res) => res.json(gymService.listPaymentMethods()));
   router.post(
     '/payment-methods',
+    requireAdmin,
     handle(async (req, res) => res.status(201).json(gymService.createPaymentMethod(req.body))),
   );
   router.patch(
     '/payment-methods/:id/toggle',
+    requireAdmin,
     handle(async (req, res) => res.json(gymService.togglePaymentMethod(req.params.id))),
   );
 
@@ -1434,6 +1468,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.get('/products', (_req, res) => res.json(gymService.listProducts()));
   router.post(
     '/products',
+    requireReception,
     handle(async (req, res) => res.status(201).json(gymService.createProduct(req.body))),
   );
   router.get('/sales', requireReception, (_req, res) => res.json(gymService.listSales()));
@@ -1510,6 +1545,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/whatsapp/connect',
+    requireAdmin,
     handle(async (_req, res) => {
       if (!whatsappService) throw new Error('Serviço WhatsApp não inicializado.');
       res.json(await whatsappService.connect());
@@ -1527,6 +1563,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/whatsapp/test',
+    requireAdmin,
     handle(async (req, res) => {
       if (!whatsappService) throw new Error('Serviço WhatsApp não inicializado.');
       const { phone, message } = req.body || {};
@@ -1569,10 +1606,15 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   });
 
   router.get('/whatsapp/media/:filename', requireReception, (req, res) => {
-    const safeName = path.basename(String(req.params.filename || ''));
-    if (!safeName || safeName !== req.params.filename) return res.sendStatus(400);
-    const mediaPath = path.join(path.dirname(store.filePath || path.join(process.cwd(), 'data', 'acesso.sqlite')), 'chat_media', safeName);
-    if (!fs.existsSync(mediaPath)) return res.sendStatus(404);
+    const rawName = String(req.params.filename || '');
+    const safeName = path.basename(rawName);
+    if (!safeName || safeName === '.' || safeName === '..' || safeName !== rawName) {
+      return res.sendStatus(400);
+    }
+    const mediaDir = path.resolve(path.dirname(store.filePath || path.join(process.cwd(), 'data', 'acesso.sqlite')), 'chat_media');
+    const mediaPath = path.resolve(mediaDir, safeName);
+    if (!mediaPath.startsWith(`${mediaDir}${path.sep}`)) return res.sendStatus(400);
+    if (!fs.existsSync(mediaPath) || !fs.statSync(mediaPath).isFile()) return res.sendStatus(404);
     res.sendFile(mediaPath);
   });
 
@@ -1798,6 +1840,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/partners/checkin',
+    requireReception,
     handle(async (req, res) => {
       const result = await partnerService.registerMemberCheckin({
         memberId: req.body?.member_id || null,
@@ -1905,13 +1948,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.post(
     '/members/:id/credit',
+    requireReception,
     handle(async (req, res) => {
       res.json(accessService.adjustMemberCredit(req.params.id, req.body || {}));
     }),
   );
 
   // --- Portal do Aluno (Sessão própria do aluno) ---
-  router.post('/members/:id/portal-invite', handle(async (req, res) => {
+  router.post('/members/:id/portal-invite', requireReception, handle(async (req, res) => {
     if (authService?.isEnabled() && !req.authUser) return res.status(403).json({ error: 'Entre como administrador para gerar convites.' });
     res.set('Cache-Control', 'no-store').json(portalService.issueInvite(req.params.id));
   }));

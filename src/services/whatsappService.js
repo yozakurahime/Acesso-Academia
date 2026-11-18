@@ -233,9 +233,16 @@ export class WhatsappService {
     this.manualDisconnect = false;
     this.lastError = null;
     this.status = 'connecting';
-    await fs.promises.mkdir(this.authDir, { recursive: true });
-
-    const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+    let state;
+    let saveCreds;
+    try {
+      await fs.promises.mkdir(this.authDir, { recursive: true });
+      ({ state, saveCreds } = await useMultiFileAuthState(this.authDir));
+    } catch (err) {
+      this.status = 'disconnected';
+      this.lastError = `Falha ao carregar sessão do WhatsApp: ${err.message}`;
+      throw err;
+    }
     let version;
     try {
       ({ version } = await fetchLatestBaileysVersion());
@@ -263,6 +270,7 @@ export class WhatsappService {
 
     sock.ev.on('creds.update', saveCreds);
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
+      if (this.sock && this.sock !== sock) return;
       if (type !== 'notify') return;
       const settings = this.store.getSettings();
       const allowReceipts = Boolean(this.onReceiptMedia) && settings.whatsapp_receipt_enabled === '1' && Boolean(settings.gemini_api_key);
@@ -405,6 +413,7 @@ export class WhatsappService {
       }
     });
     sock.ev.on('connection.update', async (update) => {
+      if (this.sock && this.sock !== sock) return;
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
         try {
@@ -1092,6 +1101,9 @@ export class WhatsappService {
               checkedAt: Date.now(),
             };
             this.verifiedJids.set(next.phone, cached);
+            if (this.verifiedJids.size > 1000) {
+              this.verifiedJids.delete(this.verifiedJids.keys().next().value);
+            }
           }
           if (!cached.exists) {
             this.store.run(

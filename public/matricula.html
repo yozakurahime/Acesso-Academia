@@ -190,10 +190,8 @@
           </div>
           <div class="btn-row">
             <button type="button" id="openCameraBtn" class="btn btn-secondary">Abrir Câmera</button>
-            <label class="btn btn-secondary" style="margin:0;cursor:pointer;">
-              Enviar / Tirar Foto
-              <input id="photoFileInput" type="file" accept="image/*" capture="user" hidden />
-            </label>
+            <button type="button" id="uploadPhotoBtn" class="btn btn-secondary">Enviar / Tirar Foto</button>
+            <input id="photoFileInput" type="file" accept="image/*" capture="user" hidden />
             <button type="button" id="captureBtn" class="btn btn-primary" style="width:auto;" hidden>Capturar Foto</button>
           </div>
           <div class="preview-box">
@@ -202,7 +200,7 @@
           </div>
         </div>
 
-        <div id="formError" class="notice err" hidden></div>
+        <div id="formError" class="notice err" role="alert" hidden></div>
 
         <button type="submit" id="submitBtn" class="btn btn-primary" style="margin-top:14px;">
           Concluir Matrícula e Gerar PIX
@@ -216,9 +214,9 @@
           <img id="pixQrImg" alt="QR Code PIX" hidden />
           <div id="pixCopy" class="pix-code"></div>
           <button type="button" id="copyPixBtn" class="btn btn-secondary" style="margin-bottom:10px;">Copiar Código PIX</button>
-          <p id="pixStatusText" style="color:var(--muted);font-size:0.9rem;">Aguardando pagamento PIX...</p>
+          <p id="pixStatusText" role="status" aria-live="polite" style="color:var(--muted);font-size:0.9rem;">Aguardando pagamento PIX...</p>
         </div>
-        <a id="whatsappFallbackBtn" class="btn btn-primary" target="_blank" rel="noopener" hidden>
+        <a id="whatsappFallbackBtn" class="btn btn-primary" target="_blank" rel="noopener noreferrer" hidden>
           Confirmar no WhatsApp (62) 98102-0169
         </a>
       </section>

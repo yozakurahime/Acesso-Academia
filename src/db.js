@@ -11,6 +11,8 @@ export class DatabaseStore {
   constructor(db, filePath = null) {
     this.db = db;
     this.filePath = filePath;
+    this.inTransaction = false;
+    this._savepointSeq = 0;
   }
 
   static async create(filePath = null) {
@@ -79,12 +81,15 @@ export class DatabaseStore {
 
   all(sql, params = []) {
     const stmt = this.db.prepare(sql);
-    stmt.bind(params);
     const rows = [];
-    while (stmt.step()) {
-      rows.push(stmt.getAsObject());
+    try {
+      stmt.bind(params);
+      while (stmt.step()) {
+        rows.push(stmt.getAsObject());
+      }
+    } finally {
+      stmt.free();
     }
-    stmt.free();
     return rows;
   }
 
@@ -106,6 +111,22 @@ export class DatabaseStore {
   }
 
   transaction(work) {
+    if (this.inTransaction) {
+      const sp = `sp_${++this._savepointSeq}`;
+      this.db.run(`SAVEPOINT ${sp}`);
+      try {
+        const result = work();
+        this.db.run(`RELEASE SAVEPOINT ${sp}`);
+        return result;
+      } catch (err) {
+        try {
+          this.db.run(`ROLLBACK TO SAVEPOINT ${sp}`);
+          this.db.run(`RELEASE SAVEPOINT ${sp}`);
+        } catch {}
+        throw err;
+      }
+    }
+
     this.db.run('BEGIN');
     this.inTransaction = true;
     let result;
@@ -113,7 +134,9 @@ export class DatabaseStore {
       result = work();
       this.db.run('COMMIT');
     } catch (err) {
-      this.db.run('ROLLBACK');
+      try {
+        this.db.run('ROLLBACK');
+      } catch {}
       throw err;
     } finally {
       this.inTransaction = false;
@@ -122,10 +145,14 @@ export class DatabaseStore {
       this.save();
     } catch (err) {
       // O arquivo anterior permanece intacto até a troca atômica.
-      const restored = new this.db.constructor(fs.readFileSync(this.filePath));
-      restored.run('PRAGMA foreign_keys = ON');
-      this.db.close();
-      this.db = restored;
+      if (this.filePath && fs.existsSync(this.filePath)) {
+        try {
+          const restored = new this.db.constructor(fs.readFileSync(this.filePath));
+          restored.run('PRAGMA foreign_keys = ON');
+          this.db.close();
+          this.db = restored;
+        } catch {}
+      }
       throw err;
     }
     return result;
