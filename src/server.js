@@ -267,6 +267,69 @@ async function start() {
       edgeSyncClient.start();
       console.log(`[EDGE SYNC] Conectado ao servidor cloud: ${process.env.EDGE_CLOUD_URL}`);
     }
+    if (edgeRole === 'edge') {
+      const watchdogState = {
+        hostConnected: false,
+        hostError: null,
+        readerConnected: false,
+        readerError: null,
+        turnstileConnected: false,
+        turnstileError: null,
+        checkedAt: null,
+      };
+      app.locals.edgeWatchdog = watchdogState;
+
+      let probing = false;
+      const runHardwareWatchdog = async () => {
+        if (probing) return;
+        probing = true;
+        try {
+          const cfg = store.getSettings();
+          if (edgeSyncClient) {
+            if (edgeSyncClient.lastError) {
+              await edgeSyncClient.syncOnce().catch(() => {});
+            }
+            watchdogState.hostConnected = !edgeSyncClient.lastError;
+            watchdogState.hostError = edgeSyncClient.lastError || null;
+          }
+
+          if (cfg.controlid_mock_mode === 'true') {
+            watchdogState.readerConnected = true;
+            watchdogState.readerError = null;
+          } else if (cfg.controlid_ip) {
+            try {
+              await controlId.ensureSession(cfg);
+              watchdogState.readerConnected = true;
+              watchdogState.readerError = null;
+            } catch (err) {
+              controlId.session = null;
+              watchdogState.readerConnected = false;
+              watchdogState.readerError = err.message;
+            }
+          }
+
+          if (cfg.toletus_mock_mode === 'true') {
+            watchdogState.turnstileConnected = true;
+            watchdogState.turnstileError = null;
+          } else if (cfg.toletus_ip) {
+            try {
+              await toletus.testConnection(cfg);
+              watchdogState.turnstileConnected = true;
+              watchdogState.turnstileError = null;
+            } catch (err) {
+              watchdogState.turnstileConnected = false;
+              watchdogState.turnstileError = err.message;
+            }
+          }
+          watchdogState.checkedAt = new Date().toISOString();
+        } finally {
+          probing = false;
+        }
+      };
+
+      setTimeout(runHardwareWatchdog, 4000).unref?.();
+      setInterval(runHardwareWatchdog, 30000).unref?.();
+    }
     tunnelHandle = startCloudflareTunnel();
     if (process.platform === 'win32' && process.env.OXIGENIO_ABRIR_TELAS === '1') {
       const launcher = spawn('powershell.exe', [

@@ -790,6 +790,22 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json({ ok: true, timestamp: new Date().toISOString() });
   });
 
+  router.get('/edge/tray-status', (req, res) => {
+    if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
+    const hw = req.app?.locals?.edgeWatchdog || {};
+    res.set('Cache-Control', 'no-store').json({
+      ok: true,
+      role: String(process.env.EDGE_ROLE || 'local').trim().toLowerCase(),
+      hostConnected: Boolean(hw.hostConnected),
+      hostError: hw.hostError || null,
+      readerConnected: Boolean(hw.readerConnected),
+      readerError: hw.readerError || null,
+      turnstileConnected: Boolean(hw.turnstileConnected),
+      turnstileError: hw.turnstileError || null,
+      checkedAt: hw.checkedAt || null,
+    });
+  });
+
   router.get(
     '/dashboard',
     handle(async (_req, res) => {
