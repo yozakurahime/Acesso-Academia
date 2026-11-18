@@ -24,6 +24,9 @@ public static class NativeWinHelper {
 
     [DllImport("gdi32.dll")]
     public static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 }
 
 public static class StdinLineQueue {
@@ -256,6 +259,7 @@ function Show-DesktopToast {
   $activePopups.Add($popup)
   Reposition-Popups
   $popup.Show()
+  [void][NativeWinHelper]::SetWindowPos($popup.Handle, [IntPtr](-1), 0, 0, 0, 0, (0x0001 -bor 0x0002 -bor 0x0010 -bor 0x0040))
   $closeTimer.Start()
 }
 
@@ -291,6 +295,7 @@ $timer.add_Tick({
       $level = if ($payload.level) { [string]$payload.level } else { 'info' }
       Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs -Level $level
     } catch {
+      [Console]::Error.WriteLine($_.Exception.Message)
     }
   }
 
