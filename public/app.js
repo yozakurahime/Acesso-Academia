@@ -631,6 +631,28 @@ document.querySelectorAll('[data-go]').forEach((button) => {
   });
 });
 
+function openNewMemberWithQuery(rawQuery = '') {
+  const query = String(rawQuery || '').trim();
+  setMemberFormOpen(true);
+  const digits = query.replace(/\D/g, '');
+  const hasLetters = /[a-zA-ZÀ-ÿ]/.test(query);
+  const nameEl = document.getElementById('mName');
+  const docEl = document.getElementById('mDoc');
+  const phoneEl = document.getElementById('mPhone');
+  if (hasLetters && nameEl) {
+    nameEl.value = query;
+    nameEl.focus();
+  } else if (digits.length === 11 && docEl) {
+    docEl.value = digits;
+    nameEl?.focus();
+  } else if (digits.length >= 8 && phoneEl) {
+    phoneEl.value = query;
+    nameEl?.focus();
+  } else {
+    nameEl?.focus();
+  }
+}
+
 document.getElementById('quickSearchForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const rawQuery = document.getElementById('quickSearch').value.trim();
@@ -656,6 +678,11 @@ document.getElementById('quickSearchForm').addEventListener('submit', async (eve
     );
     if (exactMatches.length === 1) {
       openProfile(exactMatches[0].member.id);
+      return;
+    }
+    if (state.filteredMembers.length === 0) {
+      openNewMemberWithQuery(rawQuery);
+      showToast(`Nenhum aluno encontrado para "${rawQuery}". Preencha para cadastrar!`);
       return;
     }
   }
@@ -1866,7 +1893,14 @@ function renderMembersTable() {
             </tr>`;
         })
         .join('')
-    : '<tr><td colspan="6" class="empty-cell">Nenhum aluno encontrado para este filtro.</td></tr>';
+    : `<tr><td colspan="6" class="empty-cell">
+        <div>Nenhum aluno encontrado para este filtro.</div>
+        ${q ? `<div style="margin-top:8px;"><button type="button" id="btnCreateFromEmptySearch" class="btn btn-primary btn-sm">+ Cadastrar "${escapeHtml(document.getElementById('memberSearch').value.trim())}"</button></div>` : ''}
+      </td></tr>`;
+
+  document.getElementById('btnCreateFromEmptySearch')?.addEventListener('click', () => {
+    openNewMemberWithQuery(document.getElementById('memberSearch').value.trim());
+  });
 
   document.getElementById('membersCounter').textContent = `Exibindo ${visible.length} de ${state.filteredMembers.length} aluno(s)`;
   document
