@@ -185,6 +185,25 @@ export class ImportService {
     const markActive = Boolean(options.markStudentsActive || options.exclusiveActiveList);
     const activeIds = new Set();
 
+    const planDaysById = new Map(
+      this.store.all('SELECT id, duration_days FROM plans').map((p) => [p.id, p.duration_days]),
+    );
+    const studentsByDoc = new Map();
+    const studentsByLowerName = new Map();
+    for (const s of this.store.all("SELECT id, name, document, status, valid_until, plan_id FROM members WHERE access_role = 'student'")) {
+      if (s.document) {
+        const list = studentsByDoc.get(s.document) || [];
+        list.push(s);
+        studentsByDoc.set(s.document, list);
+      }
+      const key = String(s.name || '').toLowerCase();
+      if (key) {
+        const list = studentsByLowerName.get(key) || [];
+        list.push(s);
+        studentsByLowerName.set(key, list);
+      }
+    }
+
     const rollForwardValidUntil = (currentValidUntil, durationDays) => {
       const step = Math.max(Number(durationDays) || 30, 1);
       let candidate = currentValidUntil || addDaysIso(today, step);
@@ -218,8 +237,8 @@ export class ImportService {
       const address = addressParts.join(', ');
 
       const candidates = cpf
-        ? this.store.all("SELECT id, status, valid_until, plan_id FROM members WHERE access_role = 'student' AND document = ?", [cpf])
-        : this.store.all("SELECT id, status, valid_until, plan_id FROM members WHERE access_role = 'student' AND lower(name) = lower(?)", [name]);
+        ? (studentsByDoc.get(cpf) || [])
+        : (studentsByLowerName.get(name.toLowerCase()) || []);
       if (candidates.length > 1) {
         summary.conflicts += 1;
         summary.membersSkipped += 1;
@@ -230,14 +249,14 @@ export class ImportService {
       if (existing) {
         activeIds.add(existing.id);
         if (markActive) {
-          const plan = existing.plan_id
-            ? this.store.get('SELECT duration_days FROM plans WHERE id = ?', [existing.plan_id])
-            : null;
+          const durationDays = existing.plan_id ? planDaysById.get(existing.plan_id) : null;
           const nextValidUntil =
             existing.valid_until && existing.valid_until >= today
               ? existing.valid_until
-              : rollForwardValidUntil(existing.valid_until, plan?.duration_days || 30);
+              : rollForwardValidUntil(existing.valid_until, durationDays || 30);
           if (existing.status !== 'active' || existing.valid_until !== nextValidUntil) {
+            existing.status = 'active';
+            existing.valid_until = nextValidUntil;
             this.store.run(
               `UPDATE members SET status = 'active', valid_until = ?, updated_at = datetime('now', 'localtime') WHERE id = ?`,
               [nextValidUntil, existing.id],
@@ -256,7 +275,26 @@ export class ImportService {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [name, cpf || null, phone || null, email || null, address || null, initialStatus, initialValidUntil],
       );
-      activeIds.add(res.lastInsertRowid);
+      const insertedRow = {
+        id: res.lastInsertRowid,
+        name,
+        document: cpf || null,
+        status: initialStatus,
+        valid_until: initialValidUntil,
+        plan_id: null,
+      };
+      activeIds.add(insertedRow.id);
+      if (insertedRow.document) {
+        const list = studentsByDoc.get(insertedRow.document) || [];
+        list.push(insertedRow);
+        studentsByDoc.set(insertedRow.document, list);
+      }
+      const key = name.toLowerCase();
+      if (key) {
+        const list = studentsByLowerName.get(key) || [];
+        list.push(insertedRow);
+        studentsByLowerName.set(key, list);
+      }
       if (markActive) summary.activatedMembers += 1;
       summary.membersImported += 1;
     }
@@ -322,6 +360,21 @@ export class ImportService {
     const iEnd = headers.indexOf('Fim');
     const iPrice = headers.indexOf('Valor-Cobranca') >= 0 ? headers.indexOf('Valor-Cobranca') : headers.indexOf('Valor');
     const today = localTodayIso();
+    const modalitiesByLowerName = new Map(
+      this.store.all('SELECT id, name FROM modalities').map((m) => [String(m.name || '').toLowerCase(), m]),
+    );
+    const plansByLowerName = new Map(
+      this.store.all('SELECT id, name FROM plans').map((p) => [String(p.name || '').toLowerCase(), p]),
+    );
+    const studentsByLowerName = new Map();
+    for (const s of this.store.all("SELECT id, name, valid_until FROM members WHERE access_role = 'student'")) {
+      const k = String(s.name || '').toLowerCase();
+      if (k) {
+        const list = studentsByLowerName.get(k) || [];
+        list.push(s);
+        studentsByLowerName.set(k, list);
+      }
+    }
 
     for (const row of rows) {
       const name = (row[iName] || '').trim();
@@ -344,30 +397,35 @@ export class ImportService {
       let primaryModalityId = null;
       for (const part of modParts) {
         const modName = part.replace(/\s+Completo$/i, '').trim() || part;
-        let mod = this.store.get('SELECT id FROM modalities WHERE lower(name) = lower(?)', [modName]);
+        const modKey = modName.toLowerCase();
+        let mod = modalitiesByLowerName.get(modKey);
         if (!mod) {
           const modRes = this.store.run('INSERT INTO modalities (name, description) VALUES (?, ?)', [
             modName,
             `Modalidade ${modName}`,
           ]);
-          mod = { id: modRes.lastInsertRowid };
+          mod = { id: modRes.lastInsertRowid, name: modName };
+          modalitiesByLowerName.set(modKey, mod);
           summary.modalitiesCreated += 1;
         }
         if (!primaryModalityId) primaryModalityId = mod.id;
       }
 
       const fullPlanName = `${rawPlanName} (${period})`;
-      let plan = this.store.get('SELECT id FROM plans WHERE lower(name) = lower(?)', [fullPlanName]);
+      const planKey = fullPlanName.toLowerCase();
+      let plan = plansByLowerName.get(planKey);
       if (!plan) {
         const pRes = this.store.run(
           'INSERT INTO plans (name, duration_days, price_cents) VALUES (?, ?, ?)',
           [fullPlanName, durationDays, priceCents || 10000],
         );
-        plan = { id: pRes.lastInsertRowid };
+        plan = { id: pRes.lastInsertRowid, name: fullPlanName };
+        plansByLowerName.set(planKey, plan);
         summary.plansCreated += 1;
       }
 
-      const candidates = this.store.all("SELECT id, valid_until FROM members WHERE access_role = 'student' AND lower(name) = lower(?)", [name]);
+      const nameKey = name.toLowerCase();
+      const candidates = studentsByLowerName.get(nameKey) || [];
       if (candidates.length > 1) { summary.conflicts += 1; continue; }
       const member = candidates[0];
       if (!member) {
@@ -376,12 +434,15 @@ export class ImportService {
           `INSERT INTO members (name, modality_id, plan_id, valid_until, status) VALUES (?, ?, ?, ?, ?)`,
           [name, primaryModalityId, plan.id, validUntil, status],
         );
+        const insertedMember = { id: mRes.lastInsertRowid, name, valid_until: validUntil };
+        studentsByLowerName.set(nameKey, [insertedMember]);
         summary.membersImported += 1;
         summary.enrollmentsUpdated += 1;
         continue;
       }
 
       if (!member.valid_until || validUntil >= member.valid_until) {
+        member.valid_until = validUntil;
         const status = validUntil >= today ? 'active' : 'blocked';
         this.store.run(
           `UPDATE members SET modality_id = ?, plan_id = ?, valid_until = ?, status = ?, updated_at = datetime('now', 'localtime') WHERE id = ?`,
@@ -530,6 +591,14 @@ export class ImportService {
       if (docDigits) byCpf.set(docDigits, byCpf.has(docDigits) ? null : m);
     }
 
+    const existingPayments = new Set(
+      this.store.all('SELECT member_id, amount_cents, substr(paid_at, 1, 10) AS paid_date FROM payments')
+        .map((p) => `${p.member_id}|${p.amount_cents}|${p.paid_date}`),
+    );
+    const planDaysById = new Map(
+      this.store.all('SELECT id, duration_days FROM plans').map((p) => [p.id, p.duration_days]),
+    );
+
     for (const row of rows) {
       const name = (row[iName] || '').trim();
       if (!name || /^cadastro exclu[ií]do$/i.test(name)) continue;
@@ -544,26 +613,21 @@ export class ImportService {
       if (!member) { summary.conflicts += 1; continue; }
 
       const paidTimestamp = `${paidIso} 12:00:00`;
-      const existingPay = this.store.get(
-        'SELECT id FROM payments WHERE member_id = ? AND amount_cents = ? AND substr(paid_at, 1, 10) = ?',
-        [member.id, amountCents, paidIso],
-      );
-      if (!existingPay) {
+      const payKey = `${member.id}|${amountCents}|${paidIso}`;
+      if (!existingPayments.has(payKey)) {
         const payment = this.store.run(
           'INSERT INTO payments (member_id, plan_id, amount_cents, method, paid_at) VALUES (?, ?, ?, ?, ?)',
           [member.id, member.plan_id || null, amountCents, 'sca', paidTimestamp],
         );
+        existingPayments.add(payKey);
         if (dueIso) this.store.run(`UPDATE membership_charges SET payment_id = ?
           WHERE member_id = ? AND due = ? AND amount = ? AND payment_id IS NULL`,
         [payment.lastInsertRowid, member.id, dueIso, amountCents]);
         summary.receiptsImported += 1;
       }
 
-      const plan = member.plan_id
-        ? this.store.get('SELECT id, duration_days FROM plans WHERE id = ?', [member.plan_id])
-        : null;
-      if (!plan) continue;
-      const durationDays = plan.duration_days;
+      const durationDays = member.plan_id ? planDaysById.get(member.plan_id) : null;
+      if (!durationDays) continue;
       const nextValidUntil = addDaysIso(dueIso || paidIso, durationDays);
 
       if (!member.valid_until || nextValidUntil > member.valid_until) {
