@@ -1455,6 +1455,23 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.delete(
+    '/members/:id',
+    requireReception,
+    handle(async (req, res) => {
+      const result = await accessService.deleteMember(req.params.id);
+      auditService.log({
+        actorUser: req.authUser || 'system',
+        actorRole: req.authRole || 'system',
+        action: 'member.delete',
+        entity: 'member',
+        entityId: result.id,
+        details: { name: result.name },
+      });
+      res.json(result);
+    }),
+  );
+
   router.put('/members/:id/enrollment', requireReception, handle(async (req, res) => {
     res.json(gymService.saveEnrollment(req.params.id, req.body));
   }));

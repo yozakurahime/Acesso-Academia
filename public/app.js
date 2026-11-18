@@ -2701,6 +2701,24 @@ document.getElementById('btnProfToggleStatus').addEventListener('click', async (
   }
 });
 
+document.getElementById('btnProfDelete')?.addEventListener('click', async (e) => {
+  const m = state.selectedProfileMember;
+  if (!m) return;
+  if (!window.confirm(`Tem certeza que deseja excluir o cadastro de "${m.name}" (#${m.id})?\n\nEsta ação não pode ser desfeita.`)) {
+    return;
+  }
+  await withLoading(e.currentTarget, async () => {
+    try {
+      await api(`/api/members/${m.id}`, { method: 'DELETE' });
+      showToast(`Cadastro de ${m.name} excluído.`);
+      closeProfileModal(false);
+      await Promise.all([loadMembers(), loadDashboard()]).catch(() => {});
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
 document.getElementById('btnConvertVisitor')?.addEventListener('click', async (e) => {
   const m = state.selectedProfileMember;
   if (!m || !m.is_visitor) return;

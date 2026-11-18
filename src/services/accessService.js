@@ -680,6 +680,83 @@ export class AccessService {
     return this.getMember(member.id);
   }
 
+  async deleteMember(memberId) {
+    const id = Number(memberId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error('ID de cadastro inválido.');
+    }
+    const member = this.getMember(id);
+    if (!member) {
+      throw new Error('Cadastro não encontrado.');
+    }
+
+    const paymentCount = Number(this.store.get('SELECT COUNT(*) AS c FROM payments WHERE member_id = ?', [id])?.c || 0);
+    const saleCount = Number(this.store.get('SELECT COUNT(*) AS c FROM sales WHERE member_id = ?', [id])?.c || 0);
+    const paidGateway = Number(
+      this.store.get("SELECT COUNT(*) AS c FROM gateway_charges WHERE member_id = ? AND status = 'paid'", [id])?.c || 0,
+    );
+    const paidPoint = Number(
+      this.store.get("SELECT COUNT(*) AS c FROM point_orders WHERE member_id = ? AND status = 'paid'", [id])?.c || 0,
+    );
+    if (paymentCount > 0 || saleCount > 0 || paidGateway > 0 || paidPoint > 0) {
+      throw new Error('Não é possível excluir aluno com pagamentos ou vendas registradas. Bloqueie ou inative o cadastro.');
+    }
+
+    const nullableLogTables = [
+      'access_logs',
+      'whatsapp_logs',
+      'whatsapp_chats',
+      'online_enrollment_requests',
+      'payment_receipts',
+    ];
+    const childTables = [
+      'class_enrollments',
+      'member_modalities',
+      'plan_enrollments',
+      'membership_charges',
+      'gateway_charges',
+      'asaas_subscriptions',
+      'point_orders',
+      'mp_subscriptions',
+      'enrollment_cancellations',
+      'workouts',
+      'member_credit_logs',
+      'student_fitness_preferences',
+      'student_workout_completions',
+      'partner_checkins',
+      'body_assessments',
+      'class_bookings',
+      'member_debts',
+      'member_freezes',
+    ];
+
+    this.store.transaction(() => {
+      for (const table of nullableLogTables) {
+        this.store.run(`UPDATE ${table} SET member_id = NULL WHERE member_id = ?`, [id]);
+      }
+      for (const table of childTables) {
+        this.store.run(`DELETE FROM ${table} WHERE member_id = ?`, [id]);
+      }
+      this.store.run('DELETE FROM members WHERE id = ?', [id]);
+    });
+
+    if (member.controlid_user_id && typeof this.controlId?.deleteUser === 'function') {
+      const stillUsed = this.store.get(
+        'SELECT id FROM members WHERE controlid_user_id = ? LIMIT 1',
+        [member.controlid_user_id],
+      );
+      if (!stillUsed) {
+        try {
+          await this.controlId.deleteUser(member.controlid_user_id);
+        } catch {
+          // Best-effort quando o leitor não está acessível diretamente (ex.: modo cloud).
+        }
+      }
+    }
+
+    return { ok: true, id, name: member.name };
+  }
+
   getPhotoPath(memberId, member = null) {
     if (!this.store.filePath) return null;
     const target = member && 'controlid_user_id' in member ? member : this.getMember(memberId);
