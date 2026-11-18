@@ -562,6 +562,54 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     });
   });
 
+  const LOCAL_RELEASE_ORIGINS = new Set([
+    'https://sistema.academiaoxigenio.com',
+    'https://academiaoxigenio.com',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ]);
+
+  const applyLocalReleaseCors = (req, res) => {
+    const origin = String(req.get('origin') || '').trim();
+    if (origin) {
+      if (!LOCAL_RELEASE_ORIGINS.has(origin)) return false;
+      res.set('Access-Control-Allow-Origin', origin);
+      res.set('Vary', 'Origin');
+    }
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Private-Network', 'true');
+    return true;
+  };
+
+  router.options('/edge/local-release', (req, res) => {
+    if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') return res.sendStatus(404);
+    if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
+    if (!applyLocalReleaseCors(req, res)) return res.sendStatus(403);
+    return res.sendStatus(204);
+  });
+
+  router.post(
+    '/edge/local-release',
+    handle(async (req, res) => {
+      if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') return res.sendStatus(404);
+      if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
+      if (!applyLocalReleaseCors(req, res)) return res.sendStatus(403);
+      const direction = req.body?.direction || null;
+      const turnstileId = req.body?.turnstile_id ? Number(req.body.turnstile_id) : null;
+      const result = await accessService.releaseTurnstile(direction, 'LIBERADO', { turnstileId });
+      auditService.log({
+        actorUser: 'recepcao-local',
+        actorRole: 'reception',
+        action: 'device.release',
+        entity: 'turnstile',
+        entityId: turnstileId,
+        details: { direction, via: 'edge-local' },
+      });
+      res.json({ ok: true, local: true, result });
+    }),
+  );
+
   router.post('/turnstile/preview', handle(async (req, res) => {
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
     accessService.previewTurnstileDisplay(req.body?.outcome);

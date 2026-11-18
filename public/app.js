@@ -5258,16 +5258,40 @@ document.getElementById('releaseDirection')?.addEventListener('change', (e) => {
   e.currentTarget.dataset.userChanged = '1';
 });
 
+async function releaseTurnstilePreferLocal(payload) {
+  const isLoopback = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isLoopback) {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 1200) : null;
+    try {
+      const localRes = await fetch('http://127.0.0.1:3000/api/edge/local-release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller?.signal,
+      });
+      if (localRes.ok) {
+        return await localRes.json();
+      }
+    } catch {
+      // Sem sincronizador local acessível neste dispositivo; segue para a nuvem.
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  return api('/api/device/release', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 document.getElementById('btnRelease').addEventListener('click', async (e) => {
   await withLoading(e.currentTarget, async () => {
     try {
       const direction = document.getElementById('releaseDirection')?.value || 'entry';
       const turnstileVal = document.getElementById('releaseTurnstileId')?.value || '';
       const turnstile_id = turnstileVal ? Number(turnstileVal) : null;
-      await api('/api/device/release', {
-        method: 'POST',
-        body: JSON.stringify({ direction, turnstile_id }),
-      });
+      await releaseTurnstilePreferLocal({ direction, turnstile_id });
       showToast(`Catraca liberada (${DIRECTION_LABELS[direction] || direction})!`);
       await loadDashboard();
     } catch (err) {
