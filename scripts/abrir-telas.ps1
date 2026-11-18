@@ -1,12 +1,13 @@
 param(
     [ValidateRange(1, 65535)][int]$Port = 3000,
+    [string]$PanelUrl = 'https://sistema.academiaoxigenio.com',
     [switch]$SomenteCatraca
 )
 
 $ErrorActionPreference = 'Stop'
 $baseUrl = "http://localhost:$Port"
-if (-not $SomenteCatraca) {
-    Start-Process -FilePath $baseUrl
+if (-not $SomenteCatraca -and $PanelUrl) {
+    Start-Process -FilePath $PanelUrl
 }
 
 $lock = [System.Threading.Mutex]::new($false, "Local\OxigenioTelaCatraca-$Port")

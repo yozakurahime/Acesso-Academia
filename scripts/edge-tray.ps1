@@ -41,6 +41,15 @@ if (-not $nodeCmd) {
 
 $script:runnerProc = $null
 $script:exiting = $false
+$script:screensOpened = $false
+$abrirTelasScript = Join-Path $RootDir 'scripts\abrir-telas.ps1'
+
+function Open-CatracaAndPanel([switch]$SomenteCatraca) {
+  if (-not (Test-Path $abrirTelasScript)) { return }
+  $args = @('-WindowStyle', 'Hidden', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $abrirTelasScript, '-Port', $port, '-PanelUrl', $cloudUrl)
+  if ($SomenteCatraca) { $args += '-SomenteCatraca' }
+  Start-Process powershell.exe -ArgumentList $args -WorkingDirectory $RootDir -WindowStyle Hidden
+}
 
 function Stop-EdgeProcesses {
   if ($script:runnerProc -and -not $script:runnerProc.HasExited) {
@@ -91,8 +100,8 @@ $menu.Items.Add('-') | Out-Null
 $itemOpenPanel = $menu.Items.Add('Abrir Painel (Nuvem)')
 $itemOpenPanel.Add_Click({ Start-Process $cloudUrl })
 
-$itemOpenCatraca = $menu.Items.Add('Abrir Tela da Catraca')
-$itemOpenCatraca.Add_Click({ Start-Process "http://localhost:$port/catraca.html" })
+$itemOpenCatraca = $menu.Items.Add('Abrir Tela da Catraca (Monitor 2)')
+$itemOpenCatraca.Add_Click({ Open-CatracaAndPanel -SomenteCatraca })
 
 $itemLogs = $menu.Items.Add('Ver Logs do Sincronizador')
 $itemLogs.Add_Click({
@@ -125,7 +134,7 @@ $notifyIcon.ContextMenuStrip = $menu
 $notifyIcon.Add_DoubleClick({ Start-Process $cloudUrl })
 
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 8000
+$timer.Interval = 3000
 $timer.Add_Tick({
   if ($script:exiting) { return }
   if (-not $script:runnerProc -or $script:runnerProc.HasExited) {
@@ -133,6 +142,11 @@ $timer.Add_Tick({
   }
   try {
     $res = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/edge/tray-status" -TimeoutSec 3
+    if (-not $script:screensOpened) {
+      $script:screensOpened = $true
+      $timer.Interval = 8000
+      Open-CatracaAndPanel
+    }
     $h = if ($res.hostConnected) { 'OK' } else { 'Reconectando' }
     $r = if ($res.readerConnected) { 'OK' } else { 'Off' }
     $t = if ($res.turnstileConnected) { 'OK' } else { 'Off' }
