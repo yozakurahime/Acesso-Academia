@@ -272,6 +272,181 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.set('Cache-Control', 'no-cache').json({ plans });
   });
 
+  router.get('/public/enrollment-options', (_req, res) => {
+    const plans = store.all(
+      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
+    );
+    const modalities = store.all('SELECT id, name, description FROM modalities WHERE active = 1 ORDER BY name ASC');
+    const classes = store.all(
+      `SELECT c.id, c.name, c.modality_id, mod.name AS modality_name, c.schedule, c.capacity,
+              COALESCE(c.allow_new_enrollments, 1) AS allow_new_enrollments,
+              COALESCE(c.online_enrollment_mode, 'auto') AS online_enrollment_mode,
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
+       FROM classes c
+       LEFT JOIN modalities mod ON mod.id = c.modality_id
+       WHERE c.active = 1
+       ORDER BY c.name ASC, c.schedule ASC`,
+    ).map((c) => {
+      const mode = c.online_enrollment_mode || 'auto';
+      const allowNew = Number(c.allow_new_enrollments ?? 1) === 1;
+      const spotsLeft = mode === 'reception_only' ? null : Math.max(0, Number(c.capacity || 0) - Number(c.enrolled_count || 0));
+      return {
+        id: c.id,
+        name: c.name,
+        modality_id: c.modality_id,
+        modality_name: c.modality_name,
+        schedule: c.schedule,
+        capacity: c.capacity,
+        allow_new_enrollments: allowNew ? 1 : 0,
+        online_enrollment_mode: mode,
+        spots_left: spotsLeft,
+      };
+    });
+    res.set('Cache-Control', 'no-cache').json({ plans, modalities, classes });
+  });
+
+  router.post('/public/enroll', limitExpensive, handle(async (req, res) => {
+    const body = req.body || {};
+    const name = String(body.name || '').trim();
+    const phone = String(body.phone || '').trim();
+    const document = String(body.document || '').replace(/\D/g, '') || null;
+    const birthDate = body.birth_date ? String(body.birth_date).trim() : null;
+    const modalityId = body.modality_id ? Number(body.modality_id) : null;
+    const classId = body.class_id ? Number(body.class_id) : null;
+    const planId = body.plan_id ? Number(body.plan_id) : null;
+    const photoBase64 = typeof body.photo_base64 === 'string' && body.photo_base64.trim() ? body.photo_base64.trim() : null;
+    const childAge = body.child_age ? String(body.child_age).trim() : null;
+    const preferredSchedule = body.preferred_schedule ? String(body.preferred_schedule).trim() : null;
+    const notes = body.notes ? String(body.notes).trim() : null;
+
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'Informe nome completo e WhatsApp.' });
+    }
+
+    const modality = modalityId ? store.get('SELECT * FROM modalities WHERE id = ? AND active = 1', [modalityId]) : null;
+    const modalityName = String(body.modality_name || modality?.name || '').trim();
+    const cls = classId
+      ? store.get(
+          `SELECT c.*, (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
+           FROM classes c WHERE c.id = ? AND c.active = 1`,
+          [classId],
+        )
+      : null;
+
+    if (cls && Number(cls.allow_new_enrollments ?? 1) === 0) {
+      return res.status(400).json({ error: 'Esta turma esta fechada para novas matriculas no momento.' });
+    }
+
+    const lowerMod = `${modalityName} ${cls?.name || ''}`.toLowerCase();
+    const isKidsSwim = (lowerMod.includes('nata') || lowerMod.includes('baby'))
+      && (lowerMod.includes('infantil') || lowerMod.includes('baby') || lowerMod.includes('crian'));
+    const isReceptionOnly = isKidsSwim || cls?.online_enrollment_mode === 'reception_only';
+
+    if (isReceptionOnly) {
+      const ins = store.run(
+        `INSERT INTO online_enrollment_requests
+         (name, phone, document, birth_date, modality_id, modality_name, class_id, plan_id, child_age, preferred_schedule, notes, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          name,
+          phone,
+          document,
+          birthDate,
+          modality?.id || null,
+          modalityName || 'Natação Infantil / Baby',
+          cls?.id || null,
+          planId || null,
+          childAge,
+          preferredSchedule || cls?.schedule || null,
+          notes,
+          String(body.source || 'site'),
+        ],
+      );
+      return res.status(201).json({
+        mode: 'request',
+        requestId: ins.lastInsertRowid,
+        message: 'Solicitação recebida! As vagas de Natação Infantil e Baby são confirmadas diretamente pela recepção/professor via WhatsApp.',
+      });
+    }
+
+    if (cls && Number(cls.enrolled_count || 0) >= Number(cls.capacity || 0)) {
+      return res.status(400).json({ error: 'Esta turma atingiu o limite máximo de vagas.' });
+    }
+
+    if (!planId) {
+      return res.status(400).json({ error: 'Selecione um plano para concluir a matricula.' });
+    }
+    const plan = store.get('SELECT * FROM plans WHERE id = ? AND active = 1', [planId]);
+    if (!plan) {
+      return res.status(400).json({ error: 'Plano selecionado nao encontrado.' });
+    }
+
+    if (document) {
+      const existing = store.get("SELECT id, status FROM members WHERE REPLACE(REPLACE(COALESCE(document, ''), '.', ''), '-', '') = ?", [document]);
+      if (existing) {
+        return res.status(409).json({
+          error: 'CPF ja cadastrado no sistema. Para renovar ou enviar foto, acesse o Portal do Aluno ou fale com a recepcao.',
+        });
+      }
+    }
+
+    const member = await accessService.createMember({
+      name,
+      phone,
+      document,
+      birth_date: birthDate,
+      modality_id: modality?.id || cls?.modality_id || null,
+      class_id: cls?.id || null,
+      plan_id: plan.id,
+      status: 'pending',
+    });
+
+    let faceSaved = false;
+    let faceError = null;
+    if (photoBase64) {
+      try {
+        await accessService.registerFace(member.id, photoBase64);
+        faceSaved = true;
+      } catch (err) {
+        faceError = err.message;
+      }
+    }
+
+    let pixCharge = null;
+    let pixError = null;
+    if (gatewayService && typeof gatewayService.createPixCharge === 'function') {
+      try {
+        pixCharge = await gatewayService.createPixCharge({ member_id: member.id, plan_id: plan.id });
+      } catch (err) {
+        pixError = err.message;
+      }
+    }
+
+    res.status(201).json({
+      mode: 'enrolled',
+      member: { id: member.id, name: member.name, status: member.status },
+      faceSaved,
+      faceError,
+      pixCharge,
+      pixError,
+      message: pixCharge
+        ? 'Cadastro criado! Realize o pagamento via PIX abaixo para liberar a catraca.'
+        : 'Cadastro criado! Procure a recepcao ou WhatsApp (62) 98102-0169 para concluir o pagamento.',
+    });
+  }));
+
+  router.get('/public/pix/:id/status', handle(async (req, res) => {
+    if (!gatewayService || typeof gatewayService.checkChargeStatus !== 'function') {
+      return res.status(404).json({ error: 'Gateway PIX indisponivel.' });
+    }
+    const charge = await gatewayService.checkChargeStatus(Number(req.params.id));
+    res.set('Cache-Control', 'no-store').json({
+      id: charge.id,
+      status: charge.status,
+      paid_at: charge.paid_at || null,
+    });
+  }));
+
   router.get('/turnstile/display', (req, res) => {
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
     const payload = req.query?.rich === '1' && typeof accessService.getTurnstileKioskDisplay === 'function'
@@ -1218,10 +1393,24 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/classes',
     handle(async (req, res) => res.status(201).json(gymService.createClass(req.body))),
   );
+  router.put(
+    '/classes/:id',
+    handle(async (req, res) => res.json(gymService.updateClass(req.params.id, req.body))),
+  );
   router.post(
     '/classes/:id/enroll',
     handle(async (req, res) => res.json(gymService.enrollMemberInClass(req.params.id, req.body.member_id))),
   );
+
+  router.get('/online-enrollment-requests', requireReception, (_req, res) => {
+    const rows = store.all('SELECT * FROM online_enrollment_requests ORDER BY id DESC LIMIT 100');
+    res.json(rows);
+  });
+  router.post('/online-enrollment-requests/:id/status', requireReception, handle(async (req, res) => {
+    const status = ['pending', 'approved', 'rejected'].includes(req.body?.status) ? req.body.status : 'approved';
+    store.run('UPDATE online_enrollment_requests SET status = ? WHERE id = ?', [status, Number(req.params.id)]);
+    res.json({ ok: true });
+  }));
 
   // Atendentes (Equipe)
   router.get('/staff', (_req, res) => res.json(gymService.listStaff()));

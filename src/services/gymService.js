@@ -299,21 +299,72 @@ export class GymService {
     );
   }
 
-  createClass({ name, modality_id, instructor_id, schedule, capacity }) {
+  createClass({
+    name,
+    modality_id,
+    instructor_id,
+    schedule,
+    capacity,
+    allow_new_enrollments,
+    online_enrollment_mode,
+  }) {
     if (!name?.trim() || !schedule?.trim()) {
       throw new Error('Nome da turma e horario sao obrigatorios.');
     }
+    const cleanName = name.trim();
+    const cleanSchedule = schedule.trim();
+    const lower = cleanName.toLowerCase();
+    let resolvedCapacity = capacity != null && capacity !== '' ? Number(capacity) : 20;
+    if (lower.includes('hidro')) resolvedCapacity = Math.min(resolvedCapacity, 15);
+    if (lower.includes('nata') && lower.includes('adult')) resolvedCapacity = Math.min(resolvedCapacity, 6);
+
+    const isPilates18 = lower.includes('pilates') && (cleanSchedule.includes('18') || lower.includes('18'));
+    const resolvedAllowNew = allow_new_enrollments != null
+      ? (Number(allow_new_enrollments) ? 1 : 0)
+      : (isPilates18 ? 0 : 1);
+
+    const isKidsSwim = (lower.includes('nata') || lower.includes('baby'))
+      && (lower.includes('infantil') || lower.includes('baby') || lower.includes('crian'));
+    const resolvedOnlineMode = online_enrollment_mode
+      || (isKidsSwim ? 'reception_only' : 'auto');
+
     const res = this.store.run(
-      'INSERT INTO classes (name, modality_id, instructor_id, schedule, capacity) VALUES (?, ?, ?, ?, ?)',
+      `INSERT INTO classes (name, modality_id, instructor_id, schedule, capacity, allow_new_enrollments, online_enrollment_mode)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        name.trim(),
+        cleanName,
         modality_id ? Number(modality_id) : null,
         instructor_id ? Number(instructor_id) : null,
-        schedule.trim(),
-        Number(capacity || 20),
+        cleanSchedule,
+        resolvedCapacity,
+        resolvedAllowNew,
+        resolvedOnlineMode,
       ],
     );
     return this.store.get('SELECT * FROM classes WHERE id = ?', [res.lastInsertRowid]);
+  }
+
+  updateClass(id, payload = {}) {
+    const cls = this.store.get('SELECT * FROM classes WHERE id = ?', [Number(id)]);
+    if (!cls) throw new Error('Turma nao encontrada.');
+    const nextName = payload.name !== undefined ? String(payload.name).trim() : cls.name;
+    const nextSchedule = payload.schedule !== undefined ? String(payload.schedule).trim() : cls.schedule;
+    const nextCapacity = payload.capacity !== undefined ? Math.max(1, Number(payload.capacity || cls.capacity)) : cls.capacity;
+    const nextActive = payload.active !== undefined ? (Number(payload.active) ? 1 : 0) : cls.active;
+    const nextAllowNew = payload.allow_new_enrollments !== undefined
+      ? (Number(payload.allow_new_enrollments) ? 1 : 0)
+      : (cls.allow_new_enrollments ?? 1);
+    const nextOnlineMode = payload.online_enrollment_mode !== undefined
+      ? (payload.online_enrollment_mode === 'reception_only' ? 'reception_only' : 'auto')
+      : (cls.online_enrollment_mode || 'auto');
+
+    this.store.run(
+      `UPDATE classes
+       SET name = ?, schedule = ?, capacity = ?, active = ?, allow_new_enrollments = ?, online_enrollment_mode = ?
+       WHERE id = ?`,
+      [nextName, nextSchedule, nextCapacity, nextActive, nextAllowNew, nextOnlineMode, cls.id],
+    );
+    return this.store.get('SELECT * FROM classes WHERE id = ?', [cls.id]);
   }
 
   enrollMemberInClass(classId, memberId) {
@@ -323,6 +374,7 @@ export class GymService {
     const member = this.store.get('SELECT id FROM members WHERE id = ?', [Number(memberId)]);
     if (!member) throw new Error('Aluno não encontrado.');
     if (this.store.get('SELECT 1 FROM class_enrollments WHERE class_id = ? AND member_id = ?', [cls.id, member.id])) return { ok: true };
+    if (cls.allow_new_enrollments === 0) throw new Error('Esta turma esta fechada para novas matriculas.');
     const count = this.store.get('SELECT COUNT(*) AS c FROM class_enrollments WHERE class_id = ?', [cls.id])?.c ?? 0;
     if (count >= cls.capacity) throw new Error('Turma sem vagas disponiveis.');
 
@@ -338,6 +390,8 @@ export class GymService {
     if (classId == null) return;
     const cls = this.store.get('SELECT * FROM classes WHERE id = ? AND modality_id = ?', [classId, modalityId]);
     if (!cls) throw new Error('Selecione uma turma da modalidade escolhida.');
+    const alreadyEnrolled = this.store.get('SELECT 1 FROM class_enrollments WHERE class_id = ? AND member_id = ?', [classId, memberId]);
+    if (!alreadyEnrolled && cls.allow_new_enrollments === 0) throw new Error('Esta turma esta fechada para novas matriculas.');
     const count = this.store.get('SELECT COUNT(*) AS count FROM class_enrollments WHERE class_id = ? AND member_id <> ?', [classId, memberId]);
     if (count.count >= cls.capacity) throw new Error('Esta turma está lotada.');
   }

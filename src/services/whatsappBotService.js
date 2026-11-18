@@ -13,7 +13,8 @@ const HUMAN_REQUEST_REGEX = /\b(atendente|humano|pessoa\s+real|falar\s+com\s+(?:
 const DEFAULT_PLAYBOOKS = [
   'Mensalidade: Quando perguntarem valor da mensalidade ou preço de plano, responda com os valores que existirem no contexto. Se não houver valor no contexto, encaminhe para o atendimento humano.',
   'Modalidades: Quando perguntarem modalidades, responda com lista objetiva (nome, frequência, público e observações) priorizando clareza.',
-  'Matrícula: Quando pedirem matrícula, explique documentos, formas de pagamento, etapas e ofereça concluir com atendente humano.',
+  'Matrícula Online (Musculação): Para Musculação, oriente que o cliente pode fazer o cadastro, enviar a foto do Face ID e pagar via PIX diretamente pelo link https://sistema.academiaoxigenio.com/matricula.html (ou concluir com atendente humano).',
+  'Regras de Vagas por Turma: Hidroginástica tem limite máximo de 15 alunos por horário; Natação Adulto tem limite máximo de 6 alunos por horário; Pilates das 18h está FECHADO para novas matrículas (somente alunos já matriculados continuam); Natação Infantil e Baby NÃO permitem matrícula ou confirmação automática de vaga online — sempre informe que a vaga precisa ser confirmada pela recepção/professor, colete idade da criança e horário de preferência, e encaminhe para atendimento humano.',
   'Objeções: Quando houver indecisão (tempo, preço, distância), responda com empatia, destaque benefícios práticos e convide para conhecer a academia.',
 ].join('\n');
 

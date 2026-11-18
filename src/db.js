@@ -690,6 +690,61 @@ export class DatabaseStore {
       CREATE INDEX IF NOT EXISTS idx_members_email ON members(email);
     `);
 
+    this.ensureColumns('classes', {
+      allow_new_enrollments: 'INTEGER NOT NULL DEFAULT 1',
+      online_enrollment_mode: "TEXT NOT NULL DEFAULT 'auto'",
+    });
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS online_enrollment_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        document TEXT,
+        birth_date TEXT,
+        modality_id INTEGER REFERENCES modalities(id),
+        modality_name TEXT,
+        class_id INTEGER REFERENCES classes(id),
+        plan_id INTEGER REFERENCES plans(id),
+        child_age TEXT,
+        preferred_schedule TEXT,
+        notes TEXT,
+        source TEXT NOT NULL DEFAULT 'site',
+        status TEXT NOT NULL DEFAULT 'pending',
+        member_id INTEGER REFERENCES members(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+      );
+    `);
+
+    const classRulesApplied = this.get("SELECT value FROM settings WHERE key = 'class_rules_v1_applied'")?.value;
+    if (!classRulesApplied) {
+      this.db.run(`
+        UPDATE classes
+        SET allow_new_enrollments = 0
+        WHERE lower(name) LIKE '%pilates%'
+          AND (schedule LIKE '%18%' OR lower(name) LIKE '%18%')
+      `);
+      this.db.run(`
+        UPDATE classes
+        SET capacity = 15
+        WHERE lower(name) LIKE '%hidro%'
+          AND capacity > 15
+      `);
+      this.db.run(`
+        UPDATE classes
+        SET capacity = 6
+        WHERE lower(name) LIKE '%nata%'
+          AND lower(name) LIKE '%adult%'
+          AND capacity > 6
+      `);
+      this.db.run(`
+        UPDATE classes
+        SET online_enrollment_mode = 'reception_only'
+        WHERE (lower(name) LIKE '%nata%' OR lower(name) LIKE '%baby%')
+          AND (lower(name) LIKE '%infantil%' OR lower(name) LIKE '%baby%' OR lower(name) LIKE '%crian%')
+      `);
+      this.db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('class_rules_v1_applied', '1')");
+    }
+
     this.ensureColumns('plans', {
       allowed_start_time: 'TEXT',
       allowed_end_time: 'TEXT',

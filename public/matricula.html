@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Matrícula Online — Academia Oxigênio</title>
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --card: #131a26;
+        --border: rgba(255, 255, 255, 0.1);
+        --text: #f8fafc;
+        --muted: #94a3b8;
+        --gold: #f59e0b;
+        --gold-dark: #d97706;
+        --ok: #22c55e;
+        --err: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: radial-gradient(circle at top, #1b2232 0%, var(--bg) 55%);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 20px 14px 48px;
+      }
+      .wrap { max-width: 680px; margin: 0 auto; }
+      .brand { text-align: center; margin-bottom: 20px; }
+      .brand h1 { margin: 0 0 6px; font-size: 1.65rem; color: var(--gold); }
+      .brand p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+      }
+      h2 { margin: 0 0 14px; font-size: 1.1rem; color: #fff; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 580px) { .grid { grid-template-columns: 1fr; } }
+      label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+      input, select, textarea {
+        width: 100%;
+        padding: 11px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #0d131d;
+        color: var(--text);
+        font-size: 0.95rem;
+      }
+      input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); border-color: transparent; }
+      .field { margin-bottom: 12px; }
+      .notice {
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 0.9rem;
+        line-height: 1.45;
+        margin-bottom: 14px;
+      }
+      .notice.warn { background: rgba(245, 158, 11, 0.14); border: 1px solid rgba(245, 158, 11, 0.35); color: #fde68a; }
+      .notice.ok { background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.35); color: #bbf7d0; }
+      .notice.err { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; }
+      .photo-rules {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px dashed rgba(245, 158, 11, 0.45);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+        font-size: 0.86rem;
+      }
+      .photo-rules ul { margin: 6px 0 0; padding-left: 18px; color: #e2e8f0; }
+      .photo-rules li { margin-bottom: 4px; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 18px;
+        font-weight: 700;
+        font-size: 0.95rem;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .btn-primary { background: var(--gold); color: #111827; width: 100%; }
+      .btn-primary:hover { background: var(--gold-dark); color: #fff; }
+      .btn-secondary { background: #1e293b; color: #fff; border: 1px solid var(--border); }
+      .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+      .preview-box {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .preview-box video, .preview-box img {
+        width: 180px;
+        height: 180px;
+        object-fit: cover;
+        border-radius: 14px;
+        border: 2px solid var(--gold);
+        background: #000;
+      }
+      .pix-box { text-align: center; }
+      .pix-box img { max-width: 240px; border-radius: 12px; background: #fff; padding: 8px; margin: 10px auto; display: block; }
+      .pix-code {
+        width: 100%;
+        font-family: monospace;
+        font-size: 0.8rem;
+        background: #0b1018;
+        color: #e2e8f0;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        word-break: break-all;
+        margin-bottom: 10px;
+      }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="brand">
+        <h1>Academia Oxigênio</h1>
+        <p>Matrícula Online, Face ID e Solicitação de Vagas</p>
+      </header>
+
+      <form id="enrollForm" class="card">
+        <h2>1. Escolha a Modalidade e Turma</h2>
+        <div class="field">
+          <label for="modalitySelect">Modalidade</label>
+          <select id="modalitySelect" required></select>
+        </div>
+
+        <div id="classWrap" class="field" hidden>
+          <label for="classSelect">Turma / Horário</label>
+          <select id="classSelect"></select>
+        </div>
+
+        <div id="modalityNotice" class="notice warn" hidden></div>
+
+        <div id="planWrap" class="field">
+          <label for="planSelect">Plano</label>
+          <select id="planSelect"></select>
+        </div>
+
+        <h2>2. Seus Dados</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="nameInput">Nome completo *</label>
+            <input id="nameInput" type="text" required placeholder="Ex: Maria da Silva" />
+          </div>
+          <div class="field">
+            <label for="phoneInput">WhatsApp *</label>
+            <input id="phoneInput" type="tel" required placeholder="(62) 99999-9999" />
+          </div>
+          <div class="field" id="docWrap">
+            <label for="docInput">CPF *</label>
+            <input id="docInput" type="text" placeholder="000.000.000-00" />
+          </div>
+          <div class="field" id="birthWrap">
+            <label for="birthInput">Data de nascimento</label>
+            <input id="birthInput" type="date" />
+          </div>
+        </div>
+
+        <div id="kidsWrap" class="grid" hidden>
+          <div class="field">
+            <label for="childAgeInput">Idade da criança</label>
+            <input id="childAgeInput" type="text" placeholder="Ex: 4 anos" />
+          </div>
+          <div class="field">
+            <label for="prefScheduleInput">Turno / Horário de preferência</label>
+            <input id="prefScheduleInput" type="text" placeholder="Ex: Manhã ou 17h" />
+          </div>
+        </div>
+
+        <div id="photoSection">
+          <h2>3. Foto para a Catraca (Reconhecimento Facial)</h2>
+          <div class="photo-rules">
+            <strong>Instruções obrigatórias para a foto funcionar na catraca:</strong>
+            <ul>
+              <li>✅ Rosto centralizado, olhando diretamente para a câmera</li>
+              <li>✅ Boa iluminação (evite contraluz ou sombras fortes no rosto)</li>
+              <li>✅ Fundo neutro/liso e apenas uma pessoa na foto</li>
+              <li>❌ Sem óculos escuros, boné, chapéu ou máscara</li>
+            </ul>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="openCameraBtn" class="btn btn-secondary">Abrir Câmera</button>
+            <label class="btn btn-secondary" style="margin:0;cursor:pointer;">
+              Enviar / Tirar Foto
+              <input id="photoFileInput" type="file" accept="image/*" capture="user" hidden />
+            </label>
+            <button type="button" id="captureBtn" class="btn btn-primary" style="width:auto;" hidden>Capturar Foto</button>
+          </div>
+          <div class="preview-box">
+            <video id="cameraVideo" autoplay playsinline muted hidden></video>
+            <img id="photoPreview" alt="Prévia Face ID" hidden />
+          </div>
+        </div>
+
+        <div id="formError" class="notice err" hidden></div>
+
+        <button type="submit" id="submitBtn" class="btn btn-primary" style="margin-top:14px;">
+          Concluir Matrícula e Gerar PIX
+        </button>
+      </form>
+
+      <section id="resultCard" class="card" hidden>
+        <h2 id="resultTitle">Solicitação Recebida</h2>
+        <div id="resultMessage" class="notice ok"></div>
+        <div id="pixArea" class="pix-box" hidden>
+          <img id="pixQrImg" alt="QR Code PIX" hidden />
+          <div id="pixCopy" class="pix-code"></div>
+          <button type="button" id="copyPixBtn" class="btn btn-secondary" style="margin-bottom:10px;">Copiar Código PIX</button>
+          <p id="pixStatusText" style="color:var(--muted);font-size:0.9rem;">Aguardando pagamento PIX...</p>
+        </div>
+        <a id="whatsappFallbackBtn" class="btn btn-primary" target="_blank" rel="noopener" hidden>
+          Confirmar no WhatsApp (62) 98102-0169
+        </a>
+      </section>
+    </main>
+
+    <script src="/matricula.js"></script>
+  </body>
+</html>
