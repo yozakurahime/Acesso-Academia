@@ -14,6 +14,7 @@ const PAYMENT_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
 const PAYMENT_PIX_CHOICE_REGEX = /^(1|pix|qr|copia\s+e\s+cola)$/i;
 const PAYMENT_LINK_CHOICE_REGEX = /^(2|link|cart[aã]o|cr[eé]dito|d[eé]bito)$/i;
 const PAYMENT_CHECK_REGEX = /\b(j[aá]\s+paguei|paguei|verificar|confirmar\s+pagamento|conferir)\b/i;
+const PAYMENT_DISCOUNT_REGEX = /\b(desconto|abatimento|pagar\s+menos|valor\s+menor|metade|parcelar\s+no\s+pix|fiado|combinado|promo[cç][aã]o)\b/i;
 
 function formatBrl(cents) {
   return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -585,6 +586,15 @@ export class WhatsappBotService {
     if (existing && PAYMENT_CANCEL_REGEX.test(userText)) {
       this._paymentSessions.delete(phone);
       const reply = 'Certo, cancelei o fluxo de pagamento por aqui. Se precisar de outra ajuda, é só chamar!';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    if (existing && PAYMENT_DISCOUNT_REGEX.test(userText)) {
+      const prefix = 'Por aqui não aplicamos descontos nem valores menores — a cobrança segue sempre o valor normal da mensalidade.\n_(Se você tiver algum combinado especial, responda *atendente* para falar com a recepção.)_';
+      const reply = existing.items.length > 0
+        ? this._buildPaymentMenuReply(existing.items, prefix)
+        : `${prefix}\n\nPara continuar no valor normal, informe o *CPF (11 dígitos)* ou *nome completo* do aluno, ou responda *cancelar*.`;
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
     }

@@ -152,6 +152,10 @@ test('WhatsappBotService guia pagamento Mercado Pago para 1 ou mais pessoas em l
   assert.match(step2.reply, /Lucas Filho/);
   assert.match(step2.reply, /210,00/);
 
+  const discountAttempt = await bot.handleIncomingMessage({ phone: '5562999991111', text: 'Tenho desconto, posso pagar menos?' });
+  assert.match(discountAttempt.reply, /não aplicamos descontos/i);
+  assert.match(discountAttempt.reply, /210,00/);
+
   const step3 = await bot.handleIncomingMessage({ phone: '5562999991111', text: '1' });
   assert.match(step3.reply, /000201010212PIX_LOTE_210_REAIS/);
   assert.equal(mpCalls[0].body.transaction_amount, 210);
