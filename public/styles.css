@@ -2693,3 +2693,20 @@ input.is-cpf-error {
     grid-template-columns: 1fr;
   }
 }
+
+#settings-audit table {
+  table-layout: auto;
+  width: 100%;
+}
+#settings-audit th:nth-child(-n+4),
+#settings-audit td:nth-child(-n+4) {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  width: 1%;
+}
+#settings-audit td:nth-child(5) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 200px;
+}
