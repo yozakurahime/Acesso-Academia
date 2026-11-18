@@ -1843,6 +1843,50 @@ export class AccessService {
     );
   }
 
+  getChurnRiskMembers({ limit = 25, refToday = null } = {}) {
+    const today = refToday || this.store.get("SELECT date('now', 'localtime') AS today").today;
+    const recentStart = addDays(today, -13);
+    const prevStart = addDays(today, -27);
+    const prevEnd = addDays(today, -14);
+    const nextDay = addDays(today, 1);
+
+    const rows = this.store.all(
+      `SELECT m.id, m.name, m.phone, m.valid_until, p.name AS plan_name,
+              COUNT(DISTINCT CASE WHEN substr(l.occurred_at, 1, 10) BETWEEN ? AND ? THEN substr(l.occurred_at, 1, 10) END) AS recent_visits,
+              COUNT(DISTINCT CASE WHEN substr(l.occurred_at, 1, 10) BETWEEN ? AND ? THEN substr(l.occurred_at, 1, 10) END) AS prev_visits,
+              MAX(substr(l.occurred_at, 1, 10)) AS last_visit
+       FROM members m
+       LEFT JOIN plans p ON p.id = m.plan_id
+       LEFT JOIN access_logs l ON l.member_id = m.id
+         AND l.event_code = 7
+         AND l.event_label = 'Acesso autorizado (FaceID)'
+         AND l.occurred_at < ?
+       WHERE m.access_role = 'student'
+         AND m.status = 'active'
+         AND (m.frozen_until IS NULL OR m.frozen_until < ?)
+       GROUP BY m.id
+       HAVING (prev_visits >= 3 AND recent_visits <= 1)
+           OR (last_visit IS NOT NULL AND last_visit <= ? AND recent_visits = 0)
+       ORDER BY recent_visits ASC, prev_visits DESC, last_visit ASC
+       LIMIT ?`,
+      [recentStart, today, prevStart, prevEnd, nextDay, today, addDays(today, -10), Number(limit)],
+    );
+
+    return rows.map((r) => {
+      const daysAbsent = r.last_visit
+        ? Math.max(0, Math.round((new Date(`${today}T12:00:00Z`) - new Date(`${r.last_visit}T12:00:00Z`)) / 86400000))
+        : null;
+      const riskLevel = (Number(r.prev_visits) >= 4 && Number(r.recent_visits) === 0) || (daysAbsent !== null && daysAbsent >= 14)
+        ? 'high'
+        : 'medium';
+      return {
+        ...r,
+        days_absent: daysAbsent,
+        risk_level: riskLevel,
+      };
+    });
+  }
+
   getAnalyticsReport(requestedMonth = null) {
     const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
     const month = /^\d{4}-\d{2}$/.test(String(requestedMonth || '')) ? String(requestedMonth) : today.slice(0, 7);

@@ -5826,7 +5826,42 @@ async function loadReports() {
     monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }
   const month = monthInput?.value || '';
-  const data = await api(`/api/reports/analytics${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+  const [data, churnRisk] = await Promise.all([
+    api(`/api/reports/analytics${month ? `?month=${encodeURIComponent(month)}` : ''}`),
+    api('/api/reports/churn-risk').catch(() => []),
+  ]);
+
+  const churnEl = document.getElementById('repChurnRiskList');
+  if (churnEl) {
+    if (!Array.isArray(churnRisk) || churnRisk.length === 0) {
+      churnEl.innerHTML = '<div class="muted">Nenhum aluno ativo com queda brusca de frequência no momento.</div>';
+    } else {
+      churnEl.innerHTML = churnRisk.map((item) => {
+        const digits = String(item.phone || '').replace(/\D/g, '');
+        const waDigits = digits ? (digits.startsWith('55') ? digits : `55${digits}`) : '';
+        const firstName = String(item.name || '').trim().split(/\s+/)[0] || 'aluno';
+        const msg = encodeURIComponent(`Olá ${firstName}! Sentimos sua falta nos treinos esta semana na Academia Oxigênio. Está tudo bem? Qualquer coisa conta com a gente! 💪`);
+        const badge = item.risk_level === 'high'
+          ? '<span class="badge badge-blocked">Alto risco</span>'
+          : '<span class="badge badge-pending">Atenção</span>';
+        const waBtn = waDigits
+          ? `<a class="btn btn-secondary btn-sm" href="https://wa.me/${waDigits}?text=${msg}" target="_blank" rel="noopener noreferrer">Chamar no WhatsApp</a>`
+          : '';
+        return `
+          <div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div>
+              <strong>${escapeHtml(item.name)}</strong> ${badge}
+              <div class="muted" style="font-size:12px;">
+                ${escapeHtml(item.plan_name || 'Sem plano')} · Antes: ${Number(item.prev_visits || 0)}x / 14d → Agora: ${Number(item.recent_visits || 0)}x / 14d
+                ${item.days_absent != null ? ` · ${item.days_absent} dia(s) sem treinar` : ''}
+              </div>
+            </div>
+            <div class="inline-actions">${waBtn}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
 
   document.getElementById('repTotalCents').textContent = fmtMoney(data.financial.totalCents);
   document.getElementById('repGrowth').textContent =

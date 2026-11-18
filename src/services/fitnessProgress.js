@@ -31,6 +31,30 @@ export function weeklyVisits(store, memberId, date = fitnessToday()) {
   [memberId, weekStart(date), addDays(date, 1)]).map((row) => row.day);
 }
 
+export function monthlyVisits(store, memberId, date = fitnessToday()) {
+  const monthStart = `${date.slice(0, 7)}-01`;
+  return store.all(`SELECT DISTINCT substr(occurred_at, 1, 10) AS day FROM access_logs l
+    WHERE member_id = ? AND ${VISIT_FILTER} AND occurred_at >= ? AND occurred_at < ? ORDER BY 1`,
+  [memberId, monthStart, addDays(date, 1)]).map((row) => row.day);
+}
+
+export function memberStreak(store, memberId, date = fitnessToday()) {
+  const rows = store.all(
+    `SELECT DISTINCT substr(occurred_at, 1, 10) AS day FROM access_logs l
+     WHERE member_id = ? AND ${VISIT_FILTER} AND occurred_at >= ? AND occurred_at < ?`,
+    [memberId, addDays(date, -90), addDays(date, 1)],
+  );
+  const days = new Set(rows.map((r) => r.day));
+  const yesterday = addDays(date, -1);
+  let cursor = days.has(date) ? date : (days.has(yesterday) ? yesterday : null);
+  let streak = 0;
+  while (cursor && days.has(cursor)) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
+}
+
 export function weeklyGoal(store, memberId) {
   return store.get('SELECT weekly_goal FROM student_fitness_preferences WHERE member_id = ?', [memberId])?.weekly_goal ?? 3;
 }
@@ -140,11 +164,20 @@ export function studentFitnessProgress(store, memberId, date = fitnessToday()) {
   const start = weekStart(date);
   const goal = weeklyGoal(store, memberId);
   const visits = weeklyVisits(store, memberId, date);
+  const monthVisits = monthlyVisits(store, memberId, date);
+  const currentStreak = memberStreak(store, memberId, date);
+  const totalVisits = store.get(
+    `SELECT COUNT(DISTINCT substr(occurred_at, 1, 10)) AS c FROM access_logs l WHERE member_id = ? AND ${VISIT_FILTER}`,
+    [memberId],
+  )?.c ?? 0;
   const completed = store.all('SELECT workout_id, completed_on FROM student_workout_completions WHERE member_id = ? AND completed_on BETWEEN ? AND ?',
     [memberId, start, date]);
   const firstWorkout = store.get('SELECT 1 FROM student_workout_completions WHERE member_id = ? LIMIT 1', [memberId]);
   return {
     date, start, end: addDays(start, 6), goal, visits,
+    monthVisits,
+    currentStreak,
+    totalVisits,
     alias: store.get('SELECT ranking_alias FROM student_fitness_preferences WHERE member_id = ?', [memberId])?.ranking_alias ?? '',
     workoutsThisWeek: completed.length,
     completedToday: completed.filter((row) => row.completed_on === date).map((row) => row.workout_id),
@@ -152,6 +185,9 @@ export function studentFitnessProgress(store, memberId, date = fitnessToday()) {
       { name: 'Primeiro treino', description: 'Conclua um treino no portal.', earned: Boolean(firstWorkout) },
       { name: 'Meta da semana', description: 'Alcance sua meta de visitas nesta semana.', earned: visits.length >= goal },
       { name: 'Quatro semanas de consistência', description: 'Cumpra sua meta em quatro semanas seguidas.', earned: hasFourWeekStreak(store, memberId, date, goal) },
+      { name: '7 dias seguidos', description: 'Treine 7 dias consecutivos sem faltar.', earned: currentStreak >= 7 },
+      { name: '15 treinos no mês', description: 'Complete pelo menos 15 presenças no mês atual.', earned: monthVisits.length >= 15 },
+      { name: 'Veterano (30+ visitas)', description: 'Acumule 30 ou mais dias de treino na academia.', earned: totalVisits >= 30 },
     ],
     ranking: fitnessRanking(store, date),
     challenge: monthlyFitnessChallenge(store, date),

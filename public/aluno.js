@@ -530,6 +530,28 @@ function renderFitness() {
   document.getElementById('stFitnessWorkouts').textContent = workoutsThisWeek === 1
     ? '1 treino concluído nesta semana'
     : `${workoutsThisWeek} treinos concluídos nesta semana`;
+
+  const monthSummaryEl = document.getElementById('stMonthlySummary');
+  const monthCalEl = document.getElementById('stMonthlyCalendar');
+  if (monthSummaryEl && monthCalEl) {
+    const mVisits = Array.isArray(fitness.monthVisits) ? fitness.monthVisits : [];
+    const streak = Number(fitness.currentStreak || 0);
+    const total = Number(fitness.totalVisits || 0);
+    monthSummaryEl.textContent = `${mVisits.length} visita(s) no mês · ${streak} dia(s) seguidos · ${total} no total`;
+    const refDate = String(fitness.date || new Date().toISOString().slice(0, 10));
+    const [yr, mo] = refDate.split('-').map(Number);
+    const daysInMonth = new Date(yr, mo, 0).getDate();
+    const visitSet = new Set(mVisits);
+    let cells = '';
+    for (let d = 1; d <= daysInMonth; d += 1) {
+      const iso = `${yr}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const hit = visitSet.has(iso);
+      const isToday = iso === refDate;
+      cells += `<div style="text-align:center;padding:6px 0;border-radius:8px;font-size:12px;font-weight:${hit ? '700' : '500'};background:${hit ? 'rgba(245,158,11,0.22)' : 'rgba(148,163,184,0.08)'};border:1px solid ${isToday ? '#f59e0b' : (hit ? 'rgba(245,158,11,0.5)' : 'transparent')};color:${hit ? '#fde68a' : 'inherit'};">${d}</div>`;
+    }
+    monthCalEl.innerHTML = cells;
+  }
+
   document.getElementById('stFitnessAchievements').innerHTML = achievements.map(({ name, description, earned }) =>
     `<li><strong>${esc(name)}</strong> <span class="badge ${earned ? 'badge-active' : 'badge-neutral'}">${earned ? 'Conquistada' : 'Em andamento'}</span><div class="muted">${esc(description)}</div></li>`
   ).join('');

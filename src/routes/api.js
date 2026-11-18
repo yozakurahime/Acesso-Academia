@@ -798,6 +798,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.get(
+    '/reports/churn-risk',
+    requireReception,
+    handle(async (req, res) => {
+      res.json(accessService.getChurnRiskMembers({ limit: Number(req.query.limit || 25) }));
+    }),
+  );
+
   // Configuracoes e Catraca Control iD
   router.get('/settings', requireAdmin, (_req, res) => {
     res.json(maskSettings(store.getSettings()));
