@@ -332,7 +332,8 @@ export class WhatsappBotService {
   }
 
   async transcribeAudio({ base64Data, mimeType = 'audio/ogg', settings = this.store.getSettings?.() || {} }) {
-    const apiKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
+    const rawKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
+    const apiKey = rawKey.replace(/^["']+|["']+$/g, '').trim();
     if (!apiKey || !base64Data) return null;
     const model = String(settings.gemini_model || 'gemini-2.5-flash').trim();
     try {
@@ -362,7 +363,8 @@ export class WhatsappBotService {
     const settings = this.store.getSettings?.() || {};
     if (settings.whatsapp_bot_enabled !== '1') return null;
 
-    const apiKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
+    const rawKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
+    const apiKey = rawKey.replace(/^["']+|["']+$/g, '').trim();
     if (!apiKey) return null;
 
     if (this.isPaused(normalized)) return null;
