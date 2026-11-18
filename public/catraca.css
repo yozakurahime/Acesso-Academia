@@ -1,261 +1,640 @@
-
 :root {
   color-scheme: dark;
-  font-family: Inter, "Segoe UI", system-ui, sans-serif;
-  background: #100f0e;
-  color: #fff8f1;
-  --ink: #fff8f1;
-  --quiet: #d2c3b7;
-  --accent: #ff934f;
-  --space: clamp(14px, 2.2vw, 40px);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, "Segoe UI", system-ui, sans-serif;
+  background: #07080b;
+  color: #ffffff;
+  --ink: #ffffff;
+  --quiet: rgba(255, 245, 236, 0.72);
+  --accent: #ff6a00;
+  --accent-warm: #ff9d42;
+  --signal: #ff8c32;
+  --signal-glow: rgba(255, 106, 0, 0.36);
+  --glass-bg: linear-gradient(155deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.03) 100%);
+  --glass-card-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.095) 0%, rgba(255, 255, 255, 0.025) 100%);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-border-warm: rgba(255, 140, 50, 0.34);
+  --glass-blur: blur(34px) saturate(190%);
+  --glass-shadow:
+    0 24px 60px -18px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --space: clamp(14px, 2.2vw, 38px);
 }
+
 *, *::before, *::after { box-sizing: border-box; }
 [hidden], .hidden { display: none !important; }
+
+@keyframes orbDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(2.5%, -2.5%, 0) scale(1.06); }
+}
+
+@keyframes iconPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 32px var(--signal-glow), inset 0 1px 0 rgba(255, 255, 255, 0.36);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 54px var(--signal-glow), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  }
+}
+
 body {
+  position: relative;
   margin: 0;
   min-width: 0;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--space);
-  background: #100f0e;
+  padding: clamp(12px, 1.8vh, 22px) var(--space) clamp(14px, 2vh, 24px);
+  gap: clamp(12px, 1.8vh, 22px);
+  background:
+    radial-gradient(circle at 12% 14%, rgba(255, 106, 0, 0.18), transparent 44%),
+    radial-gradient(circle at 88% 18%, rgba(255, 157, 66, 0.15), transparent 46%),
+    radial-gradient(circle at 50% 92%, rgba(255, 106, 0, 0.10), transparent 52%),
+    linear-gradient(180deg, #07080b 0%, #0d0f16 54%, #07080b 100%);
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: 0;
+  transition: background 450ms ease;
+  animation: orbDrift 15s ease-in-out infinite;
+}
+
+body::before {
+  width: 44vmax;
+  height: 44vmax;
+  top: -14vmax;
+  left: -10vmax;
+  background: radial-gradient(circle, rgba(255, 130, 36, 0.24) 0%, transparent 70%);
+}
+
+body::after {
+  width: 46vmax;
+  height: 46vmax;
+  bottom: -16vmax;
+  right: -10vmax;
+  background: radial-gradient(circle, rgba(255, 92, 0, 0.24) 0%, transparent 70%);
+  animation-delay: -7.5s;
+}
+
+body:has(#display[data-state="allowed"])::before,
+body:has(#display[data-state="allowed"])::after {
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.34) 0%, transparent 70%);
+}
+
+body:has(#display:is([data-state="denied"], [data-state="error"]))::before,
+body:has(#display:is([data-state="denied"], [data-state="error"]))::after {
+  background: radial-gradient(circle, rgba(244, 63, 94, 0.34) 0%, transparent 70%);
+}
+
+body:has(#display:is([data-state="unrecognized"], [data-state="offline"]))::before,
+body:has(#display:is([data-state="unrecognized"], [data-state="offline"]))::after {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.30) 0%, transparent 70%);
+}
+
 .turnstile-header {
+  position: relative;
+  z-index: 2;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  padding: clamp(10px, 1.8vh, 22px) 0;
-  border-bottom: 1px solid #4d3b2d;
+  gap: 12px 18px;
+  padding: clamp(10px, 1.3vh, 16px) clamp(16px, 2vw, 26px);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
 }
-.turnstile-brand, .turnstile-header-right { display: flex; align-items: center; gap: 14px; }
-.turnstile-brand { min-width: 0; }
-.turnstile-brand img { width: clamp(44px, 4.4vw, 70px); height: auto; border-radius: 12px; flex: none; }
-.turnstile-brand strong { display: block; font-size: clamp(19px, 2vw, 32px); letter-spacing: -.03em; }
-.turnstile-location, .turnstile-date { display: block; color: var(--quiet); font-size: clamp(14px, 1.2vw, 20px); margin-top: 3px; }
-.turnstile-time { text-align: right; }
-.turnstile-clock { font-size: clamp(26px, 3vw, 48px); line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
-.turnstile-fullscreen, .turnstile-occ-badge {
-  padding: 9px 12px;
-  border-radius: 8px;
-  border: 1px solid #68503e;
-  color: var(--ink);
-  background: #261e18;
-  font-family: inherit;
-  font-size: clamp(14px, 1.3vw, 21px);
-  font-weight: 650;
-}
-.turnstile-fullscreen { cursor: pointer; font-family: inherit; font-size: 15px; }
-.turnstile-fullscreen:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
-.turnstile-occ-badge { font-size: clamp(14px, 1.3vw, 21px); }
-.turnstile-occ-badge.badge-blocked { color: #ffb5ae; border-color: #df756a; }
-.turnstile-occ-badge.badge-pending { color: #ffcd87; border-color: #ba883e; }
-.turnstile-display {
-  --signal: #ffad77;
-  --signal-bg: #261b14;
-  --signal-border: #bd6835;
-  flex: 1;
-  display: grid;
-  align-content: center;
-  gap: clamp(14px, 2vh, 28px);
-  padding: clamp(14px, 2.5vh, 32px) 0;
-  min-width: 0;
-}
-.turnstile-display[data-state="allowed"] { --signal: #98f0b9; --signal-bg: #142b21; --signal-border: #60b88a; }
-.turnstile-display:is([data-state="denied"], [data-state="error"]) { --signal: #ffb5ab; --signal-bg: #351b1a; --signal-border: #e07c72; }
-.turnstile-display:is([data-state="unrecognized"], [data-state="offline"]) { --signal: #ffd28b; --signal-bg: #332713; --signal-border: #b89b59; }
-.turnstile-main-card {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: clamp(160px, 24vw, 400px) minmax(0, 1fr);
+
+.turnstile-brand {
+  display: flex;
   align-items: center;
-  gap: clamp(22px, 3vw, 65px);
-  min-height: 0;
-  padding: clamp(20px, 2vw, 38px);
-  border: 2px solid var(--signal-border);
-  border-left: clamp(7px, .75vw, 14px) solid var(--signal);
-  border-radius: 20px;
-  background: var(--signal-bg);
+  gap: 14px;
+  min-width: 0;
 }
-.turnstile-hero-wrap { position: relative; display: grid; place-items: center; min-width: 0; }
-.turnstile-avatar, .turnstile-icon {
-  grid-area: 1 / 1;
+
+.turnstile-brand img {
+  width: clamp(44px, 3.8vw, 60px);
+  height: clamp(44px, 3.8vw, 60px);
+  border-radius: 14px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.turnstile-brand strong {
+  display: block;
+  font-size: clamp(20px, 1.8vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+.turnstile-location {
+  display: block;
+  font-size: clamp(12px, 1vw, 16px);
+  color: var(--quiet);
+  letter-spacing: 0.02em;
+}
+
+.turnstile-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.turnstile-weather-badge,
+.turnstile-occ-badge,
+.turnstile-fullscreen {
+  padding: 8px 15px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  font-size: clamp(14px, 1.2vw, 20px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.turnstile-occ-badge.badge-active {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(16, 185, 129, 0.16);
+  color: #a7f3d0;
+}
+
+.turnstile-occ-badge.badge-pending {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+}
+
+.turnstile-occ-badge.badge-blocked {
+  border-color: rgba(251, 113, 133, 0.5);
+  background: rgba(244, 63, 94, 0.18);
+  color: #fecdd3;
+}
+
+.turnstile-fullscreen {
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.turnstile-fullscreen:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.turnstile-time {
+  text-align: right;
+  padding-left: 6px;
+}
+
+.turnstile-clock {
+  display: block;
+  font-size: clamp(24px, 2.2vw, 38px);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.turnstile-date {
+  display: block;
+  margin-top: 3px;
+  font-size: clamp(12px, 1vw, 16px);
+  color: var(--quiet);
+  text-transform: capitalize;
+}
+
+.turnstile-display {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: clamp(14px, 2vh, 24px);
+  min-width: 0;
+}
+
+.turnstile-display[data-state="idle"] {
+  --signal: #ff9442;
+  --signal-glow: rgba(255, 106, 0, 0.36);
+}
+
+.turnstile-display[data-state="allowed"] {
+  --signal: #34d399;
+  --signal-glow: rgba(16, 185, 129, 0.44);
+}
+
+.turnstile-display:is([data-state="denied"], [data-state="error"]) {
+  --signal: #fb7185;
+  --signal-glow: rgba(244, 63, 94, 0.44);
+}
+
+.turnstile-display:is([data-state="unrecognized"], [data-state="offline"]) {
+  --signal: #fbbf24;
+  --signal-glow: rgba(245, 158, 11, 0.4);
+}
+
+.turnstile-main-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: clamp(120px, 14vw, 240px) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(18px, 3vw, 48px);
+  min-height: clamp(260px, 52vh, 580px);
+  padding: clamp(22px, 3.2vh, 48px) clamp(24px, 3.6vw, 56px);
+  border: 1px solid var(--glass-border);
+  border-radius: 30px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+.turnstile-main-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 12% 20%, var(--signal-glow), transparent 48%);
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.turnstile-display[data-state="idle"] .turnstile-main-card {
+  min-height: clamp(145px, 24vh, 250px);
+  padding: clamp(18px, 2.4vh, 34px) clamp(22px, 3vw, 46px);
+  grid-template-columns: clamp(92px, 9.5vw, 160px) minmax(0, 1fr);
+  border-color: var(--glass-border-warm);
+}
+
+.turnstile-display:not([data-state="idle"]) .turnstile-main-card {
+  flex: 1 1 auto;
+}
+
+.turnstile-hero-wrap {
+  position: relative;
+  z-index: 1;
   width: 100%;
   aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+
+.turnstile-icon {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%);
+  color: var(--signal);
+  font-size: clamp(56px, 6.8vw, 132px);
+  font-weight: 800;
+  line-height: 1;
+  animation: iconPulse 3.2s ease-in-out infinite;
+}
+
+.turnstile-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 28px;
+  object-fit: cover;
   border: 2px solid var(--signal);
-  border-radius: 20px;
-  background: #100f0e;
+  box-shadow: 0 0 36px var(--signal-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.turnstile-avatar { object-fit: cover; height: auto; }
-.turnstile-icon { display: grid; place-items: center; color: var(--signal); font-size: clamp(90px, 16vw, 260px); line-height: 1; }
-.turnstile-hero-wrap.has-avatar .turnstile-icon {
-  position: absolute;
-  right: -10px;
-  bottom: -10px;
-  width: clamp(55px, 6vw, 100px);
-  border-radius: 50%;
-  font-size: clamp(36px, 4vw, 70px);
+
+.turnstile-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
-.turnstile-copy { min-width: 0; overflow-wrap: anywhere; }
+
 .turnstile-copy > * { margin: 0; }
-.turnstile-copy > :not([hidden]) ~ :not([hidden]) { margin-top: clamp(10px, 1.6vh, 20px); }
+.turnstile-copy > :not([hidden]) ~ :not([hidden]) { margin-top: clamp(8px, 1.4vh, 18px); }
+
 .turnstile-status {
-  display: block;
-  font-size: clamp(32px, 3.7vw, 72px);
-  line-height: 1.06;
-  font-weight: 850;
-  letter-spacing: -.035em;
+  display: inline-block;
+  font-size: clamp(19px, 1.9vw, 34px);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   color: var(--signal);
   text-transform: uppercase;
 }
+
 .turnstile-display h1 {
-  font-size: clamp(64px, 7.3vw, 160px);
+  font-size: clamp(44px, 5.2vw, 112px);
   font-weight: 850;
-  line-height: .98;
-  letter-spacing: -.055em;
-  color: #fff;
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+  color: #ffffff;
   text-wrap: balance;
 }
+
+.turnstile-display[data-state="idle"] h1 {
+  font-size: clamp(36px, 4.1vw, 82px);
+}
+
 .turnstile-message {
-  color: #fff5ec;
-  font-size: clamp(28px, 3.05vw, 64px);
-  line-height: 1.15;
-  font-weight: 650;
+  color: rgba(255, 248, 241, 0.92);
+  font-size: clamp(22px, 2.3vw, 44px);
+  line-height: 1.18;
+  font-weight: 600;
   text-wrap: balance;
 }
-.turnstile-display:is([data-state="denied"], [data-state="error"]) .turnstile-message {
-  color: var(--signal);
-  font-size: clamp(34px, 3.7vw, 76px);
-  font-weight: 800;
+
+.turnstile-display[data-state="idle"] .turnstile-message {
+  font-size: clamp(20px, 2vw, 38px);
 }
-.turnstile-preview { display: inline-block; padding: 6px 10px; border: 1px solid #ffd28b; color: #ffd28b; font-size: clamp(18px, 1.8vw, 30px); }
-.turnstile-birthday { color: var(--signal); font-size: clamp(24px, 2.2vw, 44px); font-weight: 700; }
-.turnstile-plan-alert {
-  color: #ffe1a4;
-  border-top: 1px solid #b19761;
-  padding-top: 12px;
-  font-size: clamp(26px, 2.5vw, 50px);
-  line-height: 1.15;
+
+.turnstile-display:is([data-state="denied"], [data-state="error"]) .turnstile-message {
+  color: #fecdd3;
+  font-size: clamp(28px, 3vw, 58px);
   font-weight: 750;
 }
-.turnstile-progress-wrap:not(:has(> :not([hidden]))) { display: none; }
-.turnstile-progress { color: var(--signal); font-size: clamp(24px, 2.4vw, 46px); font-weight: 700; line-height: 1.15; }
-.turnstile-goal-dots { display: flex; gap: 6px; margin-top: 9px; }
-.turnstile-goal-dot { height: 8px; width: clamp(25px, 3vw, 52px); border-radius: 8px; background: #ffffff38; }
-.turnstile-goal-dot.is-filled { background: var(--signal); }
-.turnstile-workout-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; padding-top: 12px; border-top: 1px solid #ffffff50; font-size: clamp(24px, 2.3vw, 46px); line-height: 1.12; }
-.turnstile-workout-tag { color: var(--signal); font-size: .78em; }
-.turnstile-workout-card .muted { color: var(--quiet); font-size: .85em; }
-.turnstile-display[data-state="idle"] .turnstile-main-card { min-height: clamp(130px, 24vh, 250px); padding: clamp(16px, 2.2vh, 32px) clamp(20px, 2.8vw, 44px); grid-template-columns: clamp(90px, 10vw, 170px) minmax(0, 1fr); }
-.turnstile-display:not([data-state="idle"]) { align-content: stretch; }
-.turnstile-display[data-state="idle"] h1 { font-size: clamp(40px, 4.4vw, 88px); }
-.turnstile-display[data-state="idle"] .turnstile-status { font-size: clamp(20px, 1.9vw, 34px); }
-.turnstile-display[data-state="idle"] .turnstile-message { font-size: clamp(22px, 2.2vw, 42px); }
-.turnstile-display[data-state="idle"] .turnstile-icon { font-size: clamp(64px, 7.5vw, 136px); }
-.turnstile-idle-widgets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: stretch; min-width: 0; }
-.turnstile-idle-widgets:not(:has(section:not([hidden]))) { display: none; }
-.turnstile-ranking, .turnstile-challenge, .turnstile-portal-qr, .turnstile-quote { display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch; min-width: 0; padding: clamp(14px, 1.6vw, 24px); border: 1px solid #69503c; border-radius: 16px; background: #1d1814; }
-.turnstile-portal-qr-body { display: flex; align-items: center; gap: 16px; margin-top: 14px; min-width: 0; }
-.turnstile-portal-qr-frame { flex: 0 0 auto; padding: 6px; border-radius: 12px; background: #fff8f1; line-height: 0; }
-.turnstile-portal-qr-frame img { display: block; width: clamp(84px, 7vw, 120px); height: clamp(84px, 7vw, 120px); }
-.turnstile-portal-qr-text, .turnstile-quote p { margin: 0; color: var(--quiet); font-size: clamp(16px, 1.35vw, 24px); line-height: 1.32; }
-.turnstile-quote p { margin-top: 14px; color: #fff5ec; font-weight: 600; }
-.turnstile-weather-badge { padding: 6px 12px; border: 1px solid #69503c; border-radius: 999px; background: #1d1814; color: #fff5ec; font-size: clamp(16px, 1.4vw, 24px); font-weight: 700; white-space: nowrap; }
-.turnstile-idle-widgets h2 { margin: 0; color: #ffb87f; font-size: clamp(22px, 2.1vw, 40px); letter-spacing: -.025em; }
-.turnstile-ranking ol { display: grid; gap: 6px; padding: 0; margin: 12px 0 0; list-style: none; }
-.turnstile-ranking li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 10px; border-bottom: 1px solid #4d3b2d; font-size: clamp(21px, 2vw, 38px); }
-.turnstile-ranking li.is-top1 { background: #3d281a; border-radius: 8px; }
-.turnstile-ranking strong { overflow-wrap: anywhere; }
-.turnstile-rank-streak { color: #f4c597; font-size: .82em; }
-.turnstile-rank-position { color: #ffbe8a; font-weight: 750; }
-.turnstile-challenge-head { display: grid; gap: 15px; }
-.turnstile-challenge-head span { font-size: clamp(22px, 2.2vw, 42px); color: var(--quiet); }
-.turnstile-challenge-bar { height: 15px; background: #4a3425; border-radius: 10px; overflow: hidden; margin-top: 18px; }
-.turnstile-challenge-fill { height: 100%; background: #ff9d58; }
-.turnstile-timer-bar { position: fixed; inset: auto 0 0; height: 7px; z-index: 10; background: #ffffff20; pointer-events: none; }
-.turnstile-timer-fill { width: 100%; height: 100%; transform-origin: left; background: #ff934f; }
-body:has([data-state="allowed"]) .turnstile-timer-fill { background: #98f0b9; }
-body:has([data-state="denied"]) .turnstile-timer-fill { background: #ffb5ab; }
-.turnstile-face-mirror { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: #100f0ef7; }
-.turnstile-face-mirror-card { width: min(900px, 95vw); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
-.turnstile-face-mirror-card h2 { margin: 0; font-size: clamp(32px, 4vw, 72px); }
-.turnstile-face-mirror-frame { position: relative; width: min(700px, 85vw, 90vh); aspect-ratio: 4 / 3; border: 3px solid var(--accent); border-radius: 18px; overflow: hidden; background: #100f0e; }
-.turnstile-face-mirror-frame img { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-.turnstile-face-mirror-guide { position: absolute; inset: 10% 24%; border: 2px dashed #ffffffa0; border-radius: 50%; }
 
-@media (max-width: 850px), (orientation: portrait) {
-  .turnstile-main-card { grid-template-columns: minmax(0, 1fr); text-align: center; justify-items: center; min-height: 75vh; gap: 20px; padding: 24px; }
-  .turnstile-hero-wrap { width: clamp(120px, 27vw, 290px); }
-  .turnstile-display h1 { font-size: clamp(54px, 9vw, 132px); }
-  .turnstile-status { font-size: clamp(30px, 4.5vw, 64px); }
-  .turnstile-message { font-size: clamp(26px, 4vw, 56px); }
-  .turnstile-display:is([data-state="denied"], [data-state="error"]) .turnstile-message { font-size: clamp(30px, 4.5vw, 64px); }
-  .turnstile-display[data-state="idle"] .turnstile-main-card { grid-template-columns: minmax(0, 1fr); }
-  .turnstile-progress, .turnstile-birthday { font-size: clamp(24px, 3.5vw, 44px); }
-  .turnstile-plan-alert { font-size: clamp(26px, 3.7vw, 48px); }
-  .turnstile-workout-card { justify-content: center; font-size: clamp(24px, 3.5vw, 44px); }
-  .turnstile-goal-dots { justify-content: center; }
-  .turnstile-idle-widgets { grid-template-columns: minmax(0, 1fr); }
-  .turnstile-header-right { flex-wrap: wrap; justify-content: flex-end; }
+.turnstile-preview {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  background: rgba(245, 158, 11, 0.16);
+  color: #fde68a;
+  font-size: clamp(14px, 1.3vw, 22px);
+  font-weight: 700;
 }
+
+.turnstile-birthday {
+  color: #fde68a;
+  font-size: clamp(22px, 2vw, 38px);
+  font-weight: 700;
+}
+
+.turnstile-plan-alert {
+  color: #fde68a;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding-top: 12px;
+  font-size: clamp(22px, 2.2vw, 42px);
+  line-height: 1.18;
+  font-weight: 750;
+}
+
+.turnstile-progress-wrap:not(:has(> :not([hidden]))) { display: none; }
+
+.turnstile-progress {
+  color: var(--signal);
+  font-size: clamp(20px, 2vw, 38px);
+  font-weight: 700;
+  line-height: 1.18;
+}
+
+.turnstile-goal-dots { display: flex; gap: 8px; margin-top: 10px; }
+.turnstile-goal-dot {
+  height: 9px;
+  width: clamp(24px, 2.8vw, 48px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.turnstile-goal-dot.is-filled {
+  background: var(--signal);
+  box-shadow: 0 0 12px var(--signal-glow);
+}
+
+.turnstile-workout-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: clamp(20px, 2vw, 38px);
+  line-height: 1.16;
+}
+.turnstile-workout-tag { color: var(--signal); font-size: 0.8em; font-weight: 800; text-transform: uppercase; }
+.turnstile-workout-card .muted { color: var(--quiet); font-size: 0.85em; }
+
+.turnstile-idle-widgets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(12px, 1.5vw, 20px);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.turnstile-idle-widgets:has(> #displayChallenge[hidden]) {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.15fr);
+}
+
+.turnstile-idle-widgets:not(:has(section:not([hidden]))) { display: none; }
+
+.turnstile-ranking,
+.turnstile-challenge,
+.turnstile-portal-qr,
+.turnstile-quote {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  min-width: 0;
+  padding: clamp(16px, 1.8vw, 26px);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  background: var(--glass-card-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+
+.turnstile-idle-widgets h2 {
+  margin: 0;
+  color: var(--accent-warm);
+  font-size: clamp(19px, 1.75vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.turnstile-ranking ol {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 12px 0 0;
+  list-style: none;
+}
+
+.turnstile-ranking li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: clamp(16px, 1.45vw, 25px);
+}
+
+.turnstile-ranking li.is-top1 {
+  background: linear-gradient(135deg, rgba(255, 106, 0, 0.22) 0%, rgba(255, 157, 66, 0.08) 100%);
+  border-color: rgba(255, 140, 50, 0.35);
+}
+
+.turnstile-ranking strong { overflow-wrap: anywhere; font-weight: 700; }
+.turnstile-rank-streak { color: #ffd0a6; font-size: 0.84em; font-weight: 600; white-space: nowrap; }
+.turnstile-rank-position { color: var(--accent-warm); font-weight: 800; white-space: nowrap; }
+
+.turnstile-challenge-head { display: grid; gap: 10px; }
+.turnstile-challenge-head span { font-size: clamp(18px, 1.65vw, 28px); color: var(--quiet); font-weight: 600; }
+.turnstile-challenge-bar {
+  height: 14px;
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.turnstile-challenge-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff6a00 0%, #ffb36b 100%);
+  box-shadow: 0 0 18px rgba(255, 106, 0, 0.45);
+}
+
+.turnstile-portal-qr-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+  min-width: 0;
+}
+
+.turnstile-portal-qr-frame {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  line-height: 0;
+}
+
+.turnstile-portal-qr-frame img {
+  display: block;
+  width: clamp(82px, 6.8vw, 118px);
+  height: clamp(82px, 6.8vw, 118px);
+}
+
+.turnstile-portal-qr-text,
+.turnstile-quote p {
+  margin: 0;
+  color: var(--quiet);
+  font-size: clamp(16px, 1.35vw, 23px);
+  line-height: 1.35;
+}
+
+.turnstile-quote p {
+  margin-top: 14px;
+  color: rgba(255, 250, 245, 0.94);
+  font-size: clamp(18px, 1.55vw, 27px);
+  font-weight: 600;
+}
+
+.turnstile-timer-bar {
+  position: fixed;
+  inset: auto 0 0;
+  height: 6px;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
+.turnstile-timer-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  background: linear-gradient(90deg, #ff6a00 0%, #ff9d42 100%);
+}
+body:has([data-state="allowed"]) .turnstile-timer-fill { background: #34d399; }
+body:has([data-state="denied"]) .turnstile-timer-fill { background: #fb7185; }
+
+.turnstile-face-mirror {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(7, 8, 11, 0.9);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+.turnstile-face-mirror-card {
+  width: min(900px, 95vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.turnstile-face-mirror-card h2 { margin: 0; font-size: clamp(30px, 3.8vw, 68px); }
+.turnstile-face-mirror-frame {
+  position: relative;
+  width: min(700px, 85vw, 90vh);
+  aspect-ratio: 4 / 3;
+  border: 3px solid var(--accent);
+  border-radius: 24px;
+  overflow: hidden;
+  background: #0b0d12;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+}
+.turnstile-face-mirror-frame img { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.turnstile-face-mirror-guide { position: absolute; inset: 10% 24%; border: 2px dashed rgba(255, 255, 255, 0.55); border-radius: 50%; }
+
+@media (max-width: 980px), (orientation: portrait) {
+  .turnstile-main-card,
+  .turnstile-display[data-state="idle"] .turnstile-main-card {
+    grid-template-columns: minmax(0, 1fr);
+    text-align: center;
+    justify-items: center;
+    gap: 18px;
+    padding: 22px;
+  }
+  .turnstile-hero-wrap { width: clamp(100px, 24vw, 220px); }
+  .turnstile-idle-widgets,
+  .turnstile-idle-widgets:has(> #displayChallenge[hidden]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .turnstile-header-right { flex-wrap: wrap; justify-content: flex-end; }
+  .turnstile-goal-dots { justify-content: center; }
+  .turnstile-workout-card { justify-content: center; }
+}
+
 @media (max-width: 560px) {
   .turnstile-header { align-items: flex-start; }
-  .turnstile-brand strong { font-size: 18px; }
   .turnstile-location { display: none; }
-  .turnstile-main-card { padding: 20px 16px; }
-  .turnstile-ranking li { gap: 7px; font-size: 20px; }
-  .turnstile-rank-streak { font-size: 16px; }
-}
-@media (max-height: 650px) and (orientation: landscape) and (min-width: 851px) {
-  .turnstile-main-card { min-height: calc(100dvh - 120px); padding: 20px; gap: 25px; grid-template-columns: clamp(130px, 20vw, 240px) minmax(0, 1fr); }
-  .turnstile-status { font-size: 34px; }
-  .turnstile-display h1 { font-size: clamp(62px, 6.7vw, 100px); }
-  .turnstile-copy > :not([hidden]) ~ :not([hidden]) { margin-top: 9px; }
-  .turnstile-message { font-size: 30px; }
-  .turnstile-plan-alert, .turnstile-progress, .turnstile-birthday, .turnstile-workout-card { font-size: 25px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
+  .turnstile-portal-qr-body { flex-direction: column; align-items: flex-start; }
 }
 
-/* A área de espera distribui os cartões dentro da altura útil do monitor. */
-@media (min-width: 851px) and (orientation: landscape) {
-  body:has(.turnstile-display[data-state="idle"]) { height: 100dvh; }
-  .turnstile-display[data-state="idle"] {
-    min-height: 0;
-    grid-template-rows: minmax(150px, .85fr) minmax(0, 1.35fr);
-    align-content: stretch;
-    padding-block: 14px 18px;
-  }
-  .turnstile-display[data-state="idle"] .turnstile-main-card {
-    min-height: 0;
-    padding: 16px 24px;
-    gap: 22px;
-    grid-template-columns: clamp(80px, 10vh, 130px) minmax(0, 1fr);
-  }
-  .turnstile-display[data-state="idle"] h1 { font-size: clamp(38px, 4vw, 80px); }
-  .turnstile-display[data-state="idle"] .turnstile-copy > :not([hidden]) ~ :not([hidden]) { margin-top: 8px; }
-  .turnstile-display[data-state="idle"] .turnstile-idle-widgets {
-    min-height: 0;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(200px, .8fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 12px;
-  }
-  .turnstile-ranking { grid-column: 1; grid-row: 1 / 3; padding: 14px; }
-  .turnstile-challenge { grid-column: 2; grid-row: 1; padding: 14px; }
-  .turnstile-portal-qr { grid-column: 3; grid-row: 1 / 3; flex-direction: column; justify-content: center; gap: 10px; padding: 12px; text-align: center; }
-  .turnstile-portal-qr-frame { padding: 0; border-radius: 8px; }
-  .turnstile-portal-qr-frame img { width: clamp(136px, 18vh, 230px); height: auto; }
-  .turnstile-portal-qr-copy h2 { font-size: clamp(20px, 1.7vw, 30px); }
-  .turnstile-portal-qr-copy p { font-size: clamp(17px, 1.35vw, 24px); line-height: 1.2; }
-  .turnstile-quote { grid-column: 2; grid-row: 2; padding: 14px; justify-content: center; }
-  .turnstile-quote h2, .turnstile-challenge h2, .turnstile-ranking h2 { font-size: clamp(20px, 1.8vw, 32px); }
-  .turnstile-quote p { font-size: clamp(20px, 1.8vw, 34px); line-height: 1.23; overflow-wrap: anywhere; }
-  .turnstile-ranking ol { gap: 4px; margin-top: 8px; }
-  .turnstile-ranking li { font-size: clamp(20px, 1.65vw, 32px); gap: 8px; padding: 7px 5px; }
-  .turnstile-rank-streak { font-size: .76em; }
-  .turnstile-challenge-head { gap: 8px; }
-  .turnstile-challenge-head span { font-size: clamp(20px, 1.8vw, 32px); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
