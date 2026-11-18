@@ -3403,11 +3403,15 @@ async function loadSettings() {
   document.getElementById('waPixName').value = s.pix_recipient_name || '';
   document.getElementById('waPixKey').value = s.pix_recipient_key || '';
 
+  document.getElementById('gwPosProvider').value = s.pos_provider || 'mercadopago';
   document.getElementById('gwMpToken').value = s.mp_access_token || '';
   document.getElementById('gwMpPointToken').value = s.mp_point_access_token || '';
   document.getElementById('gwMpWebhookSecret').value = s.mp_webhook_secret || '';
   document.getElementById('gwMpPointWebhookSecret').value = s.mp_point_webhook_secret || '';
   document.getElementById('gwMpPointTerminalId').value = s.mp_point_terminal_id || '';
+  document.getElementById('gwStoneApiKey').value = s.stone_api_key || '';
+  document.getElementById('gwStoneSerial').value = s.stone_terminal_serial || '';
+  document.getElementById('gwStoneWebhookSecret').value = s.stone_webhook_secret || '';
   document.getElementById('authEnabled').checked = s.auth_enabled === '1';
   document.getElementById('authUsername').value = s.auth_username || 'admin';
 
@@ -4891,18 +4895,26 @@ document.getElementById('gatewaysForm')?.addEventListener('submit', async (e) =>
       const settings = await api('/api/settings', {
         method: 'PUT',
         body: JSON.stringify({
+          pos_provider: document.getElementById('gwPosProvider').value,
           mp_access_token: document.getElementById('gwMpToken').value.trim(),
           mp_point_access_token: document.getElementById('gwMpPointToken').value.trim(),
           mp_webhook_secret: document.getElementById('gwMpWebhookSecret').value.trim(),
           mp_point_webhook_secret: document.getElementById('gwMpPointWebhookSecret').value.trim(),
           mp_point_terminal_id: document.getElementById('gwMpPointTerminalId').value.trim(),
+          stone_api_key: document.getElementById('gwStoneApiKey').value.trim(),
+          stone_terminal_serial: document.getElementById('gwStoneSerial').value.trim(),
+          stone_webhook_secret: document.getElementById('gwStoneWebhookSecret').value.trim(),
         }),
       });
+      document.getElementById('gwPosProvider').value = settings.pos_provider || 'mercadopago';
       document.getElementById('gwMpToken').value = settings.mp_access_token || '';
       document.getElementById('gwMpPointToken').value = settings.mp_point_access_token || '';
       document.getElementById('gwMpWebhookSecret').value = settings.mp_webhook_secret || '';
       document.getElementById('gwMpPointWebhookSecret').value = settings.mp_point_webhook_secret || '';
-      showToast('Credenciais do Mercado Pago salvas!');
+      document.getElementById('gwStoneApiKey').value = settings.stone_api_key || '';
+      document.getElementById('gwStoneSerial').value = settings.stone_terminal_serial || '';
+      document.getElementById('gwStoneWebhookSecret').value = settings.stone_webhook_secret || '';
+      showToast('Credenciais de pagamento salvas!');
     } catch (err) {
       showToast(err.message, true);
     }

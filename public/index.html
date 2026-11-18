@@ -1609,19 +1609,28 @@
             </section>
 
             <!-- CATEGORIA: PAGAMENTOS & CONVENIOS -->
-            <section class="panel settings-card" id="settings-gateways" data-settings-cat="integrations" data-settings-keywords="pagamentos mercado pago point smart maquininha pdv webhook">
+            <section class="panel settings-card" id="settings-gateways" data-settings-cat="integrations" data-settings-keywords="pagamentos mercado pago point smart stone pagar.me maquininha pdv webhook">
               <div class="settings-card-head">
                 <div>
-                  <h3>Pagamentos (Mercado Pago &amp; Point Smart)</h3>
-                  <p class="muted">Credenciais de checkout online, maquininha Point Smart e webhooks automáticos.</p>
+                  <h3>Pagamentos (Mercado Pago, Point Smart &amp; Stone)</h3>
+                  <p class="muted">Credenciais de checkout online, maquininha Point Smart, Stone Connect (Pagar.me v5) e webhooks automáticos.</p>
                 </div>
               </div>
               <form id="gatewaysForm" class="form-grid">
+                <label>Provedor da Maquininha (PDV)
+                  <select id="gwPosProvider">
+                    <option value="mercadopago">Mercado Pago Point Smart</option>
+                    <option value="stone">Stone Smart POS (Connect / Pagar.me)</option>
+                  </select>
+                </label>
                 <label>Mercado Pago — Access Token online <input type="password" id="gwMpToken" placeholder="APP_USR-..." /></label>
                 <label>Mercado Pago — Access Token da Point (opcional) <input type="password" id="gwMpPointToken" placeholder="Usa o token online se vazio" /></label>
                 <label>Mercado Pago Point — ID da Maquininha <input type="text" id="gwMpPointTerminalId" placeholder="Ex: NEWLAND_N950__..." /></label>
                 <label>Chave secreta do webhook online <input type="password" id="gwMpWebhookSecret" autocomplete="new-password" /></label>
                 <label>Chave secreta do webhook da Point (opcional) <input type="password" id="gwMpPointWebhookSecret" autocomplete="new-password" /></label>
+                <label>Stone / Pagar.me — Chave API (Secret Key) <input type="password" id="gwStoneApiKey" placeholder="sk_..." autocomplete="new-password" /></label>
+                <label>Stone — Serial da Maquininha (POS) <input type="text" id="gwStoneSerial" placeholder="Ex: 6L..." /></label>
+                <label>Stone — Segredo do Webhook (opcional) <input type="password" id="gwStoneWebhookSecret" autocomplete="new-password" /></label>
                 <div style="align-self:end;">
                   <button type="submit" class="btn btn-primary">Salvar credenciais de pagamento</button>
                 </div>
@@ -1632,7 +1641,7 @@
               </div>
               <div id="mpTerminalsList" class="billing-queue" style="margin-top:10px;"></div>
               <p class="muted" style="margin-top:10px;font-size:12px;">
-                Webhook automático do Mercado Pago: <code>POST /api/webhooks/mercadopago</code>.
+                Webhook Mercado Pago: <code>POST /api/webhooks/mercadopago</code> · Webhook Stone/Pagar.me: <code>POST /api/webhooks/stone</code>.
               </p>
             </section>
 

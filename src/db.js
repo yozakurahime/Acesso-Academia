@@ -815,7 +815,10 @@ export class DatabaseStore {
       membership_charge_id: 'INTEGER REFERENCES membership_charges(id)',
       checkout_ref: 'TEXT',
     });
-    this.ensureColumns('point_orders', { membership_charge_id: 'INTEGER REFERENCES membership_charges(id)' });
+    this.ensureColumns('point_orders', {
+      membership_charge_id: 'INTEGER REFERENCES membership_charges(id)',
+      provider: "TEXT NOT NULL DEFAULT 'mercadopago'",
+    });
     this.ensureColumns('access_logs', {
       edge_event_id: 'TEXT',
       edge_synced: 'INTEGER NOT NULL DEFAULT 0',

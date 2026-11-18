@@ -21,6 +21,8 @@ const SECRET_SETTING_KEYS = [
   'mp_point_access_token',
   'mp_webhook_secret',
   'mp_point_webhook_secret',
+  'stone_api_key',
+  'stone_webhook_secret',
   'gemini_api_key',
   'wellhub_api_key',
   'wellhub_webhook_secret',
@@ -77,6 +79,11 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'mp_webhook_secret',
   'mp_point_webhook_secret',
   'mp_point_terminal_id',
+  'pos_provider',
+  'stone_enabled',
+  'stone_api_key',
+  'stone_terminal_serial',
+  'stone_webhook_secret',
   'wellhub_enabled',
   'wellhub_require_checkin',
   'wellhub_api_key',
@@ -112,6 +119,9 @@ function maskSettings(settings) {
   if (process.env.MP_POINT_WEBHOOK_SECRET) safe.mp_point_webhook_secret = '******';
   if (process.env.MP_POINT_ACCESS_TOKEN) safe.mp_point_access_token = '******';
   if (process.env.MP_POINT_TERMINAL_ID) safe.mp_point_terminal_id = process.env.MP_POINT_TERMINAL_ID;
+  if (process.env.STONE_API_KEY) safe.stone_api_key = '******';
+  if (process.env.STONE_WEBHOOK_SECRET) safe.stone_webhook_secret = '******';
+  if (process.env.STONE_TERMINAL_SERIAL) safe.stone_terminal_serial = process.env.STONE_TERMINAL_SERIAL;
   return safe;
 }
 
@@ -1821,6 +1831,29 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         return res.status(401).json({ error: 'Timestamp do webhook expirado.' });
       }
       res.json(await gatewayService.handleWebhook('mercadopago', { ...req.body, data: { ...req.body?.data, id } }, req.headers));
+    }),
+  );
+
+  router.post(
+    '/webhooks/stone',
+    limitWebhook,
+    handle(async (req, res) => {
+      if (!gatewayService) return res.json({ ignored: true });
+      const settings = store.getSettings();
+      const secret = String(process.env.STONE_WEBHOOK_SECRET || settings.stone_webhook_secret || '').trim();
+      if (secret) {
+        const provided = String(
+          req.get('x-webhook-secret')
+            || req.get('x-stone-secret')
+            || req.get('authorization')?.replace(/^Bearer\s+/i, '')
+            || req.query?.token
+            || '',
+        ).trim();
+        if (!equalSecret(provided, secret)) {
+          return res.status(401).json({ error: 'Segredo de webhook Stone inválido.' });
+        }
+      }
+      res.json(await gatewayService.handleStoneWebhook(req.body || {}));
     }),
   );
 

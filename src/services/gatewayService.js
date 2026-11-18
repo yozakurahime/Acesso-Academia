@@ -658,8 +658,70 @@ export class GatewayService {
     );
   }
 
-  async createPointOrder({ member_id, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit' }) {
+  getStoneAuth(settings = this.store.getSettings()) {
+    const key = String(process.env.STONE_API_KEY || settings?.stone_api_key || '').trim();
+    if (!key) {
+      throw new Error('Configure a chave API da Stone / Pagar.me em Configurações.');
+    }
+    const basic = Buffer.from(`${key}:`).toString('base64');
+    return {
+      Authorization: `Basic ${basic}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  getStoneSerial(terminalId = null, settings = this.store.getSettings()) {
+    return String(terminalId || process.env.STONE_TERMINAL_SERIAL || settings?.stone_terminal_serial || '').trim();
+  }
+
+  resolvePosProvider(provider = null, settings = this.store.getSettings()) {
+    const explicit = String(provider || '').trim().toLowerCase();
+    if (explicit === 'stone' || explicit === 'mercadopago') return explicit;
+    const configured = String(settings?.pos_provider || '').trim().toLowerCase();
+    if (configured === 'stone') return 'stone';
+    if (settings?.stone_enabled === '1' && (process.env.STONE_API_KEY || settings?.stone_api_key) && !settings?.mp_point_access_token) {
+      return 'stone';
+    }
+    return 'mercadopago';
+  }
+
+  async _markPointOrderPaid(order, method, externalId, notes) {
+    const paymentResult = await this.accessService.recordPayment(
+      {
+        member_id: order.member_id,
+        plan_id: order.plan_id,
+        amount_cents: order.amount_cents,
+        method,
+        external_id: externalId,
+        charge_id: order.membership_charge_id,
+        notes,
+      },
+      {
+        reconcileOpenCharge: true,
+        exactCharge: Boolean(order.membership_charge_id),
+        onRecorded: (paymentId) => this.store.run(
+          `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+          [method, paymentId, order.id],
+        ),
+      },
+    );
+    if (this.whatsappService && !paymentResult.alreadyRecorded) {
+      this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
+    }
+    return {
+      paid: true,
+      alreadyPaid: Boolean(paymentResult.alreadyRecorded),
+      order: this.getPointOrderById(order.id),
+      paymentResult,
+    };
+  }
+
+  async createPointOrder({ member_id, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit', provider = null }) {
     const settings = this.store.getSettings();
+    const activeProvider = this.resolvePosProvider(provider, settings);
+    if (activeProvider === 'stone') {
+      return this._createStoneOrder({ member_id, plan_id, amount_cents, terminal_id, payment_method, settings });
+    }
     const headers = this.getPointAuth(settings);
     const productionTerminal = this.getPointTerminalId(terminal_id, settings);
     const chosenTerminal = process.env.MP_POINT_TEST_MODE === 'true' ? 'NEWLAND_N950__SBX0000001' : productionTerminal;
@@ -716,9 +778,75 @@ export class GatewayService {
     }
 
     const ins = this.store.run(
-      `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id, provider)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, 'mercadopago')`,
       [String(data.id), chosenTerminal, member.id, plan.id, finalAmount, String(payment_method || 'credit'), charge?.id ?? null],
+    );
+
+    return this.getPointOrderById(ins.lastInsertRowid);
+  }
+
+  async _createStoneOrder({ member_id, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit', settings }) {
+    const headers = this.getStoneAuth(settings);
+    const chosenSerial = this.getStoneSerial(terminal_id, settings);
+    if (!chosenSerial) {
+      throw new Error('Configure o serial da maquininha Stone em Configurações.');
+    }
+
+    const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
+    if (!member) throw new Error('Aluno não encontrado.');
+
+    const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
+    if (charge?.id) {
+      const existingPending = this.store.get(
+        `SELECT id FROM point_orders WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' AND COALESCE(provider, 'mercadopago') = 'stone' ORDER BY id DESC LIMIT 1`,
+        [member.id, charge.id],
+      );
+      if (existingPending) return this.getPointOrderById(existingPending.id);
+    }
+
+    const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
+    const doc = digitsOnly(member.document);
+    const stoneType = payment_method === 'debit' ? 'debit' : payment_method === 'pix' ? 'pix' : 'credit';
+
+    const res = await this.fetch('https://api.pagar.me/core/v5/orders', {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({
+        closed: false,
+        customer: {
+          name: member.name,
+          type: 'individual',
+          ...(doc.length >= 11 ? { document: doc } : {}),
+        },
+        items: [{ amount: finalAmount, description, quantity: 1 }],
+        poi_payment_settings: {
+          visible: true,
+          print_order_receipt: false,
+          devices_serial_number: [chosenSerial],
+          payment_setup: {
+            type: stoneType,
+            installments: 1,
+          },
+        },
+        metadata: {
+          member_id: String(member.id),
+          plan_id: String(plan.id),
+          ...(charge?.id ? { membership_charge_id: String(charge.id) } : {}),
+        },
+      }),
+    });
+
+    const data = await this.safeJson(res);
+    if (!res.ok || !data?.id) {
+      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao enviar cobrança para Stone (${res.status})`);
+    }
+
+    const ins = this.store.run(
+      `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id, provider)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, 'stone')`,
+      [String(data.id), chosenSerial, member.id, plan.id, finalAmount, String(payment_method || 'credit'), charge?.id ?? null],
     );
 
     return this.getPointOrderById(ins.lastInsertRowid);
@@ -729,6 +857,28 @@ export class GatewayService {
     if (!order) throw new Error('Cobrança da maquininha não encontrada.');
     if (order.status === 'paid') {
       return { paid: true, alreadyPaid: true, order: this.getPointOrderById(order.id) };
+    }
+
+    if (order.provider === 'stone') {
+      const headers = this.getStoneAuth();
+      const res = await this.fetch(`https://api.pagar.me/core/v5/orders/${encodeURIComponent(order.order_id)}`, {
+        headers,
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await this.safeJson(res);
+      if (!res.ok) {
+        throw new Error(data?.message || `Erro ao consultar pedido Stone (${res.status})`);
+      }
+      const orderStatus = String(data?.status || '').toLowerCase();
+      if (orderStatus === 'paid') {
+        const payMethodRaw = String(data?.charges?.[0]?.payment_method || order.payment_method || 'credit').toLowerCase();
+        const method = payMethodRaw.includes('debit') ? 'debit' : payMethodRaw.includes('pix') ? 'pix' : 'credit';
+        return this._markPointOrderPaid(order, method, `stone_order:${order.order_id}`, `Stone POS (${order.terminal_id})`);
+      }
+      if (['canceled', 'failed'].includes(orderStatus)) {
+        this.store.run(`UPDATE point_orders SET status = ? WHERE id = ? AND status <> 'paid'`, [orderStatus, order.id]);
+      }
+      return { paid: false, status: orderStatus || 'pending', order: this.getPointOrderById(order.id) };
     }
 
     const headers = this.getPointAuth();
@@ -793,6 +943,22 @@ export class GatewayService {
     if (!order) throw new Error('Cobrança da maquininha não encontrada.');
     if (order.status === 'paid') throw new Error('Cobrança já foi paga e não pode ser cancelada.');
 
+    if (order.provider === 'stone') {
+      const headers = this.getStoneAuth();
+      const res = await this.fetch(`https://api.pagar.me/core/v5/orders/${encodeURIComponent(order.order_id)}/closed`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ status: 'canceled' }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok && res.status !== 404) {
+        const data = (await this.safeJson(res)) || {};
+        throw new Error(data?.message || `Erro ao cancelar pedido na Stone (${res.status})`);
+      }
+      this.store.run(`UPDATE point_orders SET status = 'canceled' WHERE id = ?`, [order.id]);
+      return { canceled: true, order: this.getPointOrderById(order.id) };
+    }
+
     const headers = this.getPointAuth();
     const res = await this.fetch(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(order.order_id)}/cancel`, {
       method: 'POST',
@@ -841,7 +1007,37 @@ export class GatewayService {
     }
   }
 
+  async handleStoneWebhook(payload = {}) {
+    const eventType = String(payload?.type || '').toLowerCase();
+    const data = payload?.data || {};
+    const orderId = String(data?.order?.id || (eventType.startsWith('order.') ? data?.id : '') || '').trim();
+    if (!orderId) return { ignored: true };
+
+    const order = this.store.get(
+      "SELECT * FROM point_orders WHERE order_id = ? AND COALESCE(provider, 'mercadopago') = 'stone'",
+      [orderId],
+    );
+    if (!order) return { ignored: true };
+
+    if (eventType === 'charge.paid' || eventType === 'order.paid' || String(data?.status || '').toLowerCase() === 'paid') {
+      if (order.status === 'paid') return { paid: true, alreadyPaid: true };
+      const payMethodRaw = String(data?.payment_method || order.payment_method || 'credit').toLowerCase();
+      const method = payMethodRaw.includes('debit') ? 'debit' : payMethodRaw.includes('pix') ? 'pix' : 'credit';
+      return this._markPointOrderPaid(order, method, `stone_order:${order.order_id}`, `Stone POS (${order.terminal_id})`);
+    }
+
+    if (['charge.refunded', 'order.canceled', 'charge.canceled'].includes(eventType)) {
+      this.store.run(`UPDATE point_orders SET status = 'canceled' WHERE id = ? AND status <> 'paid'`, [order.id]);
+      return { canceled: true };
+    }
+
+    return { ignored: true };
+  }
+
   async handleWebhook(provider, payload = {}, headers = null) {
+    if (provider === 'stone') {
+      return this.handleStoneWebhook(payload);
+    }
     if (provider !== 'mercadopago') {
       throw new Error('Provider inválido.');
     }
