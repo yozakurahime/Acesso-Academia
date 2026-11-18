@@ -7646,9 +7646,20 @@ async function openChat(phone) {
       const cls = m.direction === 'in' ? 'in' : 'out';
       const who = m.sender_type === 'bot' ? 'Bot IA' : (m.sender_type === 'human' ? 'Atendente' : 'Cliente');
       const time = String(m.created_at || '').slice(11, 16);
+      let mediaHtml = '';
+      if (m.media_url) {
+        if (m.media_type === 'image') {
+          mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank')" />`;
+        } else if (m.media_type === 'sticker') {
+          mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Figurinha" style="max-width:140px;display:block;margin-bottom:6px;" />`;
+        } else if (m.media_type === 'audio') {
+          mediaHtml = `<audio controls preload="none" src="${escapeHtml(m.media_url)}" style="max-width:240px;height:36px;display:block;margin-bottom:6px;"></audio>`;
+        }
+      }
+      const bodyHtml = m.body ? `<div>${escapeHtml(m.body)}</div>` : '';
       return `
         <div class="chat-bubble ${cls}">
-          <div>${escapeHtml(m.body)}</div>
+          ${mediaHtml}${bodyHtml}
           <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>
         </div>
       `;

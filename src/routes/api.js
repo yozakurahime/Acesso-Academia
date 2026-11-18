@@ -1568,6 +1568,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(whatsappBotService.getChatMessages(req.params.phone));
   });
 
+  router.get('/whatsapp/media/:filename', requireReception, (req, res) => {
+    const safeName = path.basename(String(req.params.filename || ''));
+    if (!safeName || safeName !== req.params.filename) return res.sendStatus(400);
+    const mediaPath = path.join(path.dirname(store.filePath || path.join(process.cwd(), 'data', 'acesso.sqlite')), 'chat_media', safeName);
+    if (!fs.existsSync(mediaPath)) return res.sendStatus(404);
+    res.sendFile(mediaPath);
+  });
+
   router.post(
     '/whatsapp/chats/:phone/reply',
     requireReception,

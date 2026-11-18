@@ -129,10 +129,22 @@ export class WhatsappBotService {
     }
   }
 
-  recordChatMessage({ phone, direction = 'in', senderType = 'customer', body = '', contactName = null, needsHuman = false } = {}) {
+  recordChatMessage({
+    phone,
+    direction = 'in',
+    senderType = 'customer',
+    body = '',
+    mediaType = null,
+    mediaUrl = null,
+    contactName = null,
+    needsHuman = false,
+  } = {}) {
     const normalized = normalizeBrPhone(phone);
     const cleanBody = String(body || '').trim();
-    if (!normalized || !cleanBody) return null;
+    if (!normalized || (!cleanBody && !mediaUrl)) return null;
+
+    const previewText = cleanBody
+      || (mediaType === 'sticker' ? '[Figurinha]' : mediaType === 'image' ? '[Imagem]' : mediaType === 'audio' ? '[Áudio]' : '[Mídia]');
 
     const member = this._findMemberForPhone(normalized);
     const resolvedName = member?.name || (contactName ? String(contactName).trim() : null);
@@ -152,12 +164,12 @@ export class WhatsappBotService {
            unread_count = CASE WHEN ? > 0 THEN whatsapp_chats.unread_count + 1 ELSE 0 END,
            last_message = excluded.last_message,
            last_message_at = datetime('now', 'localtime')`,
-        [normalized, resolvedName, member?.id || null, pausedFlag, humanFlag, unreadDelta, cleanBody.slice(0, 240), unreadDelta],
+        [normalized, resolvedName, member?.id || null, pausedFlag, humanFlag, unreadDelta, previewText.slice(0, 240), unreadDelta],
       );
       this.store.run(
-        `INSERT INTO whatsapp_chat_messages (phone, direction, sender_type, body)
-         VALUES (?, ?, ?, ?)`,
-        [normalized, direction, senderType, cleanBody],
+        `INSERT INTO whatsapp_chat_messages (phone, direction, sender_type, body, media_type, media_url)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [normalized, direction, senderType, cleanBody, mediaType || null, mediaUrl || null],
       );
     } catch {
       return null;
@@ -196,7 +208,7 @@ export class WhatsappBotService {
       [normalized],
     );
     const messages = this.store.all(
-      `SELECT id, phone, direction, sender_type, body, created_at
+      `SELECT id, phone, direction, sender_type, body, media_type, media_url, created_at
        FROM whatsapp_chat_messages
        WHERE phone = ?
        ORDER BY id ASC

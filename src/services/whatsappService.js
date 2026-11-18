@@ -290,23 +290,63 @@ export class WhatsappService {
             }
           }
           const content = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
-          const incomingText = content?.conversation || content?.extendedTextMessage?.text || '';
-          if (incomingText && this.onBotMessage?.recordChatMessage) {
+          const imageMsg = content?.imageMessage;
+          const stickerMsg = content?.stickerMessage;
+          const audioMsg = content?.audioMessage;
+          const incomingText = content?.conversation
+            || content?.extendedTextMessage?.text
+            || imageMsg?.caption
+            || content?.videoMessage?.caption
+            || '';
+
+          let mediaType = null;
+          let mediaUrl = null;
+          let audioBuffer = null;
+          let audioMimeType = '';
+
+          const mediaTarget = imageMsg
+            ? { type: 'image', obj: imageMsg, ext: 'jpg' }
+            : stickerMsg
+              ? { type: 'sticker', obj: stickerMsg, ext: 'webp' }
+              : audioMsg
+                ? { type: 'audio', obj: audioMsg, ext: 'ogg' }
+                : null;
+
+          if (mediaTarget && Number(mediaTarget.obj.fileLength || 0) <= 6 * 1024 * 1024) {
+            try {
+              const dlBuf = await downloadMediaMessage(msg, 'buffer', {}, { logger: SILENT_LOGGER, reuploadRequest: sock.updateMediaMessage });
+              if (dlBuf?.length && dlBuf.length <= 6 * 1024 * 1024) {
+                const mediaDir = path.join(path.dirname(this.store.filePath || path.join(process.cwd(), 'data', 'acesso.sqlite')), 'chat_media');
+                fs.mkdirSync(mediaDir, { recursive: true });
+                const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${mediaTarget.ext}`;
+                fs.writeFileSync(path.join(mediaDir, safeName), dlBuf);
+                mediaType = mediaTarget.type;
+                mediaUrl = `/api/whatsapp/media/${safeName}`;
+                if (mediaTarget.type === 'audio') {
+                  audioBuffer = dlBuf;
+                  audioMimeType = audioMsg.mimetype || 'audio/ogg';
+                }
+              }
+            } catch {
+              // ignore media download error
+            }
+          }
+
+          if ((incomingText || mediaUrl) && this.onBotMessage?.recordChatMessage) {
             this.onBotMessage.recordChatMessage({
               phone: senderPhone,
               direction: 'in',
               senderType: 'customer',
               body: incomingText,
+              mediaType,
+              mediaUrl,
               contactName: msg.pushName || null,
             });
           }
           const handledOptCommand = incomingText ? this.handleIncomingText(senderPhone, incomingText) : false;
 
           if (!handledOptCommand && allowBot) {
-            const audioMsg = content?.audioMessage;
-            let audioBuffer = null;
-            let audioMimeType = '';
-            if (!incomingText && audioMsg && Number(audioMsg.fileLength || 0) <= 4 * 1024 * 1024) {
+            if (!incomingText && audioMsg && !audioBuffer && Number(audioMsg.fileLength || 0) <= 4 * 1024 * 1024) {
               audioBuffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: SILENT_LOGGER, reuploadRequest: sock.updateMediaMessage });
               audioMimeType = audioMsg.mimetype || 'audio/ogg';
             }
@@ -332,7 +372,6 @@ export class WhatsappService {
           }
 
           if (!allowReceipts) continue;
-          const imageMsg = content?.imageMessage;
           const docMsg = content?.documentMessage;
           const mimeType = imageMsg?.mimetype || docMsg?.mimetype || '';
           if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') continue;

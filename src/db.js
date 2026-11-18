@@ -796,6 +796,10 @@ export class DatabaseStore {
     this.ensureColumns('membership_charges', {
       source: "TEXT NOT NULL DEFAULT 'auto'",
     });
+    this.ensureColumns('whatsapp_chat_messages', {
+      media_type: 'TEXT',
+      media_url: 'TEXT',
+    });
     this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_logs_edge_event_id ON access_logs(edge_event_id)');
 
     // Mantém os importadores e chamadas legadas de plano em compatibilidade.
