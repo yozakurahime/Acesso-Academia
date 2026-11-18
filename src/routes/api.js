@@ -463,6 +463,21 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     });
   }));
 
+  let cachedPortalQrSvg = null;
+  router.get('/turnstile/portal-qr.svg', handle(async (_req, res) => {
+    if (!cachedPortalQrSvg) {
+      cachedPortalQrSvg = await QRCode.toString('https://academiaoxigenio.com/aluno', {
+        type: 'svg',
+        margin: 1,
+        width: 180,
+        color: { dark: '#100f0e', light: '#fff8f1' },
+      });
+    }
+    res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(cachedPortalQrSvg);
+  }));
+
   router.get('/turnstile/display', (req, res) => {
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
     const payload = req.query?.rich === '1' && typeof accessService.getTurnstileKioskDisplay === 'function'
@@ -615,21 +630,6 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
     accessService.previewTurnstileDisplay(req.body?.outcome);
     res.json({ ok: true });
-  }));
-
-  let cachedPortalQrSvg = null;
-  router.get('/turnstile/portal-qr.svg', handle(async (_req, res) => {
-    if (!cachedPortalQrSvg) {
-      cachedPortalQrSvg = await QRCode.toString('https://academiaoxigenio.com/aluno', {
-        type: 'svg',
-        margin: 1,
-        width: 180,
-        color: { dark: '#100f0e', light: '#fff8f1' },
-      });
-    }
-    res.set('Content-Type', 'image/svg+xml; charset=utf-8');
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.send(cachedPortalQrSvg);
   }));
 
   router.post('/turnstile/face-mirror', requireReception, (req, res) => {
