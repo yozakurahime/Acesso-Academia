@@ -972,6 +972,22 @@ export class AccessService {
     return { enrollment: this.getPlanEnrollment(member.id), charge: createdCharge, sync };
   }
 
+  deleteMembershipCharge(chargeId) {
+    const id = Number(chargeId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new Error('ID de cobrança inválido.');
+    }
+    const charge = this.store.get('SELECT id, member_id, due, amount, payment_id FROM membership_charges WHERE id = ?', [id]);
+    if (!charge) {
+      throw new Error('Cobrança não encontrada.');
+    }
+    if (charge.payment_id != null) {
+      throw new Error('Esta cobrança já foi paga e não pode ser removida.');
+    }
+    this.store.run('DELETE FROM membership_charges WHERE id = ? AND payment_id IS NULL', [id]);
+    return { ok: true, id, member_id: charge.member_id, due: charge.due, amount: charge.amount };
+  }
+
   async setMemberStatus(memberId, status) {
     if (!['active', 'blocked', 'pending'].includes(status)) {
       throw new Error('Status invalido.');

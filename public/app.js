@@ -7639,7 +7639,10 @@ async function loadMemberOpenDebts(memberId) {
           <span class="badge badge-pending" style="margin-left:6px;">Em aberto</span>
           <span class="muted"> · Mensalidade do plano · Venc. ${escapeHtml(fmtDate(c.due))}</span>
         </div>
-        <button type="button" class="btn btn-primary btn-sm" data-prof-pay-charge="${c.id}">Receber</button>
+        <div class="inline-actions" style="gap:6px;">
+          <button type="button" class="btn btn-primary btn-sm" data-prof-pay-charge="${c.id}">Receber</button>
+          <button type="button" class="btn btn-danger btn-sm" data-prof-cancel-charge="${c.id}">Remover</button>
+        </div>
       </li>
     `).join('');
     const debtsHtml = debts.map((d) => `
@@ -7648,7 +7651,10 @@ async function loadMemberOpenDebts(memberId) {
           <strong>${fmtMoney(d.remaining_cents)}</strong>
           <span class="muted">${d.due_date ? ` · Venc. ${escapeHtml(fmtDate(d.due_date))}` : ''}${d.notes ? ` · ${escapeHtml(d.notes)}` : ''}</span>
         </div>
-        <button type="button" class="btn btn-primary btn-sm" data-prof-pay-debt="${d.id}">Receber</button>
+        <div class="inline-actions" style="gap:6px;">
+          <button type="button" class="btn btn-primary btn-sm" data-prof-pay-debt="${d.id}">Receber</button>
+          <button type="button" class="btn btn-secondary btn-sm" data-prof-cancel-debt="${d.id}">Cancelar</button>
+        </div>
       </li>
     `).join('');
     listEl.innerHTML = (chargesHtml + debtsHtml) || '<li class="muted">Nenhuma conta em aberto.</li>';
@@ -7658,6 +7664,38 @@ async function loadMemberOpenDebts(memberId) {
 }
 
 document.getElementById('profOpenDebtsList')?.addEventListener('click', async (e) => {
+  const cancelChargeBtn = e.target.closest('[data-prof-cancel-charge]');
+  if (cancelChargeBtn) {
+    const id = Number(cancelChargeBtn.dataset.profCancelCharge);
+    if (!window.confirm('Remover esta cobrança em aberto?')) return;
+    await withLoading(cancelChargeBtn, async () => {
+      try {
+        await api(`/api/membership-charges/${id}`, { method: 'DELETE' });
+        showToast('Cobrança removida.');
+        if (state.selectedProfileId) await openProfile(state.selectedProfileId);
+        await Promise.all([loadMembers(), loadDashboard()]).catch(() => {});
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
+  const cancelDebtBtn = e.target.closest('[data-prof-cancel-debt]');
+  if (cancelDebtBtn) {
+    const id = Number(cancelDebtBtn.dataset.profCancelDebt);
+    if (!window.confirm('Cancelar este saldo pendente (fiado) em aberto?')) return;
+    await withLoading(cancelDebtBtn, async () => {
+      try {
+        await api(`/api/debts/${id}/cancel`, { method: 'POST', body: JSON.stringify({}) });
+        showToast('Saldo pendente cancelado.');
+        if (state.selectedProfileId) await loadMemberOpenDebts(state.selectedProfileId);
+        await Promise.all([loadOpenDebts(), loadMembers(), loadDashboard()]).catch(() => {});
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
   const chargeBtn = e.target.closest('[data-prof-pay-charge]');
   if (chargeBtn) {
     const member = state.selectedProfileMember || state.allMembers.find((m) => Number(m.id) === Number(state.selectedProfileId));

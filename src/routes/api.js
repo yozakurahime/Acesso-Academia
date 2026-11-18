@@ -1472,6 +1472,23 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.delete(
+    '/membership-charges/:id',
+    requireReception,
+    handle(async (req, res) => {
+      const result = accessService.deleteMembershipCharge(req.params.id);
+      auditService.log({
+        actorUser: req.authUser || 'system',
+        actorRole: req.authRole || 'system',
+        action: 'membership_charge.delete',
+        entity: 'membership_charge',
+        entityId: result.id,
+        details: { member_id: result.member_id, due: result.due, amount: result.amount },
+      });
+      res.json(result);
+    }),
+  );
+
   router.put('/members/:id/enrollment', requireReception, handle(async (req, res) => {
     res.json(gymService.saveEnrollment(req.params.id, req.body));
   }));
