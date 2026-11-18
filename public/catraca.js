@@ -144,11 +144,11 @@ function render(state, event) {
   icon.textContent = symbol;
   preview.hidden = !event?.preview;
   statusLabel.textContent = state === 'idle' ? `${getTimeGreeting()} · ${statusText}` : statusText;
-  title.textContent = state === 'denied' && event?.firstName
-    ? `${event.firstName}, procure a recepção`
+  title.textContent = ['allowed', 'denied'].includes(state) && event?.firstName
+    ? event.firstName
     : titleText;
-  message.textContent = state === 'allowed' && event?.firstName
-    ? `Bom treino, ${event.firstName}!`
+  message.textContent = state === 'allowed'
+    ? 'Pode passar. Bom treino!'
     : state === 'denied' && event?.reason ? event.reason : messageText;
 
   // Foto do aluno (FaceID ou foto de perfil)
