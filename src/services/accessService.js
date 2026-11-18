@@ -610,6 +610,7 @@ export class AccessService {
     if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
       const deviceUserId = member.controlid_user_id || member.id;
       this.saveLocalPhoto(member.id, buffer);
+      this._saveProfilePhotoIfMissing(member.id, buffer);
       this.store.run(
         "UPDATE members SET controlid_user_id = COALESCE(controlid_user_id, ?), face_registered = 1, last_sync_error = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?",
         [deviceUserId, member.id],
@@ -636,6 +637,7 @@ export class AccessService {
     }
 
     this.saveLocalPhoto(member.id, buffer);
+    this._saveProfilePhotoIfMissing(member.id, buffer);
 
     this.store.run(
       "UPDATE members SET face_registered = 1, last_sync_error = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?",
@@ -693,13 +695,27 @@ export class AccessService {
     fs.writeFileSync(filePath, buffer);
   }
 
+  _saveProfilePhotoIfMissing(memberId, buffer) {
+    if (!buffer || buffer.length === 0 || buffer.length > 512 * 1024) return false;
+    const row = this.store.get('SELECT profile_photo FROM members WHERE id = ?', [memberId]);
+    if (!row || row.profile_photo) return false;
+    const dataUrl = `data:image/jpeg;base64,${buffer.toString('base64')}`;
+    this.store.run(
+      "UPDATE members SET profile_photo = ?, updated_at = datetime('now', 'localtime') WHERE id = ? AND (profile_photo IS NULL OR profile_photo = '')",
+      [dataUrl, memberId],
+    );
+    return true;
+  }
+
   async getMemberPhoto(memberId) {
     const member = this.getMember(memberId);
     if (!member) return null;
 
     const filePath = this.getPhotoPath(member.id, member);
     if (filePath && fs.existsSync(filePath)) {
-      return fs.readFileSync(filePath);
+      const buf = fs.readFileSync(filePath);
+      this._saveProfilePhotoIfMissing(member.id, buf);
+      return buf;
     }
 
     if (member.face_registered && member.controlid_user_id && typeof this.controlId?.getUserImage === 'function') {
@@ -710,11 +726,39 @@ export class AccessService {
       const buf = await this.controlId.getUserImage(member.controlid_user_id);
       if (buf) {
         this.saveLocalPhoto(member.id, buf);
+        this._saveProfilePhotoIfMissing(member.id, buf);
         return buf;
       }
     }
 
     return null;
+  }
+
+  async collectMissingMemberPhotos({ limit = 3 } = {}) {
+    if (!this._photoSyncAttempted) this._photoSyncAttempted = new Set();
+    const candidates = this.store.all(
+      `SELECT id FROM members
+       WHERE face_registered = 1
+         AND controlid_user_id IS NOT NULL
+         AND (profile_photo IS NULL OR profile_photo = '')
+       ORDER BY id ASC`,
+    );
+    const collected = [];
+    for (const row of candidates) {
+      if (collected.length >= limit) break;
+      if (this._photoSyncAttempted.has(row.id)) continue;
+      this._photoSyncAttempted.add(row.id);
+      try {
+        await this.getMemberPhoto(row.id);
+        const updated = this.store.get('SELECT profile_photo FROM members WHERE id = ?', [row.id]);
+        if (updated?.profile_photo) {
+          collected.push({ id: row.id, profile_photo: updated.profile_photo });
+        }
+      } catch {
+        // Ignora falha individual para continuar o lote
+      }
+    }
+    return collected;
   }
 
   getPlanEnrollment(memberId) {

@@ -334,6 +334,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(edgeHub.ingestControlIdLinks(req.body?.links || []));
   });
 
+  router.post('/edge/member-photos', requireEdgeToken, (req, res) => {
+    res.json(edgeHub.ingestMemberPhotos(req.body?.photos || []));
+  });
+
   router.post('/edge/commands/ack', requireEdgeToken, (req, res) => {
     res.json({ ok: edgeHub.ackCommand(req.body?.id) });
   });

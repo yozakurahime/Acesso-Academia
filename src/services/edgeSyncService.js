@@ -132,6 +132,28 @@ export class EdgeCloudHub {
     return { updated };
   }
 
+  ingestMemberPhotos(photos = []) {
+    this.markEdgeSeen();
+    if (!Array.isArray(photos) || photos.length === 0) return { updated: 0 };
+    let updated = 0;
+    this.store.transaction(() => {
+      for (const item of photos) {
+        const id = Number(item?.id);
+        const photo = typeof item?.profile_photo === 'string' ? item.profile_photo : '';
+        if (!Number.isInteger(id) || id <= 0) continue;
+        if (!photo.startsWith('data:image/') || photo.length > 750_000) continue;
+        const res = this.store.run(
+          `UPDATE members
+           SET profile_photo = ?, updated_at = datetime('now', 'localtime')
+           WHERE id = ? AND (profile_photo IS NULL OR profile_photo = '')`,
+          [photo, id],
+        );
+        if (res.changes > 0) updated += 1;
+      }
+    });
+    return { updated };
+  }
+
   enqueueCommand(type, payload = {}) {
     const cmd = {
       id: randomUUID(),
@@ -384,6 +406,24 @@ export class EdgeSyncClient {
     return { pushed: pending.length };
   }
 
+  async pushMissingMemberPhotos() {
+    if (!this.cloudUrl || !this.token) return { pushed: 0 };
+    if (typeof this.accessService?.collectMissingMemberPhotos !== 'function') return { pushed: 0 };
+    const photos = await this.accessService.collectMissingMemberPhotos({ limit: 3 });
+    if (photos.length === 0) return { pushed: 0 };
+
+    const res = await this.fetchFn(`${this.cloudUrl}/api/edge/member-photos`, {
+      method: 'POST',
+      headers: this._headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ photos }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      throw new Error(`Falha ao enviar fotos (${res.status})`);
+    }
+    return { pushed: photos.length };
+  }
+
   async syncOnce() {
     if (this._syncing) return;
     this._syncing = true;
@@ -393,6 +433,7 @@ export class EdgeSyncClient {
       }
       await this.pushPendingLogs();
       await this.pullSnapshot();
+      await this.pushMissingMemberPhotos().catch(() => {});
     } catch (err) {
       this.lastError = err.message;
     } finally {
