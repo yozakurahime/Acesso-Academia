@@ -1759,12 +1759,18 @@
               <div class="settings-card-head">
                 <div>
                   <h3>Backup do Banco de Dados</h3>
-                  <p class="muted">Gere e baixe cópias de segurança do banco de dados.</p>
+                  <p class="muted">Gere e baixe cópias de segurança (.sqlite + fotos + planilhas CSV) — automático 2x/dia (12:00 e 21:30).</p>
                 </div>
                 <div class="inline-actions">
                   <span id="backupLastAt" class="muted" style="font-size:12px;"></span>
                   <button type="button" id="btnCreateBackup" class="btn btn-primary btn-sm">Gerar backup agora</button>
                 </div>
+              </div>
+              <div class="inline-actions" style="margin-bottom:12px;flex-wrap:wrap;">
+                <a class="btn btn-secondary btn-sm" href="/api/backups/csv/alunos" download="alunos.csv">Baixar Alunos (CSV)</a>
+                <a class="btn btn-secondary btn-sm" href="/api/backups/csv/planos" download="planos_vencimentos.csv">Baixar Planos e Vencimentos (CSV)</a>
+                <a class="btn btn-secondary btn-sm" href="/api/backups/csv/cobrancas" download="cobrancas.csv">Baixar Cobranças (CSV)</a>
+                <a class="btn btn-secondary btn-sm" href="/api/backups/csv/recebimentos" download="recebimentos.csv">Baixar Recebimentos (CSV)</a>
               </div>
               <ul id="backupsList" class="simple-list"></ul>
               <hr style="margin:16px 0;border:0;border-top:1px solid var(--border);" />

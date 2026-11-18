@@ -774,6 +774,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(backupService.listBackups());
   }));
 
+  router.get('/backups/csv/:kind', requireAdmin, handle(async (req, res) => {
+    const exported = backupService.buildCsvExport(req.params.kind);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${exported.filename}"`);
+    res.send(exported.content);
+  }));
+
   router.get('/backups/:filename', requireAdmin, handle(async (req, res) => {
     const filePath = backupService.getBackupPath(req.params.filename);
     res.download(filePath);

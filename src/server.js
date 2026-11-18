@@ -216,7 +216,7 @@ async function start() {
     }
   });
 
-  cron.schedule('30 21 * * *', async () => {
+  const runScheduledBackup = async () => {
     try {
       const backup = backupService.createBackup();
       await googleDriveBackupService.syncBackup(backup).catch((err) => {
@@ -225,7 +225,9 @@ async function start() {
     } catch (err) {
       console.error('[BACKUP CRON]', err.message);
     }
-  });
+  };
+  cron.schedule('0 12 * * *', runScheduledBackup);
+  cron.schedule('30 21 * * *', runScheduledBackup);
   if (whatsappService.hasSavedSession()) {
     whatsappService.connect().catch((err) => {
       console.error('[WHATSAPP STARTUP]', err.message);
