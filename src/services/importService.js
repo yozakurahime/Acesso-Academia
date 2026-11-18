@@ -478,16 +478,27 @@ export class ImportService {
       const dueIso = parseBrDate(row[iDue]);
       const amount = parseBrlToCents(row[iAmount]);
       if (!name || !dueIso || !Number.isSafeInteger(amount) || amount <= 0) continue;
-      if (iStatus >= 0 && !/^(abert[oa]|em aberto|vencid[oa]|pendente|a vencer)$/i.test((row[iStatus] || '').trim())) {
+      if (iStatus >= 0 && !/^(abert[oa]|em aberto|vencid[oa]|pendente|a vencer|atrasad[oa]|em atraso|inadimplente)$/i.test((row[iStatus] || '').trim())) {
         summary.conflicts += 1;
         continue;
       }
       const cpf = iCpf >= 0 ? String(row[iCpf] || '').replace(/\D/g, '') : '';
-      const candidates = cpf ? (byCpf.get(cpf) || []) : (byName.get(name.toLowerCase()) || []);
+      let candidates = cpf ? (byCpf.get(cpf) || []) : [];
+      if (candidates.length === 0) {
+        candidates = byName.get(name.toLowerCase()) || [];
+      }
       if (candidates.length !== 1) { summary.conflicts += 1; continue; }
       const memberId = candidates[0].id;
-      const inserted = this.store.run('INSERT OR IGNORE INTO membership_charges (member_id, due, amount) VALUES (?, ?, ?)',
-        [memberId, dueIso, amount]);
+      const inserted = this.store.run(
+        "INSERT OR IGNORE INTO membership_charges (member_id, due, amount, source) VALUES (?, ?, ?, 'import')",
+        [memberId, dueIso, amount],
+      );
+      if (inserted.changes === 0) {
+        this.store.run(
+          "UPDATE membership_charges SET source = 'import' WHERE member_id = ? AND due = ? AND payment_id IS NULL",
+          [memberId, dueIso],
+        );
+      }
       summary.chargesUpdated += inserted.changes;
     }
   }

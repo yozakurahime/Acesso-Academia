@@ -1364,7 +1364,7 @@ export class AccessService {
     const generateUntil = addDays(today, 10);
 
     const expiredResult = this.store.run(
-      'DELETE FROM membership_charges WHERE payment_id IS NULL AND due < ?',
+      "DELETE FROM membership_charges WHERE payment_id IS NULL AND COALESCE(source, 'auto') = 'auto' AND due < ?",
       [expireBefore],
     );
 

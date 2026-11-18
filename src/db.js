@@ -793,6 +793,9 @@ export class DatabaseStore {
       edge_event_id: 'TEXT',
       edge_synced: 'INTEGER NOT NULL DEFAULT 0',
     });
+    this.ensureColumns('membership_charges', {
+      source: "TEXT NOT NULL DEFAULT 'auto'",
+    });
     this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_logs_edge_event_id ON access_logs(edge_event_id)');
 
     // Mantém os importadores e chamadas legadas de plano em compatibilidade.
