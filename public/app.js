@@ -4328,8 +4328,20 @@ async function loadWhatsappStatus() {
     payment: 'Pagamento',
     due_reminder: 'Vencimento',
     inactive: 'Retorno (ausente)',
+    welcome: 'Boas-vindas',
+    waitlist: 'Fila de espera',
+    birthday: 'Aniversário',
+    workout_review: 'Revisão de ficha',
+    winback: 'Reativação (Win-back)',
+    class_reminder: 'Lembrete de aula',
     test: 'Teste',
     manual: 'Manual',
+  };
+  const statusLabels = {
+    sent: 'Enviado',
+    queued: 'Na fila',
+    skipped: 'Ignorado',
+    failed: 'Erro',
   };
   document.getElementById('waLogsBody').innerHTML = logs.length
     ? logs
@@ -4337,8 +4349,8 @@ async function loadWhatsappStatus() {
           (l) => `<tr>
             <td>${escapeHtml(l.sent_at || l.created_at || '-')}</td>
             <td>${escapeHtml(l.member_name || l.phone)}</td>
-            <td>${escapeHtml(kindLabels[l.kind] || l.kind)}</td>
-            <td><span class="badge ${l.status === 'sent' ? 'badge-active' : l.status === 'queued' ? 'badge-pending' : 'badge-blocked'}" title="${escapeHtml(l.error || '')}">${escapeHtml(l.status)}</span></td>
+            <td><strong>${escapeHtml(kindLabels[l.kind] || l.kind)}</strong>${l.message ? `<div class="muted" style="font-size:11px;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(l.message)}">${escapeHtml(l.message)}</div>` : ''}</td>
+            <td><span class="badge ${l.status === 'sent' ? 'badge-active' : l.status === 'queued' ? 'badge-pending' : 'badge-blocked'}" title="${escapeHtml(l.error || '')}">${escapeHtml(statusLabels[l.status] || l.status)}</span></td>
           </tr>`,
         )
         .join('')

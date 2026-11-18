@@ -1123,6 +1123,14 @@ export class WhatsappService {
             `UPDATE whatsapp_logs SET status = 'sent', sent_at = datetime('now', 'localtime') WHERE id = ?`,
             [next.id],
           );
+          if (this.onBotMessage?.recordChatMessage) {
+            this.onBotMessage.recordChatMessage({
+              phone: next.phone,
+              direction: 'out',
+              senderType: 'bot',
+              body: next.message,
+            });
+          }
 
           sentInBatch += 1;
           if (sentInBatch % 8 === 0) {
