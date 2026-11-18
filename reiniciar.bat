@@ -11,14 +11,7 @@ if exist ".env" (
 
 echo Reiniciando Sistema Academia Oxigenio - porta %PORT%...
 
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R ":%PORT% .*LISTENING"') do (
-  if not "%%P"=="0" (
-    echo Encerrando servidor anterior PID %%P...
-    taskkill /PID %%P /T /F >nul 2>&1
-  )
-)
-
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -like '*edge-runner.js*' -or $_.CommandLine -like '*src/server.js*' -or $_.CommandLine -like '*src\\server.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "$p = '%PORT%'; $pids = @(); try { $pids += (Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess) } catch {}; Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { ($pids -contains $_.ProcessId) -or $_.CommandLine -like '*edge-runner.js*' -or $_.CommandLine -like '*src/server.js*' -or $_.CommandLine -like '*src\server.js*' } | ForEach-Object { Write-Host ('Encerrando servidor anterior PID ' + $_.ProcessId); Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='cloudflared.exe'\" | Where-Object { $_.CommandLine -like '*academia-oxigenio*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 timeout /t 2 /nobreak >nul
