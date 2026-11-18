@@ -51,11 +51,11 @@ export class ReceiptService {
   }
 
   async analyzeWithGemini({ base64Data, mimeType, settings = this.store.getSettings() }) {
-    const apiKey = String(settings.gemini_api_key || '').trim();
+    const apiKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').replace(/^["']+|["']+$/g, '').trim();
     if (!apiKey) {
       throw new Error('Chave API do Gemini não configurada. Informe em Configurações → WhatsApp.');
     }
-    const model = String(settings.gemini_model || 'gemini-2.5-flash').trim();
+    const model = String(settings.gemini_model || 'gemini-3.8-flash').trim();
     const cleanBase64 = String(base64Data || '').replace(/^data:[^;]+;base64,/, '');
     if (!cleanBase64) throw new Error('Arquivo do comprovante vazio.');
 

@@ -347,7 +347,7 @@ export class WhatsappBotService {
     const rawKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
     const apiKey = rawKey.replace(/^["']+|["']+$/g, '').trim();
     if (!apiKey || !base64Data) return null;
-    const model = String(settings.gemini_model || 'gemini-2.5-flash').trim();
+    const model = String(settings.gemini_transcribe_model || 'gemini-3.5-transcribe').trim();
     try {
       const text = await this._callGemini({
         apiKey,
@@ -402,7 +402,7 @@ export class WhatsappBotService {
       };
     }
 
-    const model = String(settings.gemini_model || 'gemini-2.5-flash').trim();
+    const model = String(settings.gemini_model || 'gemini-3.8-flash').trim();
     const systemPrompt = this._buildSystemPrompt(normalized, pushName);
     const history = this._getHistory(normalized);
     const contents = [
