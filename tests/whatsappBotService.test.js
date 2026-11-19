@@ -265,4 +265,15 @@ test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros
   await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'Qual o telefone?' });
   const promptAfterNote = JSON.stringify(calls[calls.length - 1].contents);
   assert.doesNotMatch(promptAfterNote, /Combinado pagar sexta-feira/);
+
+  // Retomada automatica apos expiracao do bot_paused_until
+  const nowMs = Date.now();
+  bot2.pauseContact('5564944443333', 5000, nowMs);
+  assert.equal(bot2.isPaused('5564944443333', nowMs + 1000), true);
+  assert.equal(bot2.isPaused('5564944443333', nowMs + 6000), false);
+
+  // Respostas rapidas configuraveis
+  assert.ok(bot2.getQuickReplies().length >= 4);
+  const savedQr = bot2.saveQuickReplies([{ label: 'Teste', text: 'Mensagem teste' }]);
+  assert.deepEqual(savedQr, [{ label: 'Teste', text: 'Mensagem teste' }]);
 });

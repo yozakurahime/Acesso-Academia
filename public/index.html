@@ -584,11 +584,17 @@
               <button type="button" id="btnSaveChatNote" class="btn btn-secondary btn-sm">Salvar nota</button>
             </div>
             <div id="chatMessages" class="chat-messages"></div>
-            <div id="chatQuickReplies" class="inline-actions hidden" style="padding:6px 12px 0;gap:6px;flex-wrap:wrap;">
-              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Olá! Tudo bem? Como posso te ajudar hoje?">Boas-vindas</button>
-              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Para matrícula na Musculação, você pode fazer direto por aqui: https://sistema.academiaoxigenio.com/matricula.html">Link Matrícula</button>
-              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Para pagar sua mensalidade pelo WhatsApp, é só me enviar *quero pagar* que o sistema gera o Pix ou link de pagamento!">Pagamento MP</button>
-              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Já verifiquei por aqui! Se precisar de mais alguma coisa, é só chamar.">Encerrar</button>
+            <div id="chatQuickReplies" class="inline-actions hidden" style="padding:6px 12px 0;gap:6px;flex-wrap:wrap;"></div>
+            <div id="chatQuickRepliesEditor" class="hidden" style="padding:8px 12px;margin:6px 12px 0;border-radius:8px;background:rgba(148,163,184,0.12);font-size:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <strong>Editar respostas rápidas</strong>
+                <button type="button" id="btnAddQuickReplyRow" class="btn btn-secondary btn-sm">+ Atalho</button>
+              </div>
+              <div id="chatQuickRepliesRows" style="display:flex;flex-direction:column;gap:6px;"></div>
+              <div class="inline-actions" style="margin-top:8px;justify-content:flex-end;gap:6px;">
+                <button type="button" id="btnCancelQuickReplies" class="btn btn-secondary btn-sm">Fechar</button>
+                <button type="button" id="btnSaveQuickReplies" class="btn btn-primary btn-sm">Salvar atalhos</button>
+              </div>
             </div>
             <form id="chatReplyForm" class="chat-reply-form hidden">
               <input id="chatReplyInput" type="text" placeholder="Digite sua resposta para o WhatsApp..." autocomplete="off" required />

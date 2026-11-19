@@ -99,8 +99,15 @@ export class WhatsappBotService {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return false;
     try {
-      const row = this.store.get('SELECT bot_paused FROM whatsapp_chats WHERE phone = ?', [normalized]);
-      if (Number(row?.bot_paused) === 1) return true;
+      const row = this.store.get('SELECT bot_paused, bot_paused_until FROM whatsapp_chats WHERE phone = ?', [normalized]);
+      if (Number(row?.bot_paused) === 1) {
+        const dbUntil = Number(row?.bot_paused_until || 0);
+        if (dbUntil > 0 && nowMs >= dbUntil) {
+          this.resumeContact(normalized);
+          return false;
+        }
+        return true;
+      }
     } catch {
       // ignore if table not present
     }
@@ -116,16 +123,17 @@ export class WhatsappBotService {
   pauseContact(phone, durationMs = this.humanPauseMs, nowMs = Date.now()) {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return;
-    this._pausedUntil.set(normalized, nowMs + Math.max(1000, Number(durationMs) || this.humanPauseMs));
+    const until = nowMs + Math.max(1000, Number(durationMs) || this.humanPauseMs);
+    this._pausedUntil.set(normalized, until);
     if (this._pausedUntil.size > 1000) {
       this._pausedUntil.delete(this._pausedUntil.keys().next().value);
     }
     try {
       this.store.run(
-        `INSERT INTO whatsapp_chats (phone, bot_paused, last_message_at)
-         VALUES (?, 1, datetime('now', 'localtime'))
-         ON CONFLICT(phone) DO UPDATE SET bot_paused = 1`,
-        [normalized],
+        `INSERT INTO whatsapp_chats (phone, bot_paused, bot_paused_until, last_message_at)
+         VALUES (?, 1, ?, datetime('now', 'localtime'))
+         ON CONFLICT(phone) DO UPDATE SET bot_paused = 1, bot_paused_until = excluded.bot_paused_until`,
+        [normalized, until],
       );
     } catch {}
   }
@@ -136,7 +144,7 @@ export class WhatsappBotService {
     this._pausedUntil.delete(normalized);
     try {
       this.store.run(
-        'UPDATE whatsapp_chats SET bot_paused = 0, needs_human = 0, handoff_summary = NULL WHERE phone = ?',
+        'UPDATE whatsapp_chats SET bot_paused = 0, bot_paused_until = NULL, needs_human = 0, handoff_summary = NULL WHERE phone = ?',
         [normalized],
       );
     } catch {}
@@ -244,6 +252,43 @@ export class WhatsappBotService {
       [normalized, cleanNote],
     );
     return { phone: normalized, internal_note: cleanNote };
+  }
+
+  getQuickReplies() {
+    const defaults = [
+      { label: 'Boas-vindas', text: 'Olá! Tudo bem? Como posso te ajudar hoje?' },
+      { label: 'Link Matrícula', text: 'Para matrícula na Musculação, você pode fazer direto por aqui: https://sistema.academiaoxigenio.com/matricula.html' },
+      { label: 'Pagamento MP', text: 'Para pagar sua mensalidade pelo WhatsApp, é só me enviar *quero pagar* que o sistema gera o Pix ou link de pagamento!' },
+      { label: 'Encerrar', text: 'Já verifiquei por aqui! Se precisar de mais alguma coisa, é só chamar.' },
+    ];
+    try {
+      const raw = String(this.store.getSettings?.().whatsapp_quick_replies || '').trim();
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) return defaults;
+      const clean = parsed
+        .map((item) => ({
+          label: String(item?.label || '').trim().slice(0, 40),
+          text: String(item?.text || '').trim().slice(0, 600),
+        }))
+        .filter((item) => item.label && item.text)
+        .slice(0, 12);
+      return clean.length ? clean : defaults;
+    } catch {
+      return defaults;
+    }
+  }
+
+  saveQuickReplies(items = []) {
+    const clean = (Array.isArray(items) ? items : [])
+      .map((item) => ({
+        label: String(item?.label || '').trim().slice(0, 40),
+        text: String(item?.text || '').trim().slice(0, 600),
+      }))
+      .filter((item) => item.label && item.text)
+      .slice(0, 12);
+    this.store.updateSettings({ whatsapp_quick_replies: JSON.stringify(clean) });
+    return this.getQuickReplies();
   }
 
   getChatMessages(phone, { markRead = true } = {}) {

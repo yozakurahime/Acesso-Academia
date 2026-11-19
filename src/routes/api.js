@@ -1787,6 +1787,20 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.get('/whatsapp/quick-replies', requireReception, (_req, res) => {
+    if (!whatsappBotService) return res.json({ items: [] });
+    res.json({ items: whatsappBotService.getQuickReplies() });
+  });
+
+  router.post(
+    '/whatsapp/quick-replies',
+    requireReception,
+    handle(async (req, res) => {
+      if (!whatsappBotService) throw new Error('Bot WhatsApp não inicializado.');
+      res.json({ items: whatsappBotService.saveQuickReplies(req.body?.items) });
+    }),
+  );
+
   // Comprovantes Pix / IA (Gemini)
   router.get('/receipts', requireReception, (req, res) => {
     if (!receiptService) return res.json([]);

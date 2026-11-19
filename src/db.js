@@ -536,6 +536,7 @@ export class DatabaseStore {
         contact_name TEXT,
         member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
         bot_paused INTEGER NOT NULL DEFAULT 0,
+        bot_paused_until INTEGER,
         needs_human INTEGER NOT NULL DEFAULT 0,
         handoff_summary TEXT,
         internal_note TEXT,
@@ -830,6 +831,7 @@ export class DatabaseStore {
       source: "TEXT NOT NULL DEFAULT 'auto'",
     });
     this.ensureColumns('whatsapp_chats', {
+      bot_paused_until: 'INTEGER',
       handoff_summary: 'TEXT',
       internal_note: 'TEXT',
     });

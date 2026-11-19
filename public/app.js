@@ -7846,6 +7846,9 @@ function renderChatList() {
 
 async function openChat(phone) {
   if (!phone) return;
+  if (!quickRepliesCache.length) {
+    loadQuickReplies();
+  }
   activeChatPhone = phone;
   renderChatList();
   const data = await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/messages`);
@@ -7988,12 +7991,96 @@ document.getElementById('chatFilterBar')?.addEventListener('click', (e) => {
   });
   renderChatList();
 });
+let quickRepliesCache = [];
+
+function renderQuickReplies() {
+  const container = document.getElementById('chatQuickReplies');
+  if (!container) return;
+  const buttons = quickRepliesCache.map((item) => (
+    `<button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="${escapeHtml(item.text)}">${escapeHtml(item.label)}</button>`
+  )).join('');
+  container.innerHTML = `${buttons}<button type="button" id="btnEditQuickReplies" class="btn btn-secondary btn-sm" title="Editar respostas rápidas">Editar atalhos</button>`;
+}
+
+function renderQuickRepliesEditor() {
+  const rowsEl = document.getElementById('chatQuickRepliesRows');
+  if (!rowsEl) return;
+  rowsEl.innerHTML = quickRepliesCache.map((item, idx) => `
+    <div class="quick-reply-edit-row" data-idx="${idx}" style="display:flex;gap:6px;align-items:center;">
+      <input type="text" class="qr-label-input" value="${escapeHtml(item.label)}" placeholder="Nome do botão" maxlength="40" style="width:140px;padding:4px 8px;font-size:12px;" />
+      <input type="text" class="qr-text-input" value="${escapeHtml(item.text)}" placeholder="Texto da mensagem..." maxlength="600" style="flex:1;padding:4px 8px;font-size:12px;" />
+      <button type="button" class="btn btn-secondary btn-sm qr-remove-btn" title="Remover">×</button>
+    </div>
+  `).join('');
+}
+
+async function loadQuickReplies() {
+  try {
+    const data = await api('/api/whatsapp/quick-replies');
+    quickRepliesCache = Array.isArray(data.items) ? data.items : [];
+    renderQuickReplies();
+  } catch {
+    // fallback silencioso
+  }
+}
+
 document.getElementById('chatQuickReplies')?.addEventListener('click', (e) => {
+  if (e.target.closest('#btnEditQuickReplies')) {
+    const editor = document.getElementById('chatQuickRepliesEditor');
+    if (editor) {
+      renderQuickRepliesEditor();
+      editor.classList.toggle('hidden');
+    }
+    return;
+  }
   const btn = e.target.closest('.chat-quick-btn');
   const input = document.getElementById('chatReplyInput');
   if (!btn || !input) return;
   input.value = btn.dataset.quickText || '';
   input.focus();
+});
+
+document.getElementById('chatQuickRepliesRows')?.addEventListener('click', (e) => {
+  if (!e.target.closest('.qr-remove-btn')) return;
+  e.target.closest('.quick-reply-edit-row')?.remove();
+});
+
+document.getElementById('btnAddQuickReplyRow')?.addEventListener('click', () => {
+  const rowsEl = document.getElementById('chatQuickRepliesRows');
+  if (!rowsEl) return;
+  const row = document.createElement('div');
+  row.className = 'quick-reply-edit-row';
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.innerHTML = `
+    <input type="text" class="qr-label-input" value="" placeholder="Nome do botão" maxlength="40" style="width:140px;padding:4px 8px;font-size:12px;" />
+    <input type="text" class="qr-text-input" value="" placeholder="Texto da mensagem..." maxlength="600" style="flex:1;padding:4px 8px;font-size:12px;" />
+    <button type="button" class="btn btn-secondary btn-sm qr-remove-btn" title="Remover">×</button>
+  `;
+  rowsEl.appendChild(row);
+});
+
+document.getElementById('btnCancelQuickReplies')?.addEventListener('click', () => {
+  document.getElementById('chatQuickRepliesEditor')?.classList.add('hidden');
+});
+
+document.getElementById('btnSaveQuickReplies')?.addEventListener('click', async () => {
+  const rows = Array.from(document.querySelectorAll('#chatQuickRepliesRows .quick-reply-edit-row'));
+  const items = rows.map((row) => ({
+    label: String(row.querySelector('.qr-label-input')?.value || '').trim(),
+    text: String(row.querySelector('.qr-text-input')?.value || '').trim(),
+  })).filter((item) => item.label && item.text);
+  try {
+    const data = await api('/api/whatsapp/quick-replies', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+    quickRepliesCache = data.items || [];
+    renderQuickReplies();
+    document.getElementById('chatQuickRepliesEditor')?.classList.add('hidden');
+    showToast('Respostas rápidas salvas.');
+  } catch (err) {
+    showToast(err.message, true);
+  }
 });
 document.getElementById('btnSaveChatNote')?.addEventListener('click', async () => {
   if (!activeChatPhone) return;
