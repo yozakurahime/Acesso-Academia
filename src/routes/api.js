@@ -1065,6 +1065,33 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   // Callback do Modo Online da Control iD quando reconhece uma face
   const handleControlIdIdentified = handle(async (req, res) => {
+    const settings = store.getSettings();
+    const callbackToken = String(process.env.CONTROLID_CALLBACK_TOKEN || settings.controlid_callback_token || '').trim();
+    const rawIp = String(req.socket?.remoteAddress || req.ip || '').replace(/^::ffff:/, '').trim();
+    if (callbackToken) {
+      const provided = String(
+        req.query?.token
+          || req.get('x-controlid-token')
+          || req.get('authorization')?.replace(/^Bearer\s+/i, '')
+          || '',
+      ).trim();
+      if (!equalSecret(provided, callbackToken)) {
+        return res.status(401).json({ error: 'Token de callback Control iD inválido.' });
+      }
+    } else {
+      const isPrivateOrLocal = rawIp === '127.0.0.1'
+        || rawIp === '::1'
+        || rawIp.startsWith('10.')
+        || rawIp.startsWith('192.168.')
+        || /^172\.(1[6-9]|2\d|3[01])\./.test(rawIp);
+      const knownReader = !isPrivateOrLocal && Boolean(
+        store.get('SELECT id FROM devices WHERE ip = ? AND active = 1', [rawIp]),
+      );
+      if (!isPrivateOrLocal && !knownReader) {
+        return res.status(403).json({ error: 'Origem não autorizada para callback Control iD.' });
+      }
+    }
+
     const rawUserId = req.body?.user_id ?? req.query?.user_id;
     const userId = Number(rawUserId);
     const portalId = Number(req.body?.portal_id ?? req.query?.portal_id ?? 1);
@@ -2005,17 +2032,18 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       if (!gatewayService) return res.json({ ignored: true });
       const settings = store.getSettings();
       const secret = String(process.env.STONE_WEBHOOK_SECRET || settings.stone_webhook_secret || '').trim();
-      if (secret) {
-        const provided = String(
-          req.get('x-webhook-secret')
-            || req.get('x-stone-secret')
-            || req.get('authorization')?.replace(/^Bearer\s+/i, '')
-            || req.query?.token
-            || '',
-        ).trim();
-        if (!equalSecret(provided, secret)) {
-          return res.status(401).json({ error: 'Segredo de webhook Stone inválido.' });
-        }
+      if (!secret) {
+        return res.status(503).json({ error: 'Segredo de webhook Stone não configurado.' });
+      }
+      const provided = String(
+        req.get('x-webhook-secret')
+          || req.get('x-stone-secret')
+          || req.get('authorization')?.replace(/^Bearer\s+/i, '')
+          || req.query?.token
+          || '',
+      ).trim();
+      if (!equalSecret(provided, secret)) {
+        return res.status(401).json({ error: 'Segredo de webhook Stone inválido.' });
       }
       res.json(await gatewayService.handleStoneWebhook(req.body || {}));
     }),

@@ -42,6 +42,7 @@ export class GatewayService {
     this.fetch = fetchFn;
     this.checkoutRequests = new Map();
     this.pixRequests = new Map();
+    this.settleLocks = new Map();
   }
 
   /**
@@ -487,7 +488,21 @@ export class GatewayService {
     return await this.settleCharge(charge, { paymentId: payment.id, method, notes: 'Pagamento online (Mercado Pago)' });
   }
 
-  async settleCharge(charge, { paymentId = charge.external_id, method = 'pix', notes = 'Pix automático (Mercado Pago)' } = {}) {
+  async settleCharge(charge, opts = {}) {
+    const lockKey = Number(charge?.id);
+    if (Number.isFinite(lockKey) && this.settleLocks.has(lockKey)) {
+      return this.settleLocks.get(lockKey);
+    }
+    const task = this._settleChargeOnce(charge, opts);
+    if (Number.isFinite(lockKey)) this.settleLocks.set(lockKey, task);
+    try {
+      return await task;
+    } finally {
+      if (Number.isFinite(lockKey)) this.settleLocks.delete(lockKey);
+    }
+  }
+
+  async _settleChargeOnce(charge, { paymentId = charge.external_id, method = 'pix', notes = 'Pix automático (Mercado Pago)' } = {}) {
     const fresh = this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [charge.id]);
     if (!fresh || fresh.status === 'paid') {
       return { alreadyPaid: true, charge: fresh || charge };
@@ -1199,6 +1214,10 @@ export class GatewayService {
 
     if (eventType === 'charge.paid' || eventType === 'order.paid' || String(data?.status || '').toLowerCase() === 'paid') {
       if (order.status === 'paid') return { paid: true, alreadyPaid: true };
+      const payloadAmount = data?.amount ?? data?.charges?.[0]?.amount ?? null;
+      if (payloadAmount != null && Number(payloadAmount) !== Number(order.amount_cents)) {
+        return { ignored: true, reason: 'amount_mismatch' };
+      }
       const payMethodRaw = String(data?.payment_method || order.payment_method || 'credit').toLowerCase();
       const method = payMethodRaw.includes('debit') ? 'debit' : payMethodRaw.includes('pix') ? 'pix' : 'credit';
       return this._markPointOrderPaid(order, method, `stone_order:${order.order_id}`, `Stone POS (${order.terminal_id})`);

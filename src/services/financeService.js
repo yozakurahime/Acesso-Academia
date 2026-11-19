@@ -159,6 +159,9 @@ export class FinanceService {
     if (!existing) {
       throw httpError('Despesa não encontrada.', 404);
     }
+    if (existing.status === 'paid') {
+      throw httpError('Não é possível excluir uma despesa já paga.', 409);
+    }
     this.store.run('DELETE FROM expenses WHERE id = ?', [id]);
     return { deleted: true, id: existing.id };
   }
