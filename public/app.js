@@ -7809,6 +7809,28 @@ function updateChatNavBadge(data) {
 
 let chatFilterMode = 'all';
 
+function formatChatDateDivider(rawDate) {
+  const iso = String(rawDate || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const today = new Intl.DateTimeFormat('sv-SE').format(new Date());
+  if (iso === today) return 'Hoje';
+  const yesterday = new Intl.DateTimeFormat('sv-SE').format(new Date(Date.now() - 86400000));
+  if (iso === yesterday) return 'Ontem';
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+}
+
+function formatChatItemTime(rawDate) {
+  const s = String(rawDate || '');
+  if (s.length < 16) return '';
+  const today = new Intl.DateTimeFormat('sv-SE').format(new Date());
+  if (s.slice(0, 10) === today) return s.slice(11, 16);
+  return `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+}
+
+function formatWhatsappTextHtml(raw) {
+  return escapeHtml(raw).replace(/\*([^\*\n]+)\*/g, '<strong>$1</strong>');
+}
+
 function renderChatList() {
   const listEl = document.getElementById('chatList');
   if (!listEl) return;
@@ -7822,23 +7844,32 @@ function renderChatList() {
   });
 
   if (filtered.length === 0) {
-    listEl.innerHTML = '<div class="muted" style="padding:12px;">Nenhuma conversa registrada ainda.</div>';
+    listEl.innerHTML = '<div class="muted" style="padding:12px;">Nenhuma conversa encontrada.</div>';
     return;
   }
 
   listEl.innerHTML = filtered.map((c) => {
     const title = c.member_name || c.contact_name || c.phone;
+    const initials = memberInitials(title);
     const activeClass = c.phone === activeChatPhone ? ' active' : '';
     const humanTag = Number(c.needs_human) === 1
       ? '<span class="badge badge-pending">Atendente</span>'
       : (Number(c.unread_count) > 0 ? `<span class="badge badge-active">${Number(c.unread_count)}</span>` : '');
+    const noteBadge = c.internal_note ? '<span title="Possui nota interna" style="font-size:11px;opacity:0.75;">📝</span>' : '';
+    const timeStr = formatChatItemTime(c.last_message_at);
     return `
       <button type="button" class="chat-item${activeClass}" data-chat-phone="${escapeHtml(c.phone)}">
-        <div class="chat-item-top">
-          <strong>${escapeHtml(title)}</strong>
-          ${humanTag}
+        <div class="chat-item-avatar">${escapeHtml(initials)}</div>
+        <div class="chat-item-body">
+          <div class="chat-item-top">
+            <strong class="chat-item-name">${escapeHtml(title)}</strong>
+            <span class="chat-item-time">${escapeHtml(timeStr)}</span>
+          </div>
+          <div class="chat-item-bottom">
+            <div class="chat-item-preview">${escapeHtml(c.last_message || '')}</div>
+            ${noteBadge}${humanTag}
+          </div>
         </div>
-        <div class="chat-item-preview">${escapeHtml(c.last_message || '')}</div>
       </button>
     `;
   }).join('');
@@ -7864,9 +7895,12 @@ async function openChat(phone) {
       ? '<button type="button" id="btnChatMemberBilling" class="btn btn-secondary btn-sm">Cobrar / Plano</button>'
       : '';
     headerEl.innerHTML = `
-      <div>
-        <strong>${escapeHtml(title)}</strong>
-        <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}${escapeHtml(validLabel)}</div>
+      <div class="chat-header-info">
+        <div class="chat-item-avatar">${escapeHtml(memberInitials(title))}</div>
+        <div>
+          <strong>${escapeHtml(title)}</strong>
+          <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}${escapeHtml(validLabel)}</div>
+        </div>
       </div>
       <div class="inline-actions">
         ${memberBtnHtml}
@@ -7917,12 +7951,17 @@ async function openChat(phone) {
 
   const msgsEl = document.getElementById('chatMessages');
   if (msgsEl) {
+    let lastDateKey = '';
     msgsEl.innerHTML = (data.messages || []).map((m) => {
       const cls = m.direction === 'in' ? 'in' : 'out';
       const roleCls = m.direction === 'out' ? (m.sender_type === 'bot' ? 'bot' : 'human') : '';
       const who = m.sender_type === 'bot' ? 'Bot IA' : (m.sender_type === 'human' ? 'Atendente' : 'Cliente');
       const rawDate = String(m.created_at || '');
-      const time = rawDate.length >= 16 ? `${rawDate.slice(8, 10)}/${rawDate.slice(5, 7)} ${rawDate.slice(11, 16)}` : rawDate;
+      const dateKey = rawDate.slice(0, 10);
+      const dividerLabel = dateKey && dateKey !== lastDateKey ? formatChatDateDivider(rawDate) : '';
+      if (dateKey) lastDateKey = dateKey;
+      const dividerHtml = dividerLabel ? `<div class="chat-date-divider">${escapeHtml(dividerLabel)}</div>` : '';
+      const time = rawDate.length >= 16 ? rawDate.slice(11, 16) : rawDate;
       let mediaHtml = '';
       if (m.media_url) {
         if (m.media_type === 'image') {
@@ -7934,8 +7973,8 @@ async function openChat(phone) {
         }
       }
       const cleanText = String(m.body || '').replace(/^\[ts=\d+\]\s*/i, '');
-      const bodyHtml = cleanText ? `<div>${escapeHtml(cleanText)}</div>` : '';
-      return `
+      const bodyHtml = cleanText ? `<div>${formatWhatsappTextHtml(cleanText)}</div>` : '';
+      return `${dividerHtml}
         <div class="chat-bubble ${cls} ${roleCls}">
           ${mediaHtml}${bodyHtml}
           <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>

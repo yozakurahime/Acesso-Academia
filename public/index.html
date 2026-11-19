@@ -578,14 +578,14 @@
             <div id="chatHeader" class="chat-header">
               <div class="muted">Selecione uma conversa ao lado para visualizar e responder.</div>
             </div>
-            <div id="chatHandoffBanner" class="hidden" style="padding:8px 12px;margin:8px 12px 0;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);font-size:13px;"></div>
-            <div id="chatNoteBar" class="hidden" style="display:flex;gap:6px;padding:6px 12px 0;align-items:center;">
-              <input id="chatNoteInput" type="text" placeholder="Nota interna da recepção (não é enviada ao cliente)..." maxlength="500" style="flex:1;font-size:12px;padding:6px 10px;" />
+            <div id="chatHandoffBanner" class="chat-handoff-banner hidden"></div>
+            <div id="chatNoteBar" class="chat-note-bar hidden">
+              <input id="chatNoteInput" type="text" placeholder="Nota interna da recepção (não é enviada ao cliente)..." maxlength="500" />
               <button type="button" id="btnSaveChatNote" class="btn btn-secondary btn-sm">Salvar nota</button>
             </div>
             <div id="chatMessages" class="chat-messages"></div>
-            <div id="chatQuickReplies" class="inline-actions hidden" style="padding:6px 12px 0;gap:6px;flex-wrap:wrap;"></div>
-            <div id="chatQuickRepliesEditor" class="hidden" style="padding:8px 12px;margin:6px 12px 0;border-radius:8px;background:rgba(148,163,184,0.12);font-size:12px;">
+            <div id="chatQuickReplies" class="inline-actions chat-quick-replies hidden"></div>
+            <div id="chatQuickRepliesEditor" class="chat-quick-editor hidden">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
                 <strong>Editar respostas rápidas</strong>
                 <button type="button" id="btnAddQuickReplyRow" class="btn btn-secondary btn-sm">+ Atalho</button>
