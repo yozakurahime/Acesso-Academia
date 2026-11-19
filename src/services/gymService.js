@@ -554,8 +554,7 @@ export class GymService {
   }
 
   // --- Caixa Completo ---
-  getCurrentCashSession() {
-    const session = this.store.get("SELECT * FROM cash_sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1");
+  _buildCashSessionSummary(session) {
     if (!session) return null;
 
     const movements = this.store.all(
@@ -578,10 +577,21 @@ export class GymService {
       ...session,
       total_in_cents: totalIn,
       total_out_cents: totalOut,
-      expected_cents: drawerBalance,
+      expected_cents: session.status === 'closed' && session.expected_cents != null ? session.expected_cents : drawerBalance,
       totals_by_method: [...totalsByMethod].map(([method, amount_cents]) => ({ method, amount_cents })),
       movements,
     };
+  }
+
+  getCurrentCashSession() {
+    const session = this.store.get("SELECT * FROM cash_sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1");
+    return this._buildCashSessionSummary(session);
+  }
+
+  getCashSessionDetails(sessionId) {
+    const session = this.store.get('SELECT * FROM cash_sessions WHERE id = ?', [Number(sessionId)]);
+    if (!session) throw new Error('Turno de caixa não encontrado.');
+    return this._buildCashSessionSummary(session);
   }
 
   openCashSession({ staff_id = null, opening_cents = 0, notes = null }) {

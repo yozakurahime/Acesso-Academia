@@ -1620,6 +1620,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   // Caixa Completo
   router.get('/cash/current', requireReception, (_req, res) => res.json(gymService.getCurrentCashSession()));
   router.get('/cash/history', requireReception, (_req, res) => res.json(gymService.listCashHistory()));
+  router.get(
+    '/cash/:id',
+    requireReception,
+    handle((req, res) => res.json(gymService.getCashSessionDetails(req.params.id))),
+  );
   router.post(
     '/cash/open',
     requireReception,

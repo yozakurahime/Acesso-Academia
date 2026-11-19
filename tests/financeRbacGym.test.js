@@ -317,3 +317,22 @@ test('BackupService: inclui pasta photos no backup sob demanda e limpa .photos n
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test('GymService.getCashSessionDetails retorna entradas, saidas e movimentacoes de turno encerrado', async () => {
+  const store = await DatabaseStore.create(null);
+  const gym = new GymService(store);
+  const opened = gym.openCashSession({ opening_cents: 5000, notes: 'Manha' });
+  gym.addManualCashMovement({ type: 'in', amount_cents: 3000, method: 'cash', description: 'Troco' });
+  gym.addManualCashMovement({ type: 'out', amount_cents: 1500, method: 'cash', description: 'Agua' });
+  gym.recordCashMovementIfOpen({ type: 'payment', amount_cents: 12000, method: 'pix', description: 'Mensalidade' });
+  const closed = gym.closeCashSession({ closing_cents: 6500, notes: 'Conferido ok' });
+
+  const detail = gym.getCashSessionDetails(closed.id);
+  assert.equal(detail.status, 'closed');
+  assert.equal(detail.opening_cents, 5000);
+  assert.equal(detail.total_in_cents, 15000);
+  assert.equal(detail.total_out_cents, 1500);
+  assert.equal(detail.expected_cents, 6500);
+  assert.equal(detail.movements.length, 3);
+  assert.throws(() => gym.getCashSessionDetails(999999), /não encontrado/);
+});

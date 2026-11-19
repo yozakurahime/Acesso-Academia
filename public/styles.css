@@ -2629,6 +2629,19 @@ input.is-cpf-error {
     grid-template-columns: 1fr;
   }
 }
+.cash-history-row {
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+.cash-history-row:hover,
+.cash-history-row.active {
+  background: rgba(245, 158, 11, 0.1);
+}
+.cash-history-detail {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+}
 .cash-methods-grid {
   display: flex;
   flex-wrap: wrap;

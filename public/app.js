@@ -3139,6 +3139,60 @@ async function resumeBillingAfterOpening() {
 
 document.getElementById('btnOpenCashForPayment').addEventListener('click', openCashFromBilling);
 
+const CASH_MOVEMENT_TYPE_META = {
+  in: { label: 'Suprimento', cls: 'badge-active', sign: '+' },
+  out: { label: 'Sangria', cls: 'badge-blocked', sign: '-' },
+  payment: { label: 'Mensalidade', cls: 'badge-pending', sign: '+' },
+  sale: { label: 'Venda', cls: 'badge-neutral', sign: '+' },
+};
+
+function renderCashMovementRows(movements, emptyText) {
+  if (!movements.length) {
+    return `<tr><td colspan="5" class="muted">${escapeHtml(emptyText)}</td></tr>`;
+  }
+  return movements
+    .map((m) => {
+      const meta = CASH_MOVEMENT_TYPE_META[m.type] || { label: m.type, cls: 'badge-neutral', sign: '' };
+      return `
+        <tr>
+          <td>${escapeHtml(fmtDateTime(m.created_at))}</td>
+          <td><span class="badge ${meta.cls}">${escapeHtml(meta.label)}</span></td>
+          <td>${escapeHtml(methodName(m.method))}</td>
+          <td>${escapeHtml(m.description)}</td>
+          <td class="${m.type === 'out' ? 'text-danger' : ''}">${meta.sign}${fmtMoney(m.amount_cents)}</td>
+        </tr>`;
+    })
+    .join('');
+}
+
+function exportCashSessionCsv(session) {
+  if (!session || !Array.isArray(session.movements) || !session.movements.length) {
+    showToast('Não há movimentações neste turno para exportar.', true);
+    return;
+  }
+  const csvEscape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [
+    ['Data/Hora', 'Tipo', 'Forma', 'Descricao', 'Valor (R$)'],
+    ...session.movements.map((m) => [
+      fmtDateTime(m.created_at),
+      CASH_MOVEMENT_TYPE_META[m.type]?.label || m.type,
+      methodName(m.method),
+      m.description || '',
+      ((m.type === 'out' ? -1 : 1) * Number(m.amount_cents || 0) / 100).toFixed(2).replace('.', ','),
+    ]),
+  ];
+  const csv = '\uFEFF' + rows.map((r) => r.map(csvEscape).join(';')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `caixa-turno-${session.id || 'atual'}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function renderCashMovements() {
   const session = state.cashSession;
   const body = document.getElementById('cashMovementsBody');
@@ -3162,28 +3216,7 @@ function renderCashMovements() {
       : 'Nenhum lançamento neste filtro';
   }
 
-  const typeMeta = {
-    in: { label: 'Suprimento', cls: 'badge-active', sign: '+' },
-    out: { label: 'Sangria', cls: 'badge-blocked', sign: '-' },
-    payment: { label: 'Mensalidade', cls: 'badge-pending', sign: '+' },
-    sale: { label: 'Venda', cls: 'badge-neutral', sign: '+' },
-  };
-
-  body.innerHTML = filtered.length
-    ? filtered
-        .map((m) => {
-          const meta = typeMeta[m.type] || { label: m.type, cls: 'badge-neutral', sign: '' };
-          return `
-            <tr>
-              <td>${escapeHtml(fmtDateTime(m.created_at))}</td>
-              <td><span class="badge ${meta.cls}">${escapeHtml(meta.label)}</span></td>
-              <td>${escapeHtml(methodName(m.method))}</td>
-              <td>${escapeHtml(m.description)}</td>
-              <td class="${m.type === 'out' ? 'text-danger' : ''}">${meta.sign}${fmtMoney(m.amount_cents)}</td>
-            </tr>`;
-        })
-        .join('')
-    : '<tr><td colspan="5" class="muted">Nenhuma movimentação encontrada para este filtro.</td></tr>';
+  body.innerHTML = renderCashMovementRows(filtered, 'Nenhuma movimentação encontrada para este filtro.');
 }
 
 async function loadCurrentCash() {
@@ -3275,6 +3308,47 @@ async function loadCash() {
   await Promise.all([loadCurrentCash(), loadOnlineCash(), loadCashHistory()]);
 }
 
+let selectedClosedCashSession = null;
+
+async function openCashSessionDetail(sessionId) {
+  const panel = document.getElementById('cashHistoryDetailPanel');
+  if (!panel || !sessionId) return;
+  try {
+    const detail = await api(`/api/cash/${encodeURIComponent(sessionId)}`);
+    selectedClosedCashSession = detail;
+    document.querySelectorAll('.cash-history-row').forEach((row) => {
+      row.classList.toggle('active', Number(row.dataset.cashSessionId) === Number(sessionId));
+    });
+    document.getElementById('cashDetailTitle').textContent = `Turno #${detail.id} — ${detail.staff_name || 'Operador'}`;
+    const notePart = detail.notes ? ` · Obs.: ${detail.notes}` : '';
+    document.getElementById('cashDetailMeta').textContent = `${fmtDateTime(detail.opened_at)} até ${detail.closed_at ? fmtDateTime(detail.closed_at) : 'em aberto'}${notePart}`;
+    document.getElementById('cashDetailOpening').textContent = fmtMoney(detail.opening_cents);
+    document.getElementById('cashDetailIn').textContent = fmtMoney(detail.total_in_cents);
+    document.getElementById('cashDetailOut').textContent = fmtMoney(detail.total_out_cents);
+    const closingText = detail.closing_cents != null
+      ? `${fmtMoney(detail.closing_cents)} / ${fmtMoney(detail.expected_cents)}`
+      : fmtMoney(detail.expected_cents);
+    document.getElementById('cashDetailClosing').textContent = closingText;
+
+    const methodsEl = document.getElementById('cashDetailMethods');
+    if (methodsEl) {
+      const methods = detail.totals_by_method || [];
+      methodsEl.innerHTML = methods.length
+        ? methods.map((entry) => `<span class="cash-method-pill"><span>${escapeHtml(methodName(entry.method))}</span><strong>${fmtMoney(entry.amount_cents)}</strong></span>`).join('')
+        : '<span class="muted">Sem entradas por forma de pagamento neste turno.</span>';
+    }
+
+    document.getElementById('cashDetailMovementsBody').innerHTML = renderCashMovementRows(
+      detail.movements || [],
+      'Nenhuma movimentação registrada neste turno.',
+    );
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
 async function loadCashHistory() {
   const history = await api('/api/cash/history');
   document.getElementById('cashHistoryBody').innerHTML = history.length
@@ -3282,25 +3356,52 @@ async function loadCashHistory() {
         .slice(0, 20)
         .map((h) => {
           const diff = (h.closing_cents ?? 0) - (h.expected_cents ?? 0);
-          const diffBadge = diff === 0
-            ? '<span class="badge badge-active">Exato</span>'
-            : diff > 0
-              ? `<span class="badge badge-pending">Sobra ${fmtMoney(diff)}</span>`
-              : `<span class="badge badge-blocked">Falta ${fmtMoney(Math.abs(diff))}</span>`;
+          const diffBadge = h.status === 'open'
+            ? '<span class="badge badge-pending">Em aberto</span>'
+            : diff === 0
+              ? '<span class="badge badge-active">Exato</span>'
+              : diff > 0
+                ? `<span class="badge badge-pending">Sobra ${fmtMoney(diff)}</span>`
+                : `<span class="badge badge-blocked">Falta ${fmtMoney(Math.abs(diff))}</span>`;
           const noteHtml = h.notes ? `<div class="muted" style="font-size:11px;">${escapeHtml(h.notes)}</div>` : '';
+          const activeClass = Number(selectedClosedCashSession?.id) === Number(h.id) ? ' active' : '';
           return `
-            <tr>
+            <tr class="cash-history-row${activeClass}" data-cash-session-id="${h.id}" tabindex="0" role="button">
               <td>${escapeHtml(fmtDateTime(h.opened_at))}</td>
-              <td>${escapeHtml(fmtDateTime(h.closed_at))}</td>
+              <td>${escapeHtml(h.closed_at ? fmtDateTime(h.closed_at) : '—')}</td>
               <td>${escapeHtml(h.staff_name || '-')}${noteHtml}</td>
               <td>${fmtMoney(h.expected_cents)}</td>
-              <td>${fmtMoney(h.closing_cents)}</td>
+              <td>${h.closing_cents != null ? fmtMoney(h.closing_cents) : '—'}</td>
               <td>${diffBadge}</td>
             </tr>`;
         })
         .join('')
     : '<tr><td colspan="6" class="muted">Nenhum caixa encerrado ainda.</td></tr>';
 }
+
+document.getElementById('cashHistoryBody')?.addEventListener('click', (e) => {
+  const row = e.target.closest('[data-cash-session-id]');
+  if (!row) return;
+  openCashSessionDetail(row.dataset.cashSessionId);
+});
+
+document.getElementById('cashHistoryBody')?.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const row = e.target.closest('[data-cash-session-id]');
+  if (!row) return;
+  e.preventDefault();
+  openCashSessionDetail(row.dataset.cashSessionId);
+});
+
+document.getElementById('btnCloseCashDetail')?.addEventListener('click', () => {
+  selectedClosedCashSession = null;
+  document.getElementById('cashHistoryDetailPanel')?.classList.add('hidden');
+  document.querySelectorAll('.cash-history-row').forEach((row) => row.classList.remove('active'));
+});
+
+document.getElementById('btnExportCashDetailCsv')?.addEventListener('click', () => {
+  exportCashSessionCsv(selectedClosedCashSession);
+});
 
 document.getElementById('btnRefreshCash')?.addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
   await loadCash();
@@ -3320,32 +3421,7 @@ document.getElementById('btnFillExpectedCash')?.addEventListener('click', () => 
 });
 
 document.getElementById('btnExportCashCsv')?.addEventListener('click', () => {
-  const session = state.cashSession;
-  if (!session || !Array.isArray(session.movements) || !session.movements.length) {
-    showToast('Não há movimentações neste turno para exportar.', true);
-    return;
-  }
-  const csvEscape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [
-    ['Data/Hora', 'Tipo', 'Forma', 'Descricao', 'Valor (R$)'],
-    ...session.movements.map((m) => [
-      fmtDateTime(m.created_at),
-      ({ in: 'Suprimento', out: 'Sangria', payment: 'Mensalidade', sale: 'Venda' })[m.type] || m.type,
-      methodName(m.method),
-      m.description || '',
-      ((m.type === 'out' ? -1 : 1) * Number(m.amount_cents || 0) / 100).toFixed(2).replace('.', ','),
-    ]),
-  ];
-  const csv = '\uFEFF' + rows.map((r) => r.map(csvEscape).join(';')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `caixa-turno-${session.id || 'atual'}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  exportCashSessionCsv(state.cashSession);
 });
 
 let paymentsAbortController = null;

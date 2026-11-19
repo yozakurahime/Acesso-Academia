@@ -506,12 +506,42 @@
         </div>
 
         <div class="panel">
-          <h2>Turnos encerrados</h2>
+          <div class="panel-header">
+            <div>
+              <h2>Turnos encerrados</h2>
+              <small class="muted">Clique em qualquer turno para ver tudo o que entrou e saiu.</small>
+            </div>
+          </div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Abertura</th><th>Fechamento</th><th>Operador</th><th>Esperado</th><th>Conferido</th><th>Diferença</th></tr></thead>
               <tbody id="cashHistoryBody"></tbody>
             </table>
+          </div>
+          <div id="cashHistoryDetailPanel" class="cash-history-detail hidden">
+            <div class="panel-header">
+              <div>
+                <h3 id="cashDetailTitle" style="margin:0;">Detalhes do turno</h3>
+                <small id="cashDetailMeta" class="muted"></small>
+              </div>
+              <div class="inline-actions">
+                <button type="button" id="btnExportCashDetailCsv" class="btn btn-secondary btn-sm">Exportar CSV</button>
+                <button type="button" id="btnCloseCashDetail" class="btn btn-secondary btn-sm">Fechar</button>
+              </div>
+            </div>
+            <div class="cards" style="margin-top:10px;">
+              <div class="card"><span class="card-label">Abertura</span><strong id="cashDetailOpening" class="card-value">R$ 0,00</strong></div>
+              <div class="card card-accent-green"><span class="card-label">Entradas</span><strong id="cashDetailIn" class="card-value">R$ 0,00</strong></div>
+              <div class="card card-accent-red"><span class="card-label">Saídas / Sangrias</span><strong id="cashDetailOut" class="card-value">R$ 0,00</strong></div>
+              <div class="card card-accent-amber"><span class="card-label">Conferido / Esperado</span><strong id="cashDetailClosing" class="card-value">R$ 0,00</strong></div>
+            </div>
+            <div id="cashDetailMethods" class="cash-methods-grid"></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Hora</th><th>Tipo</th><th>Forma</th><th>Descrição</th><th>Valor</th></tr></thead>
+                <tbody id="cashDetailMovementsBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
