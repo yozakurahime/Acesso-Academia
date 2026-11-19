@@ -517,7 +517,11 @@ function renderWorkspaceCommands() {
       actions.push({
         label: `${member.name} (#${member.id})`,
         meta: detail,
-        run: () => openProfile(member.id),
+        run: async () => {
+          const targetTab = member.access_role && member.access_role !== 'student' ? 'staff' : 'members';
+          await switchTab(targetTab);
+          openProfile(member.id);
+        },
       });
     }
   }
@@ -537,10 +541,7 @@ function renderWorkspaceCommands() {
     actions.push({
       label: `Ver todos na lista de alunos: “${query}”`,
       meta: 'Filtro',
-      run: () => {
-        document.getElementById('quickSearch').value = query;
-        document.getElementById('quickSearchForm').requestSubmit();
-      },
+      run: () => runQuickMemberSearch(query),
     });
   }
 
@@ -664,13 +665,12 @@ function openNewMemberWithQuery(rawQuery = '') {
   }
 }
 
-document.getElementById('quickSearchForm')?.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const rawQuery = document.getElementById('quickSearch').value.trim();
+async function runQuickMemberSearch(rawQuery = '') {
+  const cleanQuery = String(rawQuery || '').trim();
   const search = document.getElementById('memberSearch');
   state.memberFilter = 'all';
   state.memberLimit = 50;
-  search.value = rawQuery;
+  if (search) search.value = cleanQuery;
   setMemberFormOpen(false);
   await switchTab('members');
   if (sharedLoads.has(loadMembers)) {
@@ -681,7 +681,7 @@ document.getElementById('quickSearchForm')?.addEventListener('submit', async (ev
   updateMemberFilterChips();
   renderMembersTable();
 
-  const q = normalizeSearch(rawQuery);
+  const q = normalizeSearch(cleanQuery);
   const digits = numericSearch(q);
   if (q) {
     const exactMatches = state.memberSearchIndex.filter(
@@ -692,12 +692,18 @@ document.getElementById('quickSearchForm')?.addEventListener('submit', async (ev
       return;
     }
     if (state.filteredMembers.length === 0) {
-      openNewMemberWithQuery(rawQuery);
-      showToast(`Nenhum aluno encontrado para "${rawQuery}". Preencha para cadastrar!`);
+      openNewMemberWithQuery(cleanQuery);
+      showToast(`Nenhum aluno encontrado para "${cleanQuery}". Preencha para cadastrar!`);
       return;
     }
   }
-  search.focus();
+  search?.focus();
+}
+
+document.getElementById('quickSearchForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const rawQuery = document.getElementById('quickSearch')?.value?.trim() || '';
+  await runQuickMemberSearch(rawQuery);
 });
 
 // --- Dashboard ---
