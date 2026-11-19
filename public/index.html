@@ -463,6 +463,25 @@
           </div>
         </div>
 
+        <div class="panel" id="onlineCashPanel">
+          <div class="panel-header">
+            <h2>Caixa Online (Mercado Pago)</h2>
+            <span class="badge badge-active">Separado do caixa da recepção</span>
+          </div>
+          <div class="cards">
+            <div class="card"><span class="card-label">Hoje (Online)</span><strong id="onlineCashTodayVal" class="card-value">R$ 0,00</strong></div>
+            <div class="card"><span class="card-label">No mês (Online)</span><strong id="onlineCashMonthVal" class="card-value">R$ 0,00</strong></div>
+            <div class="card"><span class="card-label">Total acumulado</span><strong id="onlineCashTotalVal" class="card-value">R$ 0,00</strong></div>
+            <div class="card"><span class="card-label">Pagamentos confirmados</span><strong id="onlineCashCountVal" class="card-value">0</strong></div>
+          </div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr><th>Data/Hora</th><th>Aluno(s)</th><th>Canal</th><th>Valor</th></tr></thead>
+              <tbody id="onlineCashBody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="panel">
           <h2>Turnos encerrados</h2>
           <div class="table-wrap">

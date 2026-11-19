@@ -1932,6 +1932,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.get('/gateways/online-cash', requireReception, (_req, res) => {
+    if (!gatewayService) {
+      return res.json({ today_cents: 0, today_count: 0, month_cents: 0, month_count: 0, total_cents: 0, total_count: 0, items: [] });
+    }
+    res.json(gatewayService.getOnlineCashSummary());
+  });
+
   router.post(
     '/webhooks/mercadopago',
     limitWebhook,

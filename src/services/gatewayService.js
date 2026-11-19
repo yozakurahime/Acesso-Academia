@@ -127,6 +127,36 @@ export class GatewayService {
     );
   }
 
+  getOnlineCashSummary(limit = 20) {
+    const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+    const monthPrefix = today.slice(0, 7);
+    const agg = this.store.get(
+      `SELECT
+         COALESCE(SUM(CASE WHEN date(COALESCE(paid_at, created_at)) = ? THEN amount_cents ELSE 0 END), 0) AS today_cents,
+         COALESCE(SUM(CASE WHEN date(COALESCE(paid_at, created_at)) = ? THEN 1 ELSE 0 END), 0) AS today_count,
+         COALESCE(SUM(CASE WHEN substr(COALESCE(paid_at, created_at), 1, 7) = ? THEN amount_cents ELSE 0 END), 0) AS month_cents,
+         COALESCE(SUM(CASE WHEN substr(COALESCE(paid_at, created_at), 1, 7) = ? THEN 1 ELSE 0 END), 0) AS month_count,
+         COALESCE(SUM(amount_cents), 0) AS total_cents,
+         COUNT(*) AS total_count
+       FROM gateway_charges
+       WHERE status = 'paid'`,
+      [today, today, monthPrefix, monthPrefix],
+    ) || { today_cents: 0, today_count: 0, month_cents: 0, month_count: 0, total_cents: 0, total_count: 0 };
+
+    const items = this.store.all(
+      `SELECT gc.id, gc.member_id, m.name AS member_name, p.name AS plan_name, gc.amount_cents,
+              gc.checkout_ref, gc.batch_items_json, COALESCE(gc.paid_at, gc.created_at) AS paid_at
+       FROM gateway_charges gc
+       JOIN members m ON m.id = gc.member_id
+       LEFT JOIN plans p ON p.id = gc.plan_id
+       WHERE gc.status = 'paid'
+       ORDER BY COALESCE(gc.paid_at, gc.created_at) DESC, gc.id DESC
+       LIMIT ?`,
+      [Number(limit)],
+    );
+    return { ...agg, items };
+  }
+
   resolveBillableMember(member, planId, amount) {
     if (!member || member.access_role !== 'student') throw new Error('Selecione um aluno para cobrar.');
     const charge = this.store.get('SELECT id, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due, id LIMIT 1', [member.id]);
@@ -490,6 +520,7 @@ export class GatewayService {
           {
             reconcileOpenCharge: true,
             exactCharge: Boolean(item.membership_charge_id),
+            separateOnlineCash: true,
             onRecorded: (recordedId) => {
               if (!firstPaymentId) firstPaymentId = recordedId;
             },
@@ -522,7 +553,7 @@ export class GatewayService {
         charge_id: fresh.membership_charge_id,
         notes,
       },
-      { reconcileOpenCharge: true, exactCharge: Boolean(fresh.membership_charge_id),
+      { reconcileOpenCharge: true, exactCharge: Boolean(fresh.membership_charge_id), separateOnlineCash: true,
         onRecorded: (paymentId) => this.store.run(
           `UPDATE gateway_charges SET status = 'paid', payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
           [paymentId, fresh.id],
@@ -655,7 +686,7 @@ export class GatewayService {
         external_id: `mercadopago:${mpPaymentId}`,
         notes: `Assinatura Mercado Pago (${sub.preapproval_id})`,
       },
-      { reconcileOpenCharge: true },
+      { reconcileOpenCharge: true, separateOnlineCash: true },
     );
 
     if (this.whatsappService && !paymentResult.alreadyRecorded) {

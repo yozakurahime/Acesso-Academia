@@ -173,4 +173,10 @@ test('WhatsappBotService guia pagamento Mercado Pago para 1 ou mais pessoas em l
   const m2 = store.get('SELECT status FROM members WHERE id = 2');
   assert.equal(m1.status, 'active');
   assert.equal(m2.status, 'active');
+
+  const cashMovements = store.all('SELECT * FROM cash_movements');
+  assert.equal(cashMovements.length, 0);
+  const onlineSummary = gatewayService.getOnlineCashSummary();
+  assert.equal(onlineSummary.total_cents, 21000);
+  assert.equal(onlineSummary.total_count, 1);
 });

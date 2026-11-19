@@ -1070,7 +1070,7 @@ export class AccessService {
   }
 
   async recordPayment({ member_id, plan_id, amount_cents, method = 'pix', external_id = null, notes = null, charge_id = null, use_credit = false, credit_excess_cents = 0, staff_id = null, commission_cents = 0, split_payments = null, debt_cents = 0, debt_due_date = null, debt_notes = null },
-    { requireOpenCash = false, reconcileOpenCharge = false, exactCharge = false, onRecorded = null } = {}) {
+    { requireOpenCash = false, reconcileOpenCharge = false, exactCharge = false, onRecorded = null, separateOnlineCash = false } = {}) {
     const existing = external_id && this.store.get('SELECT * FROM payments WHERE external_id = ?', [external_id]);
     if (existing) {
       const creditUsed = this.store.get(
@@ -1210,7 +1210,7 @@ export class AccessService {
         insertedPaymentIds.push(pid);
         if (primaryPaymentId == null) primaryPaymentId = pid;
 
-        if (openCash && part.amount_cents > 0) {
+        if (!separateOnlineCash && openCash && part.amount_cents > 0) {
           this.store.run(
             'INSERT INTO cash_movements (session_id, type, amount_cents, method, description) VALUES (?, ?, ?, ?, ?)',
             [openCash.id, 'payment', part.amount_cents, part.method, `Mensalidade: ${member.name}${plan ? ` (${plan.name})` : ''}`],

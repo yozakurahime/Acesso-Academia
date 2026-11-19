@@ -3164,8 +3164,48 @@ async function loadCurrentCash() {
   }
 }
 
+async function loadOnlineCash() {
+  const data = await api('/api/gateways/online-cash').catch(() => null);
+  if (!data) return;
+  const setTxt = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  setTxt('onlineCashTodayVal', fmtMoney(data.today_cents));
+  setTxt('onlineCashMonthVal', fmtMoney(data.month_cents));
+  setTxt('onlineCashTotalVal', fmtMoney(data.total_cents));
+  setTxt('onlineCashCountVal', String(data.total_count || 0));
+
+  const body = document.getElementById('onlineCashBody');
+  if (!body) return;
+  const items = Array.isArray(data.items) ? data.items : [];
+  body.innerHTML = items.length
+    ? items.map((item) => {
+        let names = item.member_name || 'Aluno';
+        if (item.batch_items_json) {
+          try {
+            const parsed = JSON.parse(item.batch_items_json);
+            if (Array.isArray(parsed) && parsed.length > 1) {
+              names = parsed.map((entry) => entry.member_name).join(', ');
+            }
+          } catch {
+            // mantém nome principal
+          }
+        }
+        const channel = item.checkout_ref ? 'Checkout Mercado Pago' : 'Pix Mercado Pago';
+        return `
+          <tr>
+            <td>${escapeHtml(fmtDateTime(item.paid_at))}</td>
+            <td>${escapeHtml(names)}</td>
+            <td>${escapeHtml(channel)}</td>
+            <td>${fmtMoney(item.amount_cents)}</td>
+          </tr>`;
+      }).join('')
+    : '<tr><td colspan="4" class="muted">Nenhum pagamento online confirmado ainda.</td></tr>';
+}
+
 async function loadCash() {
-  await Promise.all([loadCurrentCash(), loadCashHistory()]);
+  await Promise.all([loadCurrentCash(), loadOnlineCash(), loadCashHistory()]);
 }
 
 async function loadCashHistory() {
