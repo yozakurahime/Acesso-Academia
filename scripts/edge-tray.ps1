@@ -25,6 +25,9 @@ if (Test-Path $envFile) {
     if ($line -match '^\s*EDGE_CLOUD_URL\s*=\s*(.+?)\s*$') { $cloudUrl = $matches[1].Trim('"').Trim("'") }
   }
 }
+if (-not $cloudUrl -or $cloudUrl -match '^https?://(127\.0\.0\.1|localhost)(:\d+)?/?$') {
+  $cloudUrl = 'https://sistema.academiaoxigenio.com'
+}
 
 $nodeCmd = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $nodeCmd) {

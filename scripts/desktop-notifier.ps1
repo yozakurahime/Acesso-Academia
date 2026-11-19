@@ -1,7 +1,8 @@
 ﻿param(
   [int]$ServerPid = 0,
   [string]$IconPath = '',
-  [int]$Port = 3000
+  [int]$Port = 3000,
+  [string]$PanelUrl = 'https://sistema.academiaoxigenio.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -125,7 +126,8 @@ $notifyIcon.Visible = $true
 
 $openSystem = {
   try {
-    Start-Process "http://127.0.0.1:$Port" | Out-Null
+    $targetUrl = if ($PanelUrl -and $PanelUrl.Trim()) { $PanelUrl.Trim() } else { "http://127.0.0.1:$Port" }
+    Start-Process $targetUrl | Out-Null
   } catch {
   }
 }

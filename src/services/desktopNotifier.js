@@ -48,6 +48,7 @@ export function formatTurnstileDeniedNotification(event = {}) {
 export function createDesktopNotifier({
   rootDir,
   port = 3000,
+  panelUrl = process.env.EDGE_CLOUD_URL || 'https://sistema.academiaoxigenio.com',
   platform = process.platform,
   enabled = process.env.OXIGENIO_DESKTOP_NOTIFICATIONS !== '0' && process.env.NODE_ENV !== 'test',
   spawnFn = spawn,
@@ -88,6 +89,9 @@ export function createDesktopNotifier({
     '-Port',
     String(port),
   ];
+  if (panelUrl && String(panelUrl).trim()) {
+    args.push('-PanelUrl', String(panelUrl).trim());
+  }
   if (fs.existsSync(iconPath)) {
     args.push('-IconPath', iconPath);
   }
