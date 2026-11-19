@@ -3139,6 +3139,53 @@ async function resumeBillingAfterOpening() {
 
 document.getElementById('btnOpenCashForPayment').addEventListener('click', openCashFromBilling);
 
+function renderCashMovements() {
+  const session = state.cashSession;
+  const body = document.getElementById('cashMovementsBody');
+  const summaryEl = document.getElementById('cashMovementsSummary');
+  if (!body) return;
+  const movements = Array.isArray(session?.movements) ? session.movements : [];
+  const filterType = document.getElementById('cashMovFilterType')?.value || 'all';
+  const q = String(document.getElementById('cashMovSearch')?.value || '').trim().toLowerCase();
+
+  const filtered = movements.filter((m) => {
+    if (filterType !== 'all' && m.type !== filterType) return false;
+    if (!q) return true;
+    const hay = `${m.description || ''} ${methodName(m.method)} ${m.type || ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  if (summaryEl) {
+    const netCents = filtered.reduce((acc, m) => acc + (m.type === 'out' ? -Number(m.amount_cents || 0) : Number(m.amount_cents || 0)), 0);
+    summaryEl.textContent = filtered.length
+      ? `${filtered.length} lançamento(s) · Líquido filtrado: ${fmtMoney(netCents)}`
+      : 'Nenhum lançamento neste filtro';
+  }
+
+  const typeMeta = {
+    in: { label: 'Suprimento', cls: 'badge-active', sign: '+' },
+    out: { label: 'Sangria', cls: 'badge-blocked', sign: '-' },
+    payment: { label: 'Mensalidade', cls: 'badge-pending', sign: '+' },
+    sale: { label: 'Venda', cls: 'badge-neutral', sign: '+' },
+  };
+
+  body.innerHTML = filtered.length
+    ? filtered
+        .map((m) => {
+          const meta = typeMeta[m.type] || { label: m.type, cls: 'badge-neutral', sign: '' };
+          return `
+            <tr>
+              <td>${escapeHtml(fmtDateTime(m.created_at))}</td>
+              <td><span class="badge ${meta.cls}">${escapeHtml(meta.label)}</span></td>
+              <td>${escapeHtml(methodName(m.method))}</td>
+              <td>${escapeHtml(m.description)}</td>
+              <td class="${m.type === 'out' ? 'text-danger' : ''}">${meta.sign}${fmtMoney(m.amount_cents)}</td>
+            </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="5" class="muted">Nenhuma movimentação encontrada para este filtro.</td></tr>';
+}
+
 async function loadCurrentCash() {
   const session = await api('/api/cash/current');
   state.cashSession = session;
@@ -3171,23 +3218,15 @@ async function loadCurrentCash() {
     document.getElementById('cashInVal').textContent = fmtMoney(session.total_in_cents);
     document.getElementById('cashOutVal').textContent = fmtMoney(session.total_out_cents);
     document.getElementById('cashExpectedVal').textContent = fmtMoney(session.expected_cents);
-    document.getElementById('cashMethodsSummary').textContent = (session.totals_by_method || [])
-      .map((entry) => `${methodName(entry.method)}: ${fmtMoney(entry.amount_cents)}`).join(' · ');
+    const methodsEl = document.getElementById('cashMethodsSummary');
+    if (methodsEl) {
+      const methods = session.totals_by_method || [];
+      methodsEl.innerHTML = methods.length
+        ? methods.map((entry) => `<span class="cash-method-pill"><span>${escapeHtml(methodName(entry.method))}</span><strong>${fmtMoney(entry.amount_cents)}</strong></span>`).join('')
+        : '<span class="muted">Sem entradas por forma de pagamento ainda.</span>';
+    }
 
-    document.getElementById('cashMovementsBody').innerHTML = session.movements.length
-      ? session.movements
-          .map(
-            (m) => `
-          <tr>
-            <td>${escapeHtml(fmtDateTime(m.created_at))}</td>
-            <td>${escapeHtml(({ in: 'Suprimento', out: 'Sangria', payment: 'Mensalidade', sale: 'Venda' })[m.type] || m.type)}</td>
-            <td>${escapeHtml(methodName(m.method))}</td>
-            <td>${escapeHtml(m.description)}</td>
-            <td>${fmtMoney(m.amount_cents)}</td>
-          </tr>`,
-          )
-          .join('')
-      : '<tr><td colspan="5" class="muted">Nenhuma movimentação neste turno.</td></tr>';
+    renderCashMovements();
     updateCloseCashDiff();
   }
 }
@@ -3243,19 +3282,71 @@ async function loadCashHistory() {
         .slice(0, 20)
         .map((h) => {
           const diff = (h.closing_cents ?? 0) - (h.expected_cents ?? 0);
+          const diffBadge = diff === 0
+            ? '<span class="badge badge-active">Exato</span>'
+            : diff > 0
+              ? `<span class="badge badge-pending">Sobra ${fmtMoney(diff)}</span>`
+              : `<span class="badge badge-blocked">Falta ${fmtMoney(Math.abs(diff))}</span>`;
+          const noteHtml = h.notes ? `<div class="muted" style="font-size:11px;">${escapeHtml(h.notes)}</div>` : '';
           return `
             <tr>
               <td>${escapeHtml(fmtDateTime(h.opened_at))}</td>
               <td>${escapeHtml(fmtDateTime(h.closed_at))}</td>
-              <td>${escapeHtml(h.staff_name || '-')}</td>
+              <td>${escapeHtml(h.staff_name || '-')}${noteHtml}</td>
               <td>${fmtMoney(h.expected_cents)}</td>
               <td>${fmtMoney(h.closing_cents)}</td>
-              <td class="${diff < 0 ? 'text-danger' : 'text-success'}">${fmtMoney(diff)}</td>
+              <td>${diffBadge}</td>
             </tr>`;
         })
         .join('')
     : '<tr><td colspan="6" class="muted">Nenhum caixa encerrado ainda.</td></tr>';
 }
+
+document.getElementById('btnRefreshCash')?.addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
+  await loadCash();
+  showToast('Caixa atualizado.');
+}));
+
+document.getElementById('cashMovFilterType')?.addEventListener('change', renderCashMovements);
+document.getElementById('cashMovSearch')?.addEventListener('input', renderCashMovements);
+
+document.getElementById('btnFillExpectedCash')?.addEventListener('click', () => {
+  const expected = Number(state.cashSession?.expected_cents || 0);
+  const input = document.getElementById('closeCashAmount');
+  if (!input) return;
+  input.value = (expected / 100).toFixed(2);
+  updateCloseCashDiff();
+  input.focus();
+});
+
+document.getElementById('btnExportCashCsv')?.addEventListener('click', () => {
+  const session = state.cashSession;
+  if (!session || !Array.isArray(session.movements) || !session.movements.length) {
+    showToast('Não há movimentações neste turno para exportar.', true);
+    return;
+  }
+  const csvEscape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [
+    ['Data/Hora', 'Tipo', 'Forma', 'Descricao', 'Valor (R$)'],
+    ...session.movements.map((m) => [
+      fmtDateTime(m.created_at),
+      ({ in: 'Suprimento', out: 'Sangria', payment: 'Mensalidade', sale: 'Venda' })[m.type] || m.type,
+      methodName(m.method),
+      m.description || '',
+      ((m.type === 'out' ? -1 : 1) * Number(m.amount_cents || 0) / 100).toFixed(2).replace('.', ','),
+    ]),
+  ];
+  const csv = '\uFEFF' + rows.map((r) => r.map(csvEscape).join(';')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `caixa-turno-${session.id || 'atual'}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
 
 let paymentsAbortController = null;
 

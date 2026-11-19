@@ -2572,6 +2572,25 @@ input.is-cpf-error {
   opacity: 0.45;
 }
 
+.cash-methods-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.cash-method-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.2));
+  font-size: 12.5px;
+}
+.cash-method-pill strong {
+  color: var(--text, #f8fafc);
+}
 .card-clickable {
   cursor: pointer;
   transition: transform 0.14s ease, border-color 0.14s ease;
