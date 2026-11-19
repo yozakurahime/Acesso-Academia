@@ -71,12 +71,29 @@ export class DatabaseStore {
   }
 
   save() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
     if (!this.filePath) return;
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     const data = this.db.export();
     const temporaryPath = `${this.filePath}.tmp`;
     fs.writeFileSync(temporaryPath, Buffer.from(data), { flush: true });
     fs.renameSync(temporaryPath, this.filePath);
+  }
+
+  scheduleSave(delayMs = 300) {
+    if (!this.filePath || this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      try {
+        this.save();
+      } catch (err) {
+        console.warn('[DB] Falha ao salvar em background:', err.message);
+      }
+    }, Math.max(10, Number(delayMs) || 300));
+    this._saveTimer.unref?.();
   }
 
   all(sql, params = []) {

@@ -481,7 +481,7 @@
   }
   #studentPortalView {
     display: block;
-    padding-bottom: calc(var(--portal-nav-height) + env(safe-area-inset-bottom) + 14px);
+    padding-bottom: calc(var(--portal-nav-height) + env(safe-area-inset-bottom) + 74px);
   }
   .student-rail {
     position: static;
