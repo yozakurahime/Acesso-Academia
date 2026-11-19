@@ -335,6 +335,14 @@ export class WhatsappBotService {
     const members = this._findMembersForExactPhone(normalized);
 
     if (members.length > 0) {
+      const todayIso = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+      const todayMs = Date.parse(`${todayIso}T00:00:00Z`);
+
       const lines = members.map((member) => {
         const firstName = String(member.name || '').trim().split(/\s+/)[0] || member.name;
         const info = [
@@ -342,7 +350,26 @@ export class WhatsappBotService {
           `situação: ${member.status || 'desconhecida'}`,
         ];
         if (member.plan_name) info.push(`plano: ${member.plan_name}`);
-        if (member.valid_until) info.push(`validade: ${member.valid_until}`);
+        if (member.valid_until) {
+          const validMs = Date.parse(`${String(member.valid_until).slice(0, 10)}T00:00:00Z`);
+          if (Number.isFinite(validMs) && Number.isFinite(todayMs)) {
+            const diffDays = Math.round((validMs - todayMs) / 86400000);
+            if (diffDays < 0) info.push(`validade: ${member.valid_until} (vencido há ${Math.abs(diffDays)} dia(s))`);
+            else if (diffDays === 0) info.push(`validade: ${member.valid_until} (vence hoje)`);
+            else info.push(`validade: ${member.valid_until} (vence em ${diffDays} dia(s))`);
+          } else {
+            info.push(`validade: ${member.valid_until}`);
+          }
+        }
+        try {
+          const openCharge = this.store.get(
+            'SELECT due, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due ASC LIMIT 1',
+            [member.id],
+          );
+          if (openCharge) {
+            info.push(`cobrança em aberto: ${formatBrl(openCharge.amount)} (venc. ${openCharge.due})`);
+          }
+        } catch {}
         return `- ${info.join(' | ')}`;
       });
       return `# CONTEXTO DO ALUNO DESTE WHATSAPP\n${lines.join('\n')}`;

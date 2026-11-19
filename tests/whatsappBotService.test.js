@@ -235,6 +235,7 @@ test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros
   assert.doesNotMatch(enumAttempt.reply, /Maria Silva/);
   assert.doesNotMatch(enumAttempt.reply, /Maria Oliveira/);
   assert.doesNotMatch(enumAttempt.reply, /7766|8901/);
+  await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'cancelar' });
 
   // Handoff grava handoff_summary e resumeContact limpa
   const handoff = await bot2.handleIncomingMessage({ phone: '5564955554444', text: 'Quero falar com atendente' });
@@ -246,4 +247,14 @@ test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros
   const resumedRow = store.get('SELECT needs_human, handoff_summary FROM whatsapp_chats WHERE phone = ?', ['5564955554444']);
   assert.equal(Number(resumedRow.needs_human), 0);
   assert.equal(resumedRow.handoff_summary, null);
+
+  // Contexto financeiro: cobrança em aberto aparece apenas para o dono exato do WhatsApp
+  store.run("INSERT INTO membership_charges (member_id, due, amount) VALUES (1, '2026-11-10', 12900)");
+  await bot2.handleIncomingMessage({ phone: '5511999998888', text: 'Tenho alguma pendencia?' });
+  const ownerPrompt = calls[calls.length - 1].contents[0].parts[0].text;
+  assert.match(ownerPrompt, /cobrança em aberto: R\$\s*129,00/);
+  await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'E a Maria tem pendencia?' });
+  const otherPrompt = calls[calls.length - 1].contents[0].parts[0].text;
+  assert.doesNotMatch(otherPrompt, /cobrança em aberto/);
+  assert.doesNotMatch(otherPrompt, /Maria Silva/);
 });

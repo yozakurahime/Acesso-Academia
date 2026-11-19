@@ -7788,10 +7788,17 @@ let chatItemsCache = [];
 let activeChatPhone = null;
 let chatPollTimer = null;
 
+let lastNeedsHumanCount = null;
+
 function updateChatNavBadge(data) {
   const badge = document.getElementById('chatNavBadge');
+  const humanCount = Number(data?.needsHumanCount || 0);
+  if (lastNeedsHumanCount !== null && humanCount > lastNeedsHumanCount) {
+    showToast('Novo atendimento aguardando recepção!');
+  }
+  lastNeedsHumanCount = humanCount;
   if (!badge) return;
-  const count = Number(data?.needsHumanCount || 0) || Number(data?.unreadTotal || 0);
+  const count = humanCount || Number(data?.unreadTotal || 0);
   if (count > 0) {
     badge.textContent = String(count);
     badge.classList.remove('hidden');
@@ -7849,15 +7856,35 @@ async function openChat(phone) {
   const headerEl = document.getElementById('chatHeader');
   if (headerEl) {
     const toggleLabel = needsHuman ? 'Resolver e retomar bot' : (paused ? 'Retomar bot' : 'Pausar bot');
+    const validLabel = chat.member_valid_until ? ` · vence ${chat.member_valid_until}` : '';
+    const memberBtnHtml = chat.member_id
+      ? '<button type="button" id="btnChatMemberBilling" class="btn btn-secondary btn-sm">Cobrar / Plano</button>'
+      : '';
     headerEl.innerHTML = `
       <div>
         <strong>${escapeHtml(title)}</strong>
-        <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}</div>
+        <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}${escapeHtml(validLabel)}</div>
       </div>
       <div class="inline-actions">
+        ${memberBtnHtml}
         <button type="button" id="btnToggleChatBot" class="btn ${needsHuman ? 'btn-primary' : 'btn-secondary'} btn-sm">${toggleLabel}</button>
       </div>
     `;
+    document.getElementById('btnChatMemberBilling')?.addEventListener('click', async () => {
+      try {
+        if (!Array.isArray(state.members) || !state.members.length) {
+          await loadMembers();
+        }
+        const member = (state.members || []).find((m) => Number(m.id) === Number(chat.member_id));
+        if (!member) {
+          showToast('Cadastro do aluno não encontrado.', true);
+          return;
+        }
+        await jumpToPaymentForMember(member);
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
     document.getElementById('btnToggleChatBot')?.addEventListener('click', async () => {
       try {
         await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/bot`, {
