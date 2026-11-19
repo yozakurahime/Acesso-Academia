@@ -4392,7 +4392,7 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
         showToast('Pagamento gravado. Recarregue a página para atualizar os dados.', true);
       });
       if (isAutoPrintReceiptEnabled() && res.payment) {
-        openPaymentReceipt(res.payment, member);
+        openPaymentReceipt(res.payment, member, { autoPrint: true });
       }
       finishPaymentAndReturnHome();
     } catch (err) {
@@ -5144,7 +5144,7 @@ function startPaymentAutoPoll({ type, id }) {
           if (activePixChargeId === Number(id) && res.charge) renderPixChargeBox(res.charge);
           showToast('Pix confirmado e mensalidade baixada!');
           await Promise.all([loadGatewayCharges(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
-          if (res.payment) openPaymentReceipt(res.payment);
+          if (isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
           finishPaymentAndReturnHome();
           return;
         }
@@ -5154,7 +5154,7 @@ function startPaymentAutoPoll({ type, id }) {
           stopPaymentAutoPoll();
           showToast('Pagamento na Point Smart confirmado e baixado!');
           await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
-          if (res.payment) openPaymentReceipt(res.payment);
+          if (isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
           finishPaymentAndReturnHome();
           return;
         }
@@ -6975,7 +6975,7 @@ function showReceiptModal(html) {
   showModal('receiptPreviewModal', 'btnPrintReceiptNow');
 }
 
-function openPaymentReceipt(payment, memberObj = null) {
+function openPaymentReceipt(payment, memberObj = null, { autoPrint = false } = {}) {
   if (!window.MP4200_RECEIPT || !payment) return;
   const member = memberObj || (state.allMembers || []).find((m) => Number(m.id) === Number(payment.member_id));
   const plan = (state.plans || []).find((p) => Number(p.id) === Number(payment.plan_id));
@@ -7000,6 +7000,11 @@ function openPaymentReceipt(payment, memberObj = null) {
     validUntil: validUntil ? fmtDate(validUntil) : '',
     operatorName: payment.staff_name || '',
   });
+  currentReceiptHtml = html;
+  if (autoPrint) {
+    window.MP4200_RECEIPT.printReceiptHtml(html);
+    return;
+  }
   showReceiptModal(html);
 }
 
