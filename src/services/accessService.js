@@ -133,13 +133,14 @@ export class AccessService {
     return { ...base, ...extra };
   }
 
-  _buildKioskExtra(id, outcome, { member = null, today = fitnessToday(), preview = false } = {}) {
+  _buildKioskExtra(id, outcome, { member = null, today = fitnessToday(), preview = false, direction = null } = {}) {
     const occ = this.getCurrentOccupancy();
     const extra = {
       id,
       totalMs: outcome === 'allowed' && !preview ? 8000 : 6000,
       occupancyInfo: { count: occ.count, maxCapacity: occ.maxCapacity },
     };
+    if (direction) extra.direction = direction;
     if (!member) return extra;
 
     const firstName = String(member.name || '').trim().split(/\s+/, 1)[0] || null;
@@ -147,6 +148,7 @@ export class AccessService {
     extra.fullName = member.name || null;
     extra.photo = member.profile_photo || null;
     extra.accessRole = member.access_role || 'student';
+    extra.isVisitor = Boolean(member.is_visitor);
 
     if (preview && outcome === 'allowed') {
       extra.planName = 'Plano Mensal';
@@ -227,7 +229,7 @@ export class AccessService {
     return () => this._turnstileDeniedListeners.delete(listener);
   }
 
-  publishTurnstileDisplay(outcome, { member = null, reason = null, preview = false, progress = null, occupancy = null, source = null } = {}) {
+  publishTurnstileDisplay(outcome, { member = null, reason = null, preview = false, progress = null, occupancy = null, source = null, direction = null } = {}) {
     const today = fitnessToday();
     const maxCap = Number(this.store.getSettings()?.max_capacity || 0);
     const display = {
@@ -250,7 +252,7 @@ export class AccessService {
     if (preview) display.preview = true;
 
     this.turnstileDisplay = display;
-    this.turnstileDisplayKioskExtra = this._buildKioskExtra(display.id, outcome, { member, today, preview });
+    this.turnstileDisplayKioskExtra = this._buildKioskExtra(display.id, outcome, { member, today, preview, direction });
 
     if (outcome === 'allowed' && !preview && this._turnstileListeners.size > 0) {
       const releaseEvent = {
@@ -1900,7 +1902,7 @@ export class AccessService {
         [member.controlid_user_id, member.id, member.name],
       );
 
-      this.publishTurnstileDisplay('allowed', { member: currentMember, progress, source: 'FaceID' });
+      this.publishTurnstileDisplay('allowed', { member: currentMember, progress, source: 'FaceID', direction });
       return { allowed: true, event: 7, message: 'Bem vindo', member: currentMember };
     };
 

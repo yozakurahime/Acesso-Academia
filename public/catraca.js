@@ -136,6 +136,75 @@ function animateTimerBar(remainingMs, totalMs) {
   timerFill.style.transform = 'scaleX(0)';
 }
 
+function formatTurnstileMessages(state, event, defaults) {
+  const [defaultStatus, defaultTitle, defaultMsg] = defaults;
+  if (state === 'idle') {
+    return {
+      status: `${getTimeGreeting()} · ${defaultStatus}`,
+      title: defaultTitle,
+      message: defaultMsg,
+    };
+  }
+  if (state === 'denied') {
+    return {
+      status: 'Acesso bloqueado',
+      title: event?.firstName || defaultTitle,
+      message: event?.reason ? `${event.reason} · Procure a recepção.` : defaultMsg,
+    };
+  }
+  if (state !== 'allowed') {
+    return { status: defaultStatus, title: defaultTitle, message: defaultMsg };
+  }
+
+  const greeting = getTimeGreeting();
+  const role = event?.accessRole || 'student';
+  const isExit = event?.direction === 'exit';
+
+  if (!event?.firstName) {
+    return {
+      status: 'Liberação manual · Acesso liberado',
+      title: 'Pode passar',
+      message: `${greeting}! Catraca liberada pela recepção.`,
+    };
+  }
+  if (role === 'instructor') {
+    return {
+      status: isExit ? 'Professor · Saída liberada' : 'Professor · Acesso liberado',
+      title: `${greeting}, Prof. ${event.firstName}`,
+      message: isExit ? 'Até logo, professor! Bom descanso.' : 'Bom trabalho e ótima aula hoje!',
+    };
+  }
+  if (role === 'staff' || role === 'user') {
+    return {
+      status: isExit ? 'Equipe · Saída liberada' : 'Equipe · Acesso liberado',
+      title: `${greeting}, ${event.firstName}`,
+      message: isExit ? 'Até logo! Bom descanso.' : 'Bom trabalho hoje na academia!',
+    };
+  }
+  if (event?.isVisitor) {
+    return {
+      status: isExit ? 'Visitante · Saída liberada' : 'Visitante · Acesso liberado',
+      title: `Bem-vindo, ${event.firstName}`,
+      message: isExit ? 'Obrigado pela visita! Volte sempre.' : 'Aproveite a Academia Oxigênio! Bom treino.',
+    };
+  }
+  let studentMsg = `${greeting}! Pode passar, bom treino!`;
+  if (event?.isBirthday) {
+    studentMsg = 'Feliz aniversário! Hoje é seu dia especial. Bom treino!';
+  } else if (isExit) {
+    studentMsg = 'Treino concluído! Até a próxima!';
+  } else if (event?.progress?.visits && event?.progress?.goal && event.progress.visits >= event.progress.goal) {
+    studentMsg = 'Meta da semana batida! Bom treino!';
+  } else if (event?.progress?.visits === 1) {
+    studentMsg = 'Primeiro treino da semana! Bora pra cima!';
+  }
+  return {
+    status: isExit ? 'Aluno · Saída liberada' : 'Aluno · Acesso liberado',
+    title: event.firstName,
+    message: studentMsg,
+  };
+}
+
 function render(state, event) {
   const view = event ? `${state}:${event.id}` : state;
   if (lastView === view) return;
@@ -144,16 +213,13 @@ function render(state, event) {
   clearTimeout(resetTimer);
 
   const [symbol, statusText, titleText, messageText] = screens[state];
+  const copy = formatTurnstileMessages(state, event, [statusText, titleText, messageText]);
   display.dataset.state = state;
   icon.textContent = symbol;
   preview.hidden = !event?.preview;
-  statusLabel.textContent = state === 'idle' ? `${getTimeGreeting()} · ${statusText}` : statusText;
-  title.textContent = ['allowed', 'denied'].includes(state) && event?.firstName
-    ? event.firstName
-    : titleText;
-  message.textContent = state === 'allowed'
-    ? 'Pode passar. Bom treino!'
-    : state === 'denied' && event?.reason ? event.reason : messageText;
+  statusLabel.textContent = copy.status;
+  title.textContent = copy.title;
+  message.textContent = copy.message;
 
   // Foto do aluno (FaceID ou foto de perfil)
   if (avatarImg && heroWrap) {
