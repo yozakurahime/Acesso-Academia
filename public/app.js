@@ -4681,9 +4681,21 @@ let waPollTimer = null;
 let waPollResumeOnVisible = false;
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && waPollResumeOnVisible && state.activeTab === 'settings') {
+  if (document.hidden) {
+    stopTurnstileEvents();
+    clearTimeout(chatPollTimer);
+    chatPollTimer = null;
+    return;
+  }
+  if (state.authReady && typeof startTurnstileEvents === 'function') {
+    startTurnstileEvents();
+  }
+  if (waPollResumeOnVisible && state.activeTab === 'settings') {
     waPollResumeOnVisible = false;
     loadWhatsappStatus().catch(() => {});
+  }
+  if (state.activeTab === 'chat') {
+    loadChats().catch(() => {});
   }
 });
 
@@ -8302,37 +8314,42 @@ async function openChat(phone) {
 
   const msgsEl = document.getElementById('chatMessages');
   if (msgsEl) {
-    let lastDateKey = '';
-    msgsEl.innerHTML = (data.messages || []).map((m) => {
-      const cls = m.direction === 'in' ? 'in' : 'out';
-      const roleCls = m.direction === 'out' ? (m.sender_type === 'bot' ? 'bot' : 'human') : '';
-      const who = m.sender_type === 'bot' ? 'Bot IA' : (m.sender_type === 'human' ? 'Atendente' : 'Cliente');
-      const rawDate = String(m.created_at || '');
-      const dateKey = rawDate.slice(0, 10);
-      const dividerLabel = dateKey && dateKey !== lastDateKey ? formatChatDateDivider(rawDate) : '';
-      if (dateKey) lastDateKey = dateKey;
-      const dividerHtml = dividerLabel ? `<div class="chat-date-divider">${escapeHtml(dividerLabel)}</div>` : '';
-      const time = rawDate.length >= 16 ? rawDate.slice(11, 16) : rawDate;
-      let mediaHtml = '';
-      if (m.media_url) {
-        if (m.media_type === 'image') {
-          mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank','noopener,noreferrer')" />`;
-        } else if (m.media_type === 'sticker') {
-          mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Figurinha" style="max-width:140px;display:block;margin-bottom:6px;" />`;
-        } else if (m.media_type === 'audio') {
-          mediaHtml = `<audio controls preload="none" src="${escapeHtml(m.media_url)}" style="max-width:240px;height:36px;display:block;margin-bottom:6px;"></audio>`;
+    const msgs = data.messages || [];
+    const renderKey = `${phone}:${msgs.length}:${msgs[msgs.length - 1]?.id || 0}`;
+    if (msgsEl.dataset.renderKey !== renderKey) {
+      msgsEl.dataset.renderKey = renderKey;
+      let lastDateKey = '';
+      msgsEl.innerHTML = msgs.map((m) => {
+        const cls = m.direction === 'in' ? 'in' : 'out';
+        const roleCls = m.direction === 'out' ? (m.sender_type === 'bot' ? 'bot' : 'human') : '';
+        const who = m.sender_type === 'bot' ? 'Bot IA' : (m.sender_type === 'human' ? 'Atendente' : 'Cliente');
+        const rawDate = String(m.created_at || '');
+        const dateKey = rawDate.slice(0, 10);
+        const dividerLabel = dateKey && dateKey !== lastDateKey ? formatChatDateDivider(rawDate) : '';
+        if (dateKey) lastDateKey = dateKey;
+        const dividerHtml = dividerLabel ? `<div class="chat-date-divider">${escapeHtml(dividerLabel)}</div>` : '';
+        const time = rawDate.length >= 16 ? rawDate.slice(11, 16) : rawDate;
+        let mediaHtml = '';
+        if (m.media_url) {
+          if (m.media_type === 'image') {
+            mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank','noopener,noreferrer')" />`;
+          } else if (m.media_type === 'sticker') {
+            mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Figurinha" style="max-width:140px;display:block;margin-bottom:6px;" />`;
+          } else if (m.media_type === 'audio') {
+            mediaHtml = `<audio controls preload="none" src="${escapeHtml(m.media_url)}" style="max-width:240px;height:36px;display:block;margin-bottom:6px;"></audio>`;
+          }
         }
-      }
-      const cleanText = String(m.body || '').replace(/^\[ts=\d+\]\s*/i, '');
-      const bodyHtml = cleanText ? `<div>${formatWhatsappTextHtml(cleanText)}</div>` : '';
-      return `${dividerHtml}
-        <div class="chat-bubble ${cls} ${roleCls}">
-          ${mediaHtml}${bodyHtml}
-          <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>
-        </div>
-      `;
-    }).join('');
-    msgsEl.scrollTop = msgsEl.scrollHeight;
+        const cleanText = String(m.body || '').replace(/^\[ts=\d+\]\s*/i, '');
+        const bodyHtml = cleanText ? `<div>${formatWhatsappTextHtml(cleanText)}</div>` : '';
+        return `${dividerHtml}
+          <div class="chat-bubble ${cls} ${roleCls}">
+            ${mediaHtml}${bodyHtml}
+            <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>
+          </div>
+        `;
+      }).join('');
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
   }
 
   const noteBarEl = document.getElementById('chatNoteBar');
