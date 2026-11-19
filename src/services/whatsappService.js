@@ -569,7 +569,7 @@ export class WhatsappService {
 
     const message = this.renderTemplate(
       settings.whatsapp_tpl_payment ||
-        '{saudacao} {primeiro_nome}! Pagamento de {valor} ({plano}) confirmado na {academia}. Acesso liberado até {vencimento}.',
+        '{saudacao} {primeiro_nome}! {Pagamento|Recebemos o pagamento} de {valor} ({plano}) {confirmado|registrado} na {academia}. {Acesso liberado|Matrícula ativa} até {vencimento}. {Bom treino|Ótimos treinos}!',
       {
         name: member.name,
         planName: plan?.name || 'Mensalidade',
@@ -703,7 +703,7 @@ export class WhatsappService {
       if (queued >= remainingBudget) break;
       const message = this.renderTemplate(
         settings.whatsapp_tpl_due ||
-          '{saudacao} {primeiro_nome}! Seu plano {plano} na {academia} vence em {vencimento}.',
+          '{saudacao} {primeiro_nome}! {Passando para lembrar que seu|Lembrando que seu} plano {plano} na {academia} vence em {vencimento}. {Se quiser renovar por aqui mesmo, responda *quero pagar*|Quer renovar sem pegar fila? Responda *quero pagar* que gero o Pix ou link na hora}!',
         {
           name: member.name,
           planName: member.plan_name || 'Plano',
@@ -748,7 +748,7 @@ export class WhatsappService {
     for (const member of candidates) {
       if (queued >= remainingBudget) break;
       const message = this.renderTemplate(
-        '{saudacao} {primeiro_nome}! Sua mensalidade ({plano}) venceu ontem ({vencimento}). Para renovar rápido sem bloqueio na catraca, responda *quero pagar* por aqui que eu gero seu Pix ou link na hora!',
+        '{saudacao} {primeiro_nome}! {Sua mensalidade|Seu plano} ({plano}) venceu ontem ({vencimento}). {Para renovar rápido sem bloqueio na catraca, responda *quero pagar* por aqui que eu gero seu Pix ou link na hora|Quer evitar bloqueio na catraca? Responda *quero pagar* que já envio seu Pix ou link de pagamento}!',
         {
           name: member.name,
           planName: member.plan_name || 'Plano',
@@ -792,7 +792,7 @@ export class WhatsappService {
     for (const member of candidates) {
       if (queued >= remainingBudget) break;
       const message = this.renderTemplate(
-        '{saudacao} {primeiro_nome}! Já faz 1 semana que você começou na {academia}. Como estão sendo seus primeiros treinos? Se estiver curtindo, seu feedback ajuda muito: https://g.page/r/CU1I-EMNGUdyEBM/review',
+        '{saudacao} {primeiro_nome}! {Já faz 1 semana que você começou|Completou 1 semana com a gente} na {academia}. {Como estão sendo seus primeiros treinos?|Está curtindo os treinos até aqui?} {Se estiver gostando, seu feedback ajuda muito|Se puder deixar uma avaliação, ajuda demais nossa equipe}: https://g.page/r/CU1I-EMNGUdyEBM/review',
         { name: member.name, gymName: settings.gym_name },
       );
       const inserted = this.enqueueMessage({
@@ -838,7 +838,7 @@ export class WhatsappService {
       const count = Number(member.total_visits || 0);
       if (!milestones.has(count)) continue;
       const message = this.renderTemplate(
-        `Parabéns, {primeiro_nome}! Você acabou de completar *${count} treinos* na {academia}! Continue firme no foco!`,
+        `{Parabéns|Show de bola|Mandou bem demais}, {primeiro_nome}! {Você acabou de completar|Você atingiu a marca de} *${count} treinos* na {academia}! {Continue firme no foco|Bora pra cima dos próximos}!`,
         { name: member.name, gymName: settings.gym_name },
       );
       const inserted = this.enqueueMessage({
@@ -894,7 +894,7 @@ export class WhatsappService {
       const daysAgo = Math.max(inactiveDays, Math.round((now.getTime() - lastDate.getTime()) / 86400000));
       const message = this.renderTemplate(
         settings.whatsapp_tpl_inactive ||
-          '{saudacao} {primeiro_nome}! Sentimos sua falta na {academia} — já faz {dias_sem_vir} dias desde seu último treino.',
+          '{saudacao} {primeiro_nome}! {Sentimos sua falta|Notamos sua ausência} na {academia} — já faz {dias_sem_vir} dias desde seu último treino. {Bora retomar hoje?|Quando volta para treinar com a gente?}',
         {
           name: member.name,
           daysInactive: daysAgo,
@@ -941,7 +941,7 @@ export class WhatsappService {
       if (queued >= remainingBudget) break;
       const message = this.renderTemplate(
         settings.whatsapp_tpl_birthday ||
-          'Parabéns, {primeiro_nome}! A {academia} deseja um feliz aniversário e muitos treinos incríveis neste novo ciclo!',
+          '{Parabéns|Feliz aniversário}, {primeiro_nome}! {Desejamos|A equipe da} {academia} {um feliz aniversário e muitos treinos incríveis|deseja saúde, energia e grandes conquistas} neste novo ciclo!',
         {
           name: member.name,
           gymName: settings.gym_name,
