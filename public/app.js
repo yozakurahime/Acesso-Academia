@@ -379,6 +379,7 @@ function loadTab(tabName) {
   }).catch((err) => {
     console.error(`[tab:${tabName}]`, err);
     tabRequests.delete(tabName);
+    forms.forEach((form) => { form.inert = false; });
     status.textContent = `Não foi possível carregar esta área${err?.message ? `: ${err.message}` : '.'}`;
     const retry = document.createElement('button');
     retry.type = 'button';
@@ -628,9 +629,16 @@ document.getElementById('btnNewMember').addEventListener('click', async (event) 
 document.querySelectorAll('[data-go]').forEach((button) => {
   const activate = async () => {
     const { go, focus, expand } = button.dataset;
-    if (expand) document.getElementById(expand).open = true;
+    const expandEl = expand ? document.getElementById(expand) : null;
+    if (expandEl && 'open' in expandEl) expandEl.open = true;
     if (focus === 'mName') setMemberFormOpen(true);
-    if (await switchTab(go) && state.activeTab === go && focus) document.getElementById(focus).focus();
+    if (await switchTab(go) && state.activeTab === go) {
+      if (expandEl?.dataset?.settingsCat && typeof activateSettingsCategory === 'function') {
+        activateSettingsCategory(expandEl.dataset.settingsCat);
+        expandEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (focus) document.getElementById(focus)?.focus();
+    }
   };
   button.addEventListener('click', activate);
   if (button.tagName !== 'BUTTON' && button.tagName !== 'A') {
@@ -1846,6 +1854,7 @@ document.getElementById('billingQuickAdjust')?.addEventListener('click', (event)
   const plan = state.plans.find((p) => p.id === planId);
   const baseReais = plan ? plan.price_cents / 100 : Number(amountField.value || 0);
   const spec = btn.dataset.billingDiscount;
+  state.billingFinalAmountEdited = false;
   if (spec === 'reset') {
     if (plan) amountField.value = (plan.price_cents / 100).toFixed(2);
   } else if (spec === 'flat:10') {
