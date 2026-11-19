@@ -664,7 +664,7 @@ function openNewMemberWithQuery(rawQuery = '') {
   }
 }
 
-document.getElementById('quickSearchForm').addEventListener('submit', async (event) => {
+document.getElementById('quickSearchForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const rawQuery = document.getElementById('quickSearch').value.trim();
   const search = document.getElementById('memberSearch');

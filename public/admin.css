@@ -666,10 +666,11 @@ header.workspace-topbar,
 .workspace-app .dash-hero-cta {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   width: 100%;
-  padding: 18px 20px;
-  border-radius: 16px;
+  min-height: 104px;
+  padding: 22px 24px;
+  border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   background: linear-gradient(135deg, rgba(19, 23, 38, 0.92) 0%, rgba(30, 35, 56, 0.86) 100%);
   color: #f8fafc;
