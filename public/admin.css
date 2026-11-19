@@ -657,6 +657,97 @@ header.workspace-topbar,
   margin-bottom: 20px;
 }
 
+.workspace-app .dashboard-primary-ctas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.workspace-app .dash-hero-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(135deg, rgba(19, 23, 38, 0.92) 0%, rgba(30, 35, 56, 0.86) 100%);
+  color: #f8fafc;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+.workspace-app .dash-hero-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+}
+.workspace-app .dash-hero-cta--register::before {
+  background: linear-gradient(90deg, #ff7a18, #f59e0b);
+}
+.workspace-app .dash-hero-cta--pay::before {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+.workspace-app .dash-hero-cta--register:hover,
+.workspace-app .dash-hero-cta--register:focus-visible {
+  border-color: rgba(245, 158, 11, 0.65);
+  box-shadow: 0 12px 28px rgba(245, 158, 11, 0.18);
+  transform: translateY(-2px);
+  outline: none;
+}
+.workspace-app .dash-hero-cta--pay:hover,
+.workspace-app .dash-hero-cta--pay:focus-visible {
+  border-color: rgba(16, 185, 129, 0.65);
+  box-shadow: 0 12px 28px rgba(16, 185, 129, 0.18);
+  transform: translateY(-2px);
+  outline: none;
+}
+.workspace-app .dash-hero-cta-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.workspace-app .dash-hero-cta--register .dash-hero-cta-icon {
+  background: rgba(245, 158, 11, 0.16);
+  color: #f59e0b;
+}
+.workspace-app .dash-hero-cta--pay .dash-hero-cta-icon {
+  background: rgba(16, 185, 129, 0.16);
+  color: #10b981;
+}
+.workspace-app .dash-hero-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.workspace-app .dash-hero-cta-text strong {
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  color: #f8fafc;
+}
+.workspace-app .dash-hero-cta-text small {
+  font-size: 12.5px;
+  color: #94a3b8;
+}
+.workspace-app .dash-hero-cta-arrow {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  color: #94a3b8;
+}
+@media (max-width: 720px) {
+  .workspace-app .dashboard-primary-ctas {
+    grid-template-columns: 1fr;
+  }
+}
+
 .workspace-app .reception-hero {
   position: relative;
   isolation: isolate;
