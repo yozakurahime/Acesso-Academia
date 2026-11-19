@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeBrPhone } from './whatsappService.js';
+import { OnlineSalesBotService, formatBrl } from './onlineSalesBotService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CONTEXT_PATH = path.resolve(__dirname, '..', 'config', 'defaultBotContext.txt');
@@ -9,25 +10,6 @@ const DEFAULT_CONTEXT_PATH = path.resolve(__dirname, '..', 'config', 'defaultBot
 export const CONTEXT_MISSING_HANDOFF_MARKER = '[[HUMAN_HANDOFF_CONTEXT_MISSING]]';
 
 const HUMAN_REQUEST_REGEX = /\b(atendente|humano|pessoa\s+real|falar\s+com\s+(?:algu[eé]m|atendente|recep[cç][aã]o|gerente|dono)|chamar\s+atendente|suporte\s+humano)\b/i;
-const PAYMENT_INTENT_REGEX = /\b(pagar|pagamento|mensalidade|renovar|renova[cç][aã]o|pix|link\s+de\s+pagamento|quero\s+pagar)\b/i;
-const PAYMENT_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
-const PAYMENT_PIX_CHOICE_REGEX = /^(1|pix|qr|copia\s+e\s+cola)$/i;
-const PAYMENT_LINK_CHOICE_REGEX = /^(2|link|cart[aã]o|cr[eé]dito|d[eé]bito)$/i;
-const PAYMENT_CHECK_REGEX = /\b(j[aá]\s+paguei|paguei|verificar|confirmar\s+pagamento|conferir)\b/i;
-const PAYMENT_DISCOUNT_REGEX = /\b(desconto|abatimento|pagar\s+menos|valor\s+menor|metade|parcelar\s+no\s+pix|fiado|combinado|promo[cç][aã]o)\b/i;
-
-function formatBrl(cents) {
-  return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function stripAccents(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 const DEFAULT_PLAYBOOKS = [
   'Mensalidade: Quando perguntarem valor da mensalidade ou preço de plano, responda com os valores que existirem no contexto. Se não houver valor no contexto, encaminhe para o atendimento humano.',
@@ -69,6 +51,7 @@ export class WhatsappBotService {
     contextFilePath = DEFAULT_CONTEXT_PATH,
     fetchFn = fetch,
     gatewayService = null,
+    accessService = null,
     humanPauseMs = 4 * 60 * 60 * 1000,
     ownerTakeoverPauseMs = 30 * 60 * 1000,
     historyMaxTurns = 10,
@@ -78,21 +61,30 @@ export class WhatsappBotService {
     this.store = store;
     this.contextFilePath = contextFilePath;
     this.fetchFn = fetchFn;
-    this.gatewayService = gatewayService;
     this.humanPauseMs = humanPauseMs;
     this.ownerTakeoverPauseMs = ownerTakeoverPauseMs;
     this.historyMaxTurns = historyMaxTurns;
     this.historyTtlMs = historyTtlMs;
-    this.paymentSessionTtlMs = paymentSessionTtlMs;
     this._pausedUntil = new Map();
     this._histories = new Map();
-    this._paymentSessions = new Map();
     this._cachedFileText = null;
     this._cachedFileMtimeMs = 0;
+    this.onlineSalesBot = new OnlineSalesBotService(store, {
+      gatewayService,
+      accessService,
+      recordChatMessage: (payload) => this.recordChatMessage(payload),
+      pauseContact: (phone, ms) => this.pauseContact(phone, ms),
+      humanPauseMs,
+      sessionTtlMs: paymentSessionTtlMs,
+    });
   }
 
   setGatewayService(gatewayService) {
-    this.gatewayService = gatewayService || null;
+    this.onlineSalesBot.setGatewayService(gatewayService);
+  }
+
+  setAccessService(accessService) {
+    this.onlineSalesBot.setAccessService(accessService);
   }
 
   isPaused(phone, nowMs = Date.now()) {
@@ -584,9 +576,9 @@ export class WhatsappBotService {
       };
     }
 
-    const paymentResult = await this._handlePaymentFlow({ phone: normalized, userText, settings });
-    if (paymentResult) {
-      return paymentResult;
+    const salesResult = await this.onlineSalesBot.handleMessage({ phone: normalized, userText, settings });
+    if (salesResult) {
+      return salesResult;
     }
 
     const model = String(settings.gemini_model || 'gemini-3.8-flash').trim();
@@ -627,234 +619,5 @@ export class WhatsappBotService {
       requiresHuman: false,
       reason: null,
     };
-  }
-
-  _getPaymentSession(phone, nowMs = Date.now()) {
-    const entry = this._paymentSessions.get(phone);
-    if (!entry) return null;
-    if (nowMs - entry.updatedAt > this.paymentSessionTtlMs) {
-      this._paymentSessions.delete(phone);
-      return null;
-    }
-    return entry;
-  }
-
-  _setPaymentSession(phone, session, nowMs = Date.now()) {
-    session.updatedAt = nowMs;
-    this._paymentSessions.set(phone, session);
-    return session;
-  }
-
-  _resolveBillableList(members = []) {
-    if (!this.gatewayService) return [];
-    const items = [];
-    for (const member of members) {
-      try {
-        const resolved = this.gatewayService.resolveBillableMember(member);
-        items.push({
-          member_id: member.id,
-          member_name: member.name,
-          plan_id: resolved.plan?.id || null,
-          plan_name: resolved.plan?.name || 'Mensalidade',
-          amount_cents: resolved.cents,
-          document: member.document || '',
-        });
-      } catch {
-        // Ignora cadastros sem plano/valor cobrável
-      }
-    }
-    return items;
-  }
-
-  _findBillableMembersByPhone(phone) {
-    const rows = this.store.all("SELECT * FROM members WHERE access_role = 'student'");
-    const matches = rows.filter((m) => normalizeBrPhone(m.phone) === phone);
-    return this._resolveBillableList(matches);
-  }
-
-  _findBillableMembersByQuery(rawQuery) {
-    const cleaned = String(rawQuery || '')
-      .replace(/^(adicionar|incluir|mais|tamb[eé]m|cpf|nome)\s*[:\-]?\s*/i, '')
-      .trim();
-    if (!cleaned) return [];
-    const digits = cleaned.replace(/\D/g, '');
-    const rows = this.store.all("SELECT * FROM members WHERE access_role = 'student'");
-
-    let matches = [];
-    if (digits.length === 11) {
-      matches = rows.filter((m) => String(m.document || '').replace(/\D/g, '') === digits);
-    }
-    // Exige nome completo exato (nunca busca parcial) para evitar enumeração de alunos por terceiros
-    if (!matches.length) {
-      const needle = stripAccents(cleaned);
-      if (needle.includes(' ') && needle.length >= 6) {
-        matches = rows.filter((m) => stripAccents(m.name) === needle);
-      }
-    }
-    return this._resolveBillableList(matches);
-  }
-
-  _formatPaymentSummary(items) {
-    const total = items.reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
-    const lines = items.map(
-      (item, idx) => `${idx + 1}. *${item.member_name}* (${item.plan_name}) — *${formatBrl(item.amount_cents)}*`,
-    );
-    return { lines: lines.join('\n'), totalCents: total };
-  }
-
-  _buildPaymentMenuReply(items, prefix = '') {
-    const { lines, totalCents } = this._formatPaymentSummary(items);
-    return [
-      prefix,
-      lines,
-      `\nTotal: *${formatBrl(totalCents)}*`,
-      '\nComo deseja continuar?',
-      '• Responda *1* para gerar o *Pix Copia e Cola*',
-      '• Responda *2* para gerar o *Link de Pagamento (Cartão ou Pix)*',
-      '• Ou envie o *CPF ou nome completo* de outra pessoa para incluir no mesmo pagamento',
-      '• Responda *cancelar* para sair',
-    ].filter(Boolean).join('\n');
-  }
-
-  async _handlePaymentFlow({ phone, userText, settings }) {
-    const existing = this._getPaymentSession(phone);
-    const wantsPayment = PAYMENT_INTENT_REGEX.test(userText);
-    if (!existing && !wantsPayment) return null;
-
-    const mpConfigured = Boolean(this.gatewayService && String(settings.mp_access_token || '').trim());
-    if (!mpConfigured) {
-      if (!existing && wantsPayment) {
-        this.pauseContact(phone, this.humanPauseMs);
-        const reply = 'Vou encaminhar seu atendimento para nossa equipe concluir seu pagamento por aqui.';
-        this.recordChatMessage({
-          phone,
-          direction: 'out',
-          senderType: 'bot',
-          body: reply,
-          needsHuman: true,
-          handoffSummary: 'Pagamento solicitado (Mercado Pago não configurado)',
-        });
-        return { reply, requiresHuman: true, reason: 'mp_not_configured' };
-      }
-      return null;
-    }
-
-    if (existing && PAYMENT_CANCEL_REGEX.test(userText)) {
-      this._paymentSessions.delete(phone);
-      const reply = 'Certo, cancelei o fluxo de pagamento por aqui. Se precisar de outra ajuda, é só chamar!';
-      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-      return { reply, requiresHuman: false };
-    }
-
-    if (existing && PAYMENT_DISCOUNT_REGEX.test(userText)) {
-      const prefix = 'Por aqui não aplicamos descontos nem valores menores — a cobrança segue sempre o valor normal da mensalidade.\n_(Se você tiver algum combinado especial, responda *atendente* para falar com a recepção.)_';
-      const reply = existing.items.length > 0
-        ? this._buildPaymentMenuReply(existing.items, prefix)
-        : `${prefix}\n\nPara continuar no valor normal, informe o *CPF (11 dígitos)* ou *nome completo* do aluno, ou responda *cancelar*.`;
-      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-      return { reply, requiresHuman: false };
-    }
-
-    if (existing?.pendingChargeId && PAYMENT_CHECK_REGEX.test(userText)) {
-      try {
-        const check = await this.gatewayService.checkChargeStatus(existing.pendingChargeId);
-        if (check.paid) {
-          this._paymentSessions.delete(phone);
-          const reply = '✅ Pagamento confirmado! Todas as mensalidades foram baixadas e a catraca já está liberada. Bom treino!';
-          this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-          return { reply, requiresHuman: false };
-        }
-        const reply = 'Ainda não recebemos a confirmação do Mercado Pago. Assim que o pagamento for concluído, a baixa e a liberação na catraca acontecem automaticamente!';
-        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-        return { reply, requiresHuman: false };
-      } catch {
-        const reply = 'Não consegui consultar agora, mas assim que o pagamento for aprovado a baixa é automática.';
-        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-        return { reply, requiresHuman: false };
-      }
-    }
-
-    if (existing && existing.items.length > 0 && (PAYMENT_PIX_CHOICE_REGEX.test(userText) || PAYMENT_LINK_CHOICE_REGEX.test(userText))) {
-      const mode = PAYMENT_LINK_CHOICE_REGEX.test(userText) ? 'checkout' : 'pix';
-      try {
-        const { charge, items, totalCents } = await this.gatewayService.createBatchPayment({
-          memberIds: existing.items.map((i) => i.member_id),
-          mode,
-        });
-        existing.pendingChargeId = charge.id;
-        this._setPaymentSession(phone, existing);
-        const { lines } = this._formatPaymentSummary(items);
-        const reply = mode === 'pix'
-          ? [
-              '✅ *Pix gerado via Mercado Pago!*',
-              lines,
-              `Total: *${formatBrl(totalCents)}*`,
-              '\nCopie e pague o código Pix abaixo no app do seu banco:',
-              charge.qr_code || charge.payment_url || '',
-              '\nAssim que pagar, a baixa e a liberação na catraca são automáticas (ou responda *"já paguei"* para conferir).',
-            ].filter(Boolean).join('\n')
-          : [
-              '✅ *Link de pagamento gerado via Mercado Pago!*',
-              lines,
-              `Total: *${formatBrl(totalCents)}*`,
-              '\nAcesse para pagar no Cartão ou Pix:',
-              charge.payment_url,
-              '\nAssim que concluir, a baixa e a liberação na catraca são automáticas!',
-            ].join('\n');
-        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-        return { reply, requiresHuman: false, charge };
-      } catch (err) {
-        const reply = `Não consegui gerar a cobrança agora (${err.message}). Vou chamar um atendente para te ajudar.`;
-        this.pauseContact(phone, this.humanPauseMs);
-        this.recordChatMessage({
-          phone,
-          direction: 'out',
-          senderType: 'bot',
-          body: reply,
-          needsHuman: true,
-          handoffSummary: `Erro ao gerar cobrança MP: ${String(err.message || '').slice(0, 120)}`,
-        });
-        return { reply, requiresHuman: true, reason: 'payment_error' };
-      }
-    }
-
-    if (!existing) {
-      const ownItems = this._findBillableMembersByPhone(phone);
-      const session = this._setPaymentSession(phone, { items: ownItems, pendingChargeId: null });
-      const reply = ownItems.length > 0
-        ? this._buildPaymentMenuReply(ownItems, 'Encontrei seu cadastro para pagamento:')
-        : 'Claro! Para gerar o pagamento pelo Mercado Pago, informe o *CPF (11 dígitos)* ou o *nome completo* do aluno.\n\n_(Se quiser pagar para mais de uma pessoa tudo junto, é só enviar um por vez!)_';
-      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-      return { reply, requiresHuman: false, session };
-    }
-
-    const found = this._findBillableMembersByQuery(userText);
-    if (!found.length) {
-      const reply = existing.items.length > 0
-        ? this._buildPaymentMenuReply(existing.items, 'Não encontrei outro aluno ativo/com plano por esse nome ou CPF.')
-        : 'Não encontrei nenhum aluno com plano vinculado por esse nome ou CPF. Confira e envie o *CPF (11 dígitos)* ou *nome completo*, ou responda *cancelar*.';
-      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-      return { reply, requiresHuman: false };
-    }
-
-    if (found.length > 1) {
-      const reply = 'Encontrei mais de um cadastro com esse nome exato. Por segurança, envie o *CPF (11 dígitos)* da pessoa que deseja incluir.';
-      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-      return { reply, requiresHuman: false };
-    }
-
-    const picked = found[0];
-    const already = existing.items.some((i) => i.member_id === picked.member_id);
-    if (!already) {
-      existing.items.push(picked);
-      existing.pendingChargeId = null;
-      this._setPaymentSession(phone, existing);
-    }
-    const prefix = already
-      ? `*${picked.member_name}* já está na lista deste pagamento:`
-      : `Adicionei *${picked.member_name}* ao pagamento:`;
-    const reply = this._buildPaymentMenuReply(existing.items, prefix);
-    this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-    return { reply, requiresHuman: false };
   }
 }

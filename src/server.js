@@ -56,6 +56,7 @@ async function start() {
   accessService.setEdgeCloudHub(edgeCloudHub);
   whatsappService.setReceiptHandler((payload) => receiptService.processReceipt(payload));
   whatsappBotService.setGatewayService(gatewayService);
+  whatsappBotService.setAccessService(accessService);
   whatsappService.setBotHandler(whatsappBotService);
 
   const app = express();

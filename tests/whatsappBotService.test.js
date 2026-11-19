@@ -181,6 +181,50 @@ test('WhatsappBotService guia pagamento Mercado Pago para 1 ou mais pessoas em l
   assert.equal(onlineSummary.total_count, 1);
 });
 
+test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> CPF -> Pix Mercado Pago)', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'TEST-MP-TOKEN',
+  });
+  const accessService = new AccessService(store, null, null);
+  const fakeMpFetch = async () => {
+    const payload = {
+      id: 77665544,
+      status: 'pending',
+      point_of_interaction: {
+        transaction_data: {
+          qr_code: '000201010212PIX_NOVA_MATRICULA',
+          qr_code_base64: 'ZmFrZQ==',
+        },
+      },
+    };
+    return { ok: true, status: 201, json: async () => payload, text: async () => JSON.stringify(payload) };
+  };
+  const gatewayService = new GatewayService(store, accessService, { fetchFn: fakeMpFetch });
+  const bot = new WhatsappBotService(store, { gatewayService, accessService });
+
+  const s1 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Quero me matricular' });
+  assert.match(s1.reply, /Escolha o número do plano/);
+
+  const s2 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
+  assert.match(s2.reply, /nome completo/i);
+
+  const s3 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Mariana Souza Lima' });
+  assert.match(s3.reply, /CPF/i);
+
+  const s4 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '52998224725' });
+  assert.match(s4.reply, /Cadastro pronto para \*Mariana Souza Lima\*/);
+
+  const s5 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
+  assert.match(s5.reply, /000201010212PIX_NOVA_MATRICULA/);
+
+  const created = store.get("SELECT id, name, status FROM members WHERE document = '529.982.247-25'");
+  assert.equal(created.name, 'Mariana Souza Lima');
+  assert.equal(created.status, 'pending');
+});
+
 test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros no pagamento e persiste historico isolado', async () => {
   const store = await DatabaseStore.create(null);
   store.updateSettings({
