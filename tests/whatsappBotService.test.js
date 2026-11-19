@@ -257,4 +257,12 @@ test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros
   const otherPrompt = calls[calls.length - 1].contents[0].parts[0].text;
   assert.doesNotMatch(otherPrompt, /cobrança em aberto/);
   assert.doesNotMatch(otherPrompt, /Maria Silva/);
+
+  // Nota interna fica salva apenas para a recepcao e nunca vai para o prompt do bot
+  bot2.setInternalNote('5564999998888', 'Combinado pagar sexta-feira na recepcao');
+  const chatWithNote = bot2.getChatMessages('5564999998888').chat;
+  assert.equal(chatWithNote.internal_note, 'Combinado pagar sexta-feira na recepcao');
+  await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'Qual o telefone?' });
+  const promptAfterNote = JSON.stringify(calls[calls.length - 1].contents);
+  assert.doesNotMatch(promptAfterNote, /Combinado pagar sexta-feira/);
 });

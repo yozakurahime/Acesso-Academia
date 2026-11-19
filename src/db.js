@@ -538,6 +538,7 @@ export class DatabaseStore {
         bot_paused INTEGER NOT NULL DEFAULT 0,
         needs_human INTEGER NOT NULL DEFAULT 0,
         handoff_summary TEXT,
+        internal_note TEXT,
         unread_count INTEGER NOT NULL DEFAULT 0,
         last_message TEXT,
         last_message_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
@@ -830,6 +831,7 @@ export class DatabaseStore {
     });
     this.ensureColumns('whatsapp_chats', {
       handoff_summary: 'TEXT',
+      internal_note: 'TEXT',
     });
     this.ensureColumns('whatsapp_chat_messages', {
       media_type: 'TEXT',

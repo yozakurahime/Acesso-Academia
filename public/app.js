@@ -7942,6 +7942,15 @@ async function openChat(phone) {
     msgsEl.scrollTop = msgsEl.scrollHeight;
   }
 
+  const noteBarEl = document.getElementById('chatNoteBar');
+  const noteInputEl = document.getElementById('chatNoteInput');
+  if (noteBarEl && noteInputEl) {
+    noteBarEl.classList.remove('hidden');
+    if (document.activeElement !== noteInputEl) {
+      noteInputEl.value = chat.internal_note || '';
+    }
+  }
+
   document.getElementById('chatQuickReplies')?.classList.remove('hidden');
   document.getElementById('chatReplyForm')?.classList.remove('hidden');
 }
@@ -7985,6 +7994,19 @@ document.getElementById('chatQuickReplies')?.addEventListener('click', (e) => {
   if (!btn || !input) return;
   input.value = btn.dataset.quickText || '';
   input.focus();
+});
+document.getElementById('btnSaveChatNote')?.addEventListener('click', async () => {
+  if (!activeChatPhone) return;
+  const note = String(document.getElementById('chatNoteInput')?.value || '').trim();
+  try {
+    await api(`/api/whatsapp/chats/${encodeURIComponent(activeChatPhone)}/note`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    });
+    showToast(note ? 'Nota interna salva.' : 'Nota interna removida.');
+  } catch (err) {
+    showToast(err.message, true);
+  }
 });
 document.getElementById('chatList')?.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-chat-phone]');

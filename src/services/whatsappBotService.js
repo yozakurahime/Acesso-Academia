@@ -220,7 +220,7 @@ export class WhatsappBotService {
 
   listChats() {
     const items = this.store.all(
-      `SELECT c.phone, c.contact_name, c.member_id, c.bot_paused, c.needs_human, c.handoff_summary,
+      `SELECT c.phone, c.contact_name, c.member_id, c.bot_paused, c.needs_human, c.handoff_summary, c.internal_note,
               c.unread_count, c.last_message, c.last_message_at,
               m.name AS member_name, m.status AS member_status, m.valid_until AS member_valid_until
        FROM whatsapp_chats c
@@ -231,6 +231,19 @@ export class WhatsappBotService {
     const needsHumanCount = items.filter((i) => Number(i.needs_human) === 1).length;
     const unreadTotal = items.reduce((acc, i) => acc + Number(i.unread_count || 0), 0);
     return { items, needsHumanCount, unreadTotal };
+  }
+
+  setInternalNote(phone, note = '') {
+    const normalized = normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
+    if (!normalized) return null;
+    const cleanNote = String(note || '').trim().slice(0, 500) || null;
+    this.store.run(
+      `INSERT INTO whatsapp_chats (phone, internal_note, last_message_at)
+       VALUES (?, ?, datetime('now', 'localtime'))
+       ON CONFLICT(phone) DO UPDATE SET internal_note = excluded.internal_note`,
+      [normalized, cleanNote],
+    );
+    return { phone: normalized, internal_note: cleanNote };
   }
 
   getChatMessages(phone, { markRead = true } = {}) {

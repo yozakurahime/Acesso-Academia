@@ -1778,6 +1778,15 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.post(
+    '/whatsapp/chats/:phone/note',
+    requireReception,
+    handle(async (req, res) => {
+      if (!whatsappBotService) throw new Error('Bot WhatsApp não inicializado.');
+      res.json(whatsappBotService.setInternalNote(req.params.phone, req.body?.note));
+    }),
+  );
+
   // Comprovantes Pix / IA (Gemini)
   router.get('/receipts', requireReception, (req, res) => {
     if (!receiptService) return res.json([]);
