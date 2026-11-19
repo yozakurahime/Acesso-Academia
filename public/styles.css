@@ -2572,6 +2572,27 @@ input.is-cpf-error {
   opacity: 0.45;
 }
 
+.card-clickable {
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+.card-clickable:hover,
+.card-clickable:focus-visible {
+  transform: translateY(-2px);
+  border-color: #f59e0b;
+  outline: none;
+}
+.dashboard-metric-link {
+  cursor: pointer;
+  border-radius: 8px;
+  padding-inline: 6px;
+  transition: background 0.14s ease;
+}
+.dashboard-metric-link:hover,
+.dashboard-metric-link:focus-visible {
+  background: rgba(245, 158, 11, 0.08);
+  outline: none;
+}
 /* Chat / Atendimento WhatsApp */
 .chat-layout {
   display: grid;

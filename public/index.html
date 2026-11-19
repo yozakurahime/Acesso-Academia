@@ -155,12 +155,13 @@
           <button type="button" class="quick-action" data-go="billing" data-focus="pMemberSearch"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></span><span>Receber mensalidade</span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
           <button type="button" class="quick-action" data-go="products" data-focus="saleProduct"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg></span><span>Venda rápida</span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
           <button type="button" class="quick-action" data-go="members" data-focus="mName"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span><span>Cadastrar aluno</span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          <button type="button" class="quick-action" data-go="chat"><span class="quick-icon"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg></span><span>Atendimento WhatsApp <span id="dashChatActionBadge" class="badge badge-pending hidden" style="margin-left:6px;">0</span></span><svg class="icon quick-arrow" aria-hidden="true"><use href="#i-arrow"/></svg></button>
         </div>
           </section>
         </div>
 
         <div class="cards overview-cards dashboard-primary">
-          <div class="card card-accent-green">
+          <div class="card card-accent-green card-clickable" data-go="members" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Alunos com acesso ativo</span>
@@ -170,7 +171,7 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-red">
+          <div class="card card-accent-red card-clickable" data-go="members" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Alunos bloqueados ou pendentes</span>
@@ -180,7 +181,7 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-orange">
+          <div class="card card-accent-orange card-clickable" data-go="billing" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Recebido hoje</span>
@@ -190,7 +191,7 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-orange">
+          <div class="card card-accent-orange card-clickable" data-go="reports" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Recebido no mês</span>
@@ -200,7 +201,7 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-amber">
+          <div class="card card-accent-amber card-clickable" data-go="cash" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Caixa atual</span>
@@ -210,7 +211,7 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-amber">
+          <div class="card card-accent-amber card-clickable" data-go="logs" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Lotação atual</span>
@@ -244,9 +245,11 @@
           <section class="panel">
             <div class="panel-header"><h2>Pendências</h2></div>
             <dl class="dashboard-metrics">
-              <div><dt>Matrículas vencidas</dt><dd id="statExpired">—</dd></div>
-              <div><dt>Cobranças vencidas em aberto</dt><dd id="statOverdue">—</dd></div>
-              <div><dt>Produtos com até 5 unidades</dt><dd id="statLowStock">—</dd></div>
+              <div class="dashboard-metric-link" data-go="chat" role="button" tabindex="0"><dt>Atendimentos aguardando humano</dt><dd id="statChatHuman">—</dd></div>
+              <div class="dashboard-metric-link" data-go="members" role="button" tabindex="0"><dt>Matrículas vencidas</dt><dd id="statExpired">—</dd></div>
+              <div class="dashboard-metric-link" data-go="billing" role="button" tabindex="0"><dt>Cobranças vencidas em aberto</dt><dd id="statOverdue">—</dd></div>
+              <div class="dashboard-metric-link" data-go="products" role="button" tabindex="0"><dt>Produtos com até 5 unidades</dt><dd id="statLowStock">—</dd></div>
+              <div class="dashboard-metric-link" data-go="cash" role="button" tabindex="0"><dt>Caixa Online (Mercado Pago)</dt><dd id="statOnlineToday">—</dd></div>
             </dl>
           </section>
           <section class="panel">

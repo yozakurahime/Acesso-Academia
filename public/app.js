@@ -625,12 +625,21 @@ document.getElementById('btnNewMember').addEventListener('click', async (event) 
 });
 
 document.querySelectorAll('[data-go]').forEach((button) => {
-  button.addEventListener('click', async () => {
+  const activate = async () => {
     const { go, focus, expand } = button.dataset;
     if (expand) document.getElementById(expand).open = true;
     if (focus === 'mName') setMemberFormOpen(true);
     if (await switchTab(go) && state.activeTab === go && focus) document.getElementById(focus).focus();
-  });
+  };
+  button.addEventListener('click', activate);
+  if (button.tagName !== 'BUTTON' && button.tagName !== 'A') {
+    button.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      }
+    });
+  }
 });
 
 function openNewMemberWithQuery(rawQuery = '') {
@@ -712,10 +721,29 @@ document.getElementById('sidebarLiveWidget')?.addEventListener('click', () => {
 });
 
 async function loadDashboard() {
-  const [data, occupancy] = await Promise.all([
+  const [data, occupancy, chatsData, onlineCash] = await Promise.all([
     api('/api/dashboard'),
     api('/api/occupancy').catch(() => null),
+    api('/api/whatsapp/chats').catch(() => null),
+    api('/api/gateways/online-cash').catch(() => null),
   ]);
+  if (chatsData) updateChatNavBadge(chatsData);
+  const humanCount = Number(chatsData?.needsHumanCount || 0);
+  const chatHumanEl = document.getElementById('statChatHuman');
+  if (chatHumanEl) {
+    chatHumanEl.innerHTML = humanCount > 0
+      ? `<span class="badge badge-pending">${humanCount} aguardando</span>`
+      : '0';
+  }
+  const dashChatBadge = document.getElementById('dashChatActionBadge');
+  if (dashChatBadge) {
+    dashChatBadge.textContent = String(humanCount);
+    dashChatBadge.classList.toggle('hidden', humanCount <= 0);
+  }
+  const onlineEl = document.getElementById('statOnlineToday');
+  if (onlineEl) {
+    onlineEl.textContent = onlineCash ? `${fmtMoney(onlineCash.today_cents || 0)} hoje` : '—';
+  }
   updateSidebarLiveOccupancy(occupancy, data.recentLogs?.[0] || null);
   const occEl = document.getElementById('statOccupancy');
   if (occEl) {
