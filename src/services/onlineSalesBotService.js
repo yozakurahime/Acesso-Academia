@@ -2,6 +2,7 @@ import { normalizeBrPhone } from './whatsappService.js';
 
 const PAYMENT_INTENT_REGEX = /\b(pagar|pagamento|mensalidade|renovar|renova[cç][aã]o|pix|link\s+de\s+pagamento|quero\s+pagar)\b/i;
 const ENROLLMENT_INTENT_REGEX = /\b(quero\s+me\s+matricular|fazer\s+matr[ií]cula|fazer\s+cadastro|me\s+cadastrar|nova\s+matr[ií]cula)\b/i;
+const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)|baby|infantil)\b/i;
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
 const PAYMENT_PIX_CHOICE_REGEX = /^(1|pix|qr|copia\s+e\s+cola)$/i;
 const PAYMENT_LINK_CHOICE_REGEX = /^(2|link|cart[aã]o|cr[eé]dito|d[eé]bito)$/i;
@@ -155,16 +156,36 @@ export class OnlineSalesBotService {
   }
 
   _listOnlinePlans() {
-    return this.store.all(
+    const rows = this.store.all(
       `SELECT id, name, duration_days, price_cents
        FROM plans
-       WHERE price_cents > 0 AND duration_days > 1
-       ORDER BY price_cents ASC, id ASC
-       LIMIT 6`,
+       WHERE COALESCE(active, 1) = 1 AND price_cents > 0 AND duration_days > 1
+       ORDER BY price_cents ASC, id ASC`,
     );
+    return rows
+      .filter((p) => {
+        const label = stripAccents(p.name || '');
+        return !label.includes('baby') && !label.includes('infantil') && !label.includes('kids');
+      })
+      .slice(0, 6);
   }
 
   async _handleEnrollmentFlow({ phone, userText, session }) {
+    if (KIDS_SWIM_REGEX.test(userText)) {
+      this._sessions.delete(phone);
+      this.pauseContact(phone, this.humanPauseMs);
+      const reply = 'As modalidades de *Natação Baby* e *Natação Infantil* não possuem matrícula online automática por conta do controle de vagas por turma.\n\nPor favor, me informe a *idade da criança* e o *horário de preferência* — nossa recepção vai confirmar a disponibilidade e concluir com você por aqui!';
+      this.recordChatMessage({
+        phone,
+        direction: 'out',
+        senderType: 'bot',
+        body: reply,
+        needsHuman: true,
+        handoffSummary: 'Matrícula Natação Baby/Infantil (somente recepção)',
+      });
+      return { reply, requiresHuman: true, reason: 'kids_swim_reception_only' };
+    }
+
     if (!session) {
       const plans = this._listOnlinePlans();
       if (!plans.length) {

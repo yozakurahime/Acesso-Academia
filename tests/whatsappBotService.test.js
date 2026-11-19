@@ -188,6 +188,8 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
     gemini_api_key: 'fake-key',
     mp_access_token: 'TEST-MP-TOKEN',
   });
+  store.run("INSERT INTO plans (name, duration_days, price_cents, active) VALUES ('Natação Infantil (Mensal)', 30, 14000, 1)");
+  store.run("INSERT INTO plans (name, duration_days, price_cents, active) VALUES ('Natação Baby (Mensal)', 30, 14000, 1)");
   const accessService = new AccessService(store, null, null);
   const fakeMpFetch = async () => {
     const payload = {
@@ -207,6 +209,12 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
 
   const s1 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Quero me matricular' });
   assert.match(s1.reply, /Escolha o número do plano/);
+  assert.doesNotMatch(s1.reply, /Infantil|Baby/i);
+
+  const kids = await bot.handleIncomingMessage({ phone: '5562991234599', text: 'Quero fazer matrícula na Natação Infantil' });
+  assert.equal(kids.requiresHuman, true);
+  assert.equal(kids.reason, 'kids_swim_reception_only');
+  assert.match(kids.reply, /Natação Baby.*Natação Infantil/i);
 
   const s2 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
   assert.match(s2.reply, /nome completo/i);
