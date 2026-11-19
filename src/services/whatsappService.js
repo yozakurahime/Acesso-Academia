@@ -723,6 +723,136 @@ export class WhatsappService {
     return queued;
   }
 
+  enqueueOverdueTodayReminders(now = new Date()) {
+    const settings = this.store.getSettings();
+    if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_due !== '1' || settings.whatsapp_notify_overdue === '0') return 0;
+
+    const yesterdayIso = localDateIso(-1, now);
+    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
+    if (remainingBudget === 0) return 0;
+
+    const candidates = this.store.all(
+      `SELECT m.id, m.name, m.phone, m.valid_until, p.name AS plan_name
+       FROM members m
+       LEFT JOIN plans p ON p.id = m.plan_id
+       WHERE COALESCE(m.access_role, 'student') = 'student'
+         AND m.status IN ('active', 'blocked')
+         AND m.phone IS NOT NULL AND trim(m.phone) <> ''
+         AND m.valid_until = ?
+       ORDER BY m.id ASC`,
+      [yesterdayIso],
+    );
+
+    let queued = 0;
+    for (const member of candidates) {
+      if (queued >= remainingBudget) break;
+      const message = this.renderTemplate(
+        '{saudacao} {primeiro_nome}! Sua mensalidade ({plano}) venceu ontem ({vencimento}). Para renovar rápido sem bloqueio na catraca, responda *quero pagar* por aqui que eu gero seu Pix ou link na hora!',
+        {
+          name: member.name,
+          planName: member.plan_name || 'Plano',
+          validUntil: member.valid_until,
+          gymName: settings.gym_name,
+        },
+      );
+      const inserted = this.enqueueMessage({
+        memberId: member.id,
+        phone: member.phone,
+        kind: 'overdue_reminder',
+        refKey: `overdue:${member.valid_until}`,
+        message,
+      });
+      if (inserted) queued += 1;
+    }
+    return queued;
+  }
+
+  enqueueOnboardingCheckins(now = new Date()) {
+    const settings = this.store.getSettings();
+    if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_welcome !== '1' || settings.whatsapp_notify_onboarding === '0') return 0;
+
+    const targetIso = localDateIso(-7, now);
+    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
+    if (remainingBudget === 0) return 0;
+
+    const candidates = this.store.all(
+      `SELECT id, name, phone
+       FROM members
+       WHERE COALESCE(access_role, 'student') = 'student'
+         AND status = 'active'
+         AND phone IS NOT NULL AND trim(phone) <> ''
+         AND date(created_at) = ?
+       ORDER BY id ASC`,
+      [targetIso],
+    );
+
+    let queued = 0;
+    for (const member of candidates) {
+      if (queued >= remainingBudget) break;
+      const message = this.renderTemplate(
+        '{saudacao} {primeiro_nome}! Já faz 1 semana que você começou na {academia}. Como estão sendo seus primeiros treinos? Se estiver curtindo, seu feedback ajuda muito: https://g.page/r/CU1I-EMNGUdyEBM/review',
+        { name: member.name, gymName: settings.gym_name },
+      );
+      const inserted = this.enqueueMessage({
+        memberId: member.id,
+        phone: member.phone,
+        kind: 'onboarding_7d',
+        refKey: `onboarding7d:${member.id}`,
+        message,
+      });
+      if (inserted) queued += 1;
+    }
+    return queued;
+  }
+
+  enqueueMilestoneMessages(now = new Date()) {
+    const settings = this.store.getSettings();
+    if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_milestone === '0') return 0;
+
+    const todayIso = localDateIso(0, now);
+    const milestones = new Set([10, 30, 50, 100, 200]);
+    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
+    if (remainingBudget === 0) return 0;
+
+    const candidates = this.store.all(
+      `SELECT m.id, m.name, m.phone, COUNT(a.id) AS total_visits
+       FROM members m
+       JOIN access_logs a ON a.member_id = m.id AND a.event_code IN (7, 11, 12)
+       WHERE COALESCE(m.access_role, 'student') = 'student'
+         AND m.status = 'active'
+         AND m.phone IS NOT NULL AND trim(m.phone) <> ''
+         AND EXISTS (
+           SELECT 1 FROM access_logs t
+           WHERE t.member_id = m.id AND t.event_code IN (7, 11, 12) AND date(t.occurred_at) = ?
+         )
+       GROUP BY m.id`,
+      [todayIso],
+    );
+
+    let queued = 0;
+    for (const member of candidates) {
+      if (queued >= remainingBudget) break;
+      const count = Number(member.total_visits || 0);
+      if (!milestones.has(count)) continue;
+      const message = this.renderTemplate(
+        `Parabéns, {primeiro_nome}! Você acabou de completar *${count} treinos* na {academia}! Continue firme no foco!`,
+        { name: member.name, gymName: settings.gym_name },
+      );
+      const inserted = this.enqueueMessage({
+        memberId: member.id,
+        phone: member.phone,
+        kind: 'milestone',
+        refKey: `milestone:${count}`,
+        message,
+      });
+      if (inserted) queued += 1;
+    }
+    return queued;
+  }
+
   enqueueInactiveCheckins(now = new Date()) {
     const settings = this.store.getSettings();
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_inactive !== '1') return 0;
@@ -989,6 +1119,9 @@ export class WhatsappService {
     if (!ignoreWindow && !this.isWithinAllowedWindow(settings, now)) {
       return {
         dueQueued: 0,
+        overdueQueued: 0,
+        onboardingQueued: 0,
+        milestoneQueued: 0,
         inactiveQueued: 0,
         birthdayQueued: 0,
         workoutReviewQueued: 0,
@@ -998,17 +1131,23 @@ export class WhatsappService {
       };
     }
     const dueQueued = this.enqueueDueReminders(now);
+    const overdueQueued = this.enqueueOverdueTodayReminders(now);
+    const onboardingQueued = this.enqueueOnboardingCheckins(now);
+    const milestoneQueued = this.enqueueMilestoneMessages(now);
     const inactiveQueued = this.enqueueInactiveCheckins(now);
     const birthdayQueued = this.enqueueBirthdayMessages(now);
     const classReminderQueued = this.enqueueClassReminders(now);
     const workoutReviewQueued = this.enqueueWorkoutReviewReminders(now);
     const winBackQueued = this.enqueueWinBackMessages(now);
-    const total = dueQueued + inactiveQueued + birthdayQueued + classReminderQueued + workoutReviewQueued + winBackQueued;
+    const total = dueQueued + overdueQueued + onboardingQueued + milestoneQueued + inactiveQueued + birthdayQueued + classReminderQueued + workoutReviewQueued + winBackQueued;
     if (total > 0 && this.status === 'connected') {
       this.processQueue().catch(() => {});
     }
     return {
       dueQueued,
+      overdueQueued,
+      onboardingQueued,
+      milestoneQueued,
       inactiveQueued,
       birthdayQueued,
       workoutReviewQueued,

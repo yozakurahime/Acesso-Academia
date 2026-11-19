@@ -181,3 +181,59 @@ test('WhatsappService aplica opt-out automático, spintax e trava de win-back', 
   assert.equal(wa.handleIncomingText('5511977772001', 'VOLTAR'), true);
   assert.ok(wa.enqueueMessage({ memberId: mId, phone: '11977772001', kind: 'winback', refKey: 'wb:2', message: 'Volte' }));
 });
+
+test('WhatsappService enfileira cobranca vencida ontem, check-in de 7 dias e marcos de treinos sem duplicar', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_notify_due: '1',
+    whatsapp_notify_welcome: '1',
+    whatsapp_daily_limit: '20',
+  });
+  const wa = new WhatsappService(store);
+  const now = new Date(2026, 10, 19, 10, 0, 0);
+  const pad = (n) => String(n).padStart(2, '0');
+  const isoOffset = (days) => {
+    const d = new Date(now.getTime());
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const yesterday = isoOffset(-1);
+  const sevenDaysAgo = isoOffset(-7);
+  const today = isoOffset(0);
+
+  const planId = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Mensal', 30, 12000)").lastInsertRowid;
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('João Vencido', '20000000001', '62999990001', 'active', ?, ?)",
+    [yesterday, planId],
+  );
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id, created_at) VALUES ('Paula Nova', '20000000002', '62999990002', 'active', '2026-12-10', ?, ?)",
+    [planId, `${sevenDaysAgo} 09:00:00`],
+  );
+  const m3 = store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Carlos Foco', '20000000003', '62999990003', 'active', '2026-12-10', ?)",
+    [planId],
+  ).lastInsertRowid;
+  for (let i = 0; i < 10; i++) {
+    store.run(
+      "INSERT INTO access_logs (member_id, member_name, event_code, event_label, occurred_at) VALUES (?, 'Carlos Foco', 7, 'Liberado', ?)",
+      [m3, `${today} 08:0${i}:00`],
+    );
+  }
+
+  assert.equal(wa.enqueueOverdueTodayReminders(now), 1);
+  assert.equal(wa.enqueueOnboardingCheckins(now), 1);
+  assert.equal(wa.enqueueMilestoneMessages(now), 1);
+
+  // Deduplicacao impede reenvio no mesmo ciclo
+  assert.equal(wa.enqueueOverdueTodayReminders(now), 0);
+  assert.equal(wa.enqueueOnboardingCheckins(now), 0);
+  assert.equal(wa.enqueueMilestoneMessages(now), 0);
+
+  const logs = store.all('SELECT kind, message FROM whatsapp_logs ORDER BY id ASC');
+  assert.deepEqual(logs.map((l) => l.kind), ['overdue_reminder', 'onboarding_7d', 'milestone']);
+  assert.match(logs[0].message, /quero pagar/i);
+  assert.match(logs[1].message, /g\.page\/r\//);
+  assert.match(logs[2].message, /10 treinos/);
+});
