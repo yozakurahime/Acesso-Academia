@@ -7800,11 +7800,15 @@ function updateChatNavBadge(data) {
   }
 }
 
+let chatFilterMode = 'all';
+
 function renderChatList() {
   const listEl = document.getElementById('chatList');
   if (!listEl) return;
   const q = String(document.getElementById('chatSearchInput')?.value || '').trim().toLowerCase();
   const filtered = chatItemsCache.filter((c) => {
+    if (chatFilterMode === 'human' && Number(c.needs_human) !== 1) return false;
+    if (chatFilterMode === 'unread' && Number(c.unread_count || 0) <= 0) return false;
     if (!q) return true;
     const name = String(c.member_name || c.contact_name || '').toLowerCase();
     return name.includes(q) || String(c.phone || '').includes(q);
@@ -7841,15 +7845,17 @@ async function openChat(phone) {
   const chat = data.chat || { phone };
   const title = chat.member_name || chat.contact_name || chat.phone;
   const paused = Number(chat.bot_paused) === 1;
+  const needsHuman = Number(chat.needs_human) === 1;
   const headerEl = document.getElementById('chatHeader');
   if (headerEl) {
+    const toggleLabel = needsHuman ? 'Resolver e retomar bot' : (paused ? 'Retomar bot' : 'Pausar bot');
     headerEl.innerHTML = `
       <div>
         <strong>${escapeHtml(title)}</strong>
         <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}</div>
       </div>
       <div class="inline-actions">
-        <button type="button" id="btnToggleChatBot" class="btn btn-secondary btn-sm">${paused ? 'Retomar bot' : 'Pausar bot'}</button>
+        <button type="button" id="btnToggleChatBot" class="btn ${needsHuman ? 'btn-primary' : 'btn-secondary'} btn-sm">${toggleLabel}</button>
       </div>
     `;
     document.getElementById('btnToggleChatBot')?.addEventListener('click', async () => {
@@ -7864,6 +7870,19 @@ async function openChat(phone) {
         showToast(err.message, true);
       }
     });
+  }
+
+  const handoffEl = document.getElementById('chatHandoffBanner');
+  if (handoffEl) {
+    if (needsHuman) {
+      const summaryText = chat.handoff_summary
+        ? `Motivo do transbordo: ${chat.handoff_summary}`
+        : 'Este contato solicitou atendimento humano (bot pausado).';
+      handoffEl.textContent = summaryText;
+      handoffEl.classList.remove('hidden');
+    } else {
+      handoffEl.classList.add('hidden');
+    }
   }
 
   const msgsEl = document.getElementById('chatMessages');
@@ -7896,6 +7915,7 @@ async function openChat(phone) {
     msgsEl.scrollTop = msgsEl.scrollHeight;
   }
 
+  document.getElementById('chatQuickReplies')?.classList.remove('hidden');
   document.getElementById('chatReplyForm')?.classList.remove('hidden');
 }
 
@@ -7921,6 +7941,24 @@ document.getElementById('btnRefreshChats')?.addEventListener('click', () => {
   loadChats().catch((err) => showToast(err.message, true));
 });
 document.getElementById('chatSearchInput')?.addEventListener('input', renderChatList);
+document.getElementById('chatFilterBar')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.chat-filter-btn');
+  if (!btn) return;
+  chatFilterMode = btn.dataset.chatFilter || 'all';
+  document.querySelectorAll('.chat-filter-btn').forEach((b) => {
+    const active = b === btn;
+    b.classList.toggle('btn-primary', active);
+    b.classList.toggle('btn-secondary', !active);
+  });
+  renderChatList();
+});
+document.getElementById('chatQuickReplies')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.chat-quick-btn');
+  const input = document.getElementById('chatReplyInput');
+  if (!btn || !input) return;
+  input.value = btn.dataset.quickText || '';
+  input.focus();
+});
 document.getElementById('chatList')?.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-chat-phone]');
   if (!btn) return;

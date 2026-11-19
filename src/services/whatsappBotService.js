@@ -136,7 +136,7 @@ export class WhatsappBotService {
     this._pausedUntil.delete(normalized);
     try {
       this.store.run(
-        'UPDATE whatsapp_chats SET bot_paused = 0, needs_human = 0 WHERE phone = ?',
+        'UPDATE whatsapp_chats SET bot_paused = 0, needs_human = 0, handoff_summary = NULL WHERE phone = ?',
         [normalized],
       );
     } catch {}
@@ -146,18 +146,25 @@ export class WhatsappBotService {
     this.pauseContact(phone, this.ownerTakeoverPauseMs, nowMs);
   }
 
-  _findMemberForPhone(normalizedPhone) {
-    if (!normalizedPhone) return null;
+  _findMembersForExactPhone(normalizedPhone) {
+    if (!normalizedPhone) return [];
     try {
-      return this.store.get(
-        `SELECT id, name FROM members
-         WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?
-         ORDER BY id DESC LIMIT 1`,
+      const candidates = this.store.all(
+        `SELECT m.id, m.name, m.phone, m.status, m.valid_until, p.name AS plan_name
+         FROM members m
+         LEFT JOIN plans p ON p.id = m.plan_id
+         WHERE replace(replace(replace(replace(COALESCE(m.phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?
+         ORDER BY m.id DESC`,
         [normalizedPhone.slice(-8)],
       );
+      return candidates.filter((m) => normalizeBrPhone(m.phone) === normalizedPhone);
     } catch {
-      return null;
+      return [];
     }
+  }
+
+  _findMemberForPhone(normalizedPhone) {
+    return this._findMembersForExactPhone(normalizedPhone)[0] || null;
   }
 
   recordChatMessage({
@@ -169,6 +176,7 @@ export class WhatsappBotService {
     mediaUrl = null,
     contactName = null,
     needsHuman = false,
+    handoffSummary = null,
   } = {}) {
     const normalized = normalizeBrPhone(phone);
     const cleanBody = String(body || '').trim();
@@ -182,20 +190,22 @@ export class WhatsappBotService {
     const unreadDelta = direction === 'in' ? 1 : 0;
     const pausedFlag = needsHuman ? 1 : 0;
     const humanFlag = needsHuman ? 1 : 0;
+    const cleanSummary = handoffSummary ? String(handoffSummary).trim().slice(0, 240) : null;
 
     try {
       this.store.run(
-        `INSERT INTO whatsapp_chats (phone, contact_name, member_id, bot_paused, needs_human, unread_count, last_message, last_message_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        `INSERT INTO whatsapp_chats (phone, contact_name, member_id, bot_paused, needs_human, handoff_summary, unread_count, last_message, last_message_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
          ON CONFLICT(phone) DO UPDATE SET
            contact_name = COALESCE(excluded.contact_name, whatsapp_chats.contact_name),
            member_id = COALESCE(excluded.member_id, whatsapp_chats.member_id),
            bot_paused = CASE WHEN excluded.bot_paused = 1 THEN 1 ELSE whatsapp_chats.bot_paused END,
            needs_human = CASE WHEN excluded.needs_human = 1 THEN 1 ELSE whatsapp_chats.needs_human END,
+           handoff_summary = COALESCE(excluded.handoff_summary, whatsapp_chats.handoff_summary),
            unread_count = CASE WHEN ? > 0 THEN whatsapp_chats.unread_count + 1 ELSE 0 END,
            last_message = excluded.last_message,
            last_message_at = datetime('now', 'localtime')`,
-        [normalized, resolvedName, member?.id || null, pausedFlag, humanFlag, unreadDelta, previewText.slice(0, 240), unreadDelta],
+        [normalized, resolvedName, member?.id || null, pausedFlag, humanFlag, cleanSummary, unreadDelta, previewText.slice(0, 240), unreadDelta],
       );
       this.store.run(
         `INSERT INTO whatsapp_chat_messages (phone, direction, sender_type, body, media_type, media_url)
@@ -210,7 +220,7 @@ export class WhatsappBotService {
 
   listChats() {
     const items = this.store.all(
-      `SELECT c.phone, c.contact_name, c.member_id, c.bot_paused, c.needs_human,
+      `SELECT c.phone, c.contact_name, c.member_id, c.bot_paused, c.needs_human, c.handoff_summary,
               c.unread_count, c.last_message, c.last_message_at,
               m.name AS member_name, m.status AS member_status, m.valid_until AS member_valid_until
        FROM whatsapp_chats c
@@ -259,12 +269,33 @@ export class WhatsappBotService {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return [];
     const entry = this._histories.get(normalized);
-    if (!entry) return [];
-    if (nowMs - entry.updatedAt > this.historyTtlMs) {
-      this._histories.delete(normalized);
-      return [];
+    if (entry) {
+      if (nowMs - entry.updatedAt > this.historyTtlMs) {
+        this._histories.delete(normalized);
+      } else {
+        return entry.turns;
+      }
     }
-    return entry.turns;
+    try {
+      const limit = this.historyMaxTurns * 2;
+      const rows = this.store.all(
+        `SELECT direction, body FROM whatsapp_chat_messages
+         WHERE phone = ? AND COALESCE(TRIM(body), '') != ''
+         ORDER BY id DESC LIMIT ?`,
+        [normalized, limit],
+      );
+      if (rows.length > 0) {
+        const turns = rows.reverse().map((r) => ({
+          role: r.direction === 'in' ? 'user' : 'model',
+          text: r.body,
+        }));
+        this._histories.set(normalized, { updatedAt: nowMs, turns });
+        return turns;
+      }
+    } catch {
+      // ignore if table not present
+    }
+    return [];
   }
 
   _appendHistory(phone, role, text, nowMs = Date.now()) {
@@ -301,31 +332,20 @@ export class WhatsappBotService {
   _buildMemberContext(phone, pushName) {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return '';
-    const suffix = normalized.slice(-8);
-    let member = null;
-    try {
-      member = this.store.get(
-        `SELECT m.id, m.name, m.status, m.valid_until, p.name AS plan_name
-         FROM members m
-         LEFT JOIN plans p ON p.id = m.plan_id
-         WHERE replace(replace(replace(replace(COALESCE(m.phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?
-         ORDER BY m.id DESC
-         LIMIT 1`,
-        [suffix],
-      );
-    } catch {
-      member = null;
-    }
+    const members = this._findMembersForExactPhone(normalized);
 
-    if (member) {
-      const firstName = String(member.name || '').trim().split(/\s+/)[0] || member.name;
-      const parts = [
-        `Aluno identificado no sistema: ${member.name} (chame de ${firstName}).`,
-        `Situação do cadastro: ${member.status || 'desconhecida'}.`,
-      ];
-      if (member.plan_name) parts.push(`Plano: ${member.plan_name}.`);
-      if (member.valid_until) parts.push(`Validade da matrícula: ${member.valid_until}.`);
-      return `# CONTEXTO DO ALUNO\n${parts.join('\n')}`;
+    if (members.length > 0) {
+      const lines = members.map((member) => {
+        const firstName = String(member.name || '').trim().split(/\s+/)[0] || member.name;
+        const info = [
+          `Aluno: ${member.name} (chame de ${firstName})`,
+          `situação: ${member.status || 'desconhecida'}`,
+        ];
+        if (member.plan_name) info.push(`plano: ${member.plan_name}`);
+        if (member.valid_until) info.push(`validade: ${member.valid_until}`);
+        return `- ${info.join(' | ')}`;
+      });
+      return `# CONTEXTO DO ALUNO DESTE WHATSAPP\n${lines.join('\n')}`;
     }
 
     if (pushName && String(pushName).trim()) {
@@ -334,17 +354,58 @@ export class WhatsappBotService {
     return '';
   }
 
+  _buildCatalogContext() {
+    const sections = [];
+    try {
+      const plans = this.store.all(
+        `SELECT name, duration_days, price_cents, allowed_start_time, allowed_end_time, weekly_limit
+         FROM plans WHERE active = 1 ORDER BY price_cents ASC, name ASC`,
+      );
+      if (plans.length > 0) {
+        const planLines = plans.map((p) => {
+          const extras = [];
+          if (p.duration_days) extras.push(`${p.duration_days} dias`);
+          if (p.weekly_limit) extras.push(`${p.weekly_limit}x/semana`);
+          if (p.allowed_start_time && p.allowed_end_time) extras.push(`${p.allowed_start_time}–${p.allowed_end_time}`);
+          return `- ${p.name}: ${formatBrl(p.price_cents)}${extras.length ? ` (${extras.join(', ')})` : ''}`;
+        });
+        sections.push(`Planos ativos:\n${planLines.join('\n')}`);
+      }
+    } catch {}
+
+    try {
+      const classes = this.store.all(
+        `SELECT c.name, c.schedule, c.capacity, m.name AS modality_name
+         FROM classes c
+         LEFT JOIN modalities m ON m.id = c.modality_id
+         WHERE c.active = 1 ORDER BY c.name ASC`,
+      );
+      if (classes.length > 0) {
+        const classLines = classes.map((c) => {
+          const mod = c.modality_name ? `${c.modality_name} — ` : '';
+          return `- ${mod}${c.name}: ${c.schedule} (capacidade ${c.capacity} alunos)`;
+        });
+        sections.push(`Turmas e horários ativos:\n${classLines.join('\n')}`);
+      }
+    } catch {}
+
+    return sections.length > 0 ? `# DADOS ATUAIS DO SISTEMA (SEM DADOS PESSOAIS)\n${sections.join('\n\n')}` : '';
+  }
+
   _buildSystemPrompt(phone, pushName) {
     const nowInfo = resolveBrazilNowInfo();
     const baseContext = this.loadBaseContext();
+    const catalogContext = this._buildCatalogContext();
     const memberContext = this._buildMemberContext(phone, pushName);
 
     const parts = [
       `# RELÓGIO OFICIAL\nFuso horário oficial: ${nowInfo.timezone}\nData de hoje: ${nowInfo.dateBR}\nHora atual: ${nowInfo.timeBR}\nDia da semana oficial: ${nowInfo.weekday}.`,
       '# REGRA DE DATA\nQuando mencionar "hoje", use EXATAMENTE o dia da semana oficial acima. Nunca invente outro dia da semana.',
+      '# REGRA ABSOLUTA DE PRIVACIDADE (LGPD)\n- NUNCA revele, confirme ou consulte dados pessoais, financeiros, de matrícula, telefone, CPF ou status de OUTRAS pessoas/alunos.\n- Use exclusivamente os dados do # CONTEXTO DO ALUNO DESTE WHATSAPP (se houver). Se alguém perguntar sobre terceiros, informe que por privacidade não é possível passar informações de outras pessoas pelo WhatsApp e encaminhe para atendimento humano se necessário.',
       '# REGRA DE TRANSFERÊNCIA POR CONTEXTO\n- Nunca peça transferência apenas porque não entendeu uma mensagem; nesse caso, faça uma pergunta curta para esclarecer.\n- Quando o usuário pedir uma informação factual da academia e a resposta confiável NÃO existir no contexto fornecido, responda EXATAMENTE ' + CONTEXT_MISSING_HANDOFF_MARKER + ' e nada mais.\n- Use o marcador somente para informação ausente, nunca para saudações ou conversa geral.',
       `# PLAYBOOKS\n${DEFAULT_PLAYBOOKS}`,
       baseContext,
+      catalogContext,
       memberContext,
       'Se houver conflito entre histórico e base de conhecimento, priorize SEMPRE a base de conhecimento. Responda de forma curta, natural e acolhedora.',
     ];
@@ -429,7 +490,8 @@ export class WhatsappBotService {
     if (HUMAN_REQUEST_REGEX.test(userText)) {
       this.pauseContact(normalized, this.humanPauseMs);
       const reply = 'Claro! Vou encaminhar sua conversa para nossa equipe de atendimento humano. Assim que possível alguém já te responde por aqui.';
-      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: reply, needsHuman: true });
+      const handoffSummary = `Solicitou atendente: "${userText.slice(0, 120)}"`;
+      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: reply, needsHuman: true, handoffSummary });
       return {
         reply,
         requiresHuman: true,
@@ -459,7 +521,8 @@ export class WhatsappBotService {
     if (rawReply.includes(CONTEXT_MISSING_HANDOFF_MARKER)) {
       this.pauseContact(normalized, this.humanPauseMs);
       const reply = 'Vou confirmar essa informação certinha com nossa equipe de atendimento humano e já te respondemos por aqui!';
-      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: reply, needsHuman: true });
+      const handoffSummary = `Sem resposta no contexto: "${userText.slice(0, 120)}"`;
+      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: reply, needsHuman: true, handoffSummary });
       return {
         reply,
         requiresHuman: true,
@@ -536,10 +599,11 @@ export class WhatsappBotService {
     if (digits.length === 11) {
       matches = rows.filter((m) => String(m.document || '').replace(/\D/g, '') === digits);
     }
+    // Exige nome completo exato (nunca busca parcial) para evitar enumeração de alunos por terceiros
     if (!matches.length) {
       const needle = stripAccents(cleaned);
-      if (needle.length >= 3) {
-        matches = rows.filter((m) => stripAccents(m.name).includes(needle));
+      if (needle.includes(' ') && needle.length >= 6) {
+        matches = rows.filter((m) => stripAccents(m.name) === needle);
       }
     }
     return this._resolveBillableList(matches);
@@ -577,7 +641,14 @@ export class WhatsappBotService {
       if (!existing && wantsPayment) {
         this.pauseContact(phone, this.humanPauseMs);
         const reply = 'Vou encaminhar seu atendimento para nossa equipe concluir seu pagamento por aqui.';
-        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply, needsHuman: true });
+        this.recordChatMessage({
+          phone,
+          direction: 'out',
+          senderType: 'bot',
+          body: reply,
+          needsHuman: true,
+          handoffSummary: 'Pagamento solicitado (Mercado Pago não configurado)',
+        });
         return { reply, requiresHuman: true, reason: 'mp_not_configured' };
       }
       return null;
@@ -650,7 +721,14 @@ export class WhatsappBotService {
       } catch (err) {
         const reply = `Não consegui gerar a cobrança agora (${err.message}). Vou chamar um atendente para te ajudar.`;
         this.pauseContact(phone, this.humanPauseMs);
-        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply, needsHuman: true });
+        this.recordChatMessage({
+          phone,
+          direction: 'out',
+          senderType: 'bot',
+          body: reply,
+          needsHuman: true,
+          handoffSummary: `Erro ao gerar cobrança MP: ${String(err.message || '').slice(0, 120)}`,
+        });
         return { reply, requiresHuman: true, reason: 'payment_error' };
       }
     }
@@ -675,8 +753,7 @@ export class WhatsappBotService {
     }
 
     if (found.length > 1) {
-      const opts = found.slice(0, 5).map((m) => `• ${m.member_name}${m.document ? ` (CPF final ${String(m.document).slice(-4)})` : ''} — ${m.plan_name}`).join('\n');
-      const reply = `Encontrei mais de um aluno parecido:\n${opts}\n\nEnvie o *CPF* ou o *nome completo* exato de quem deseja incluir.`;
+      const reply = 'Encontrei mais de um cadastro com esse nome exato. Por segurança, envie o *CPF (11 dígitos)* da pessoa que deseja incluir.';
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
     }

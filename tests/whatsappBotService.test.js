@@ -180,3 +180,70 @@ test('WhatsappBotService guia pagamento Mercado Pago para 1 ou mais pessoas em l
   assert.equal(onlineSummary.total_cents, 21000);
   assert.equal(onlineSummary.total_count, 1);
 });
+
+test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros no pagamento e persiste historico isolado', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'TEST-MP-TOKEN',
+  });
+  const p1 = store.run("INSERT INTO plans (name, duration_days, price_cents, active) VALUES ('Musculacao Mensal', 30, 12900, 1)").lastInsertRowid;
+  // Mesmo sufixo de 8 digitos (99998888), mas DDD diferente (11 vs 64)
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Maria Silva', '99988877766', '5511999998888', 'active', '2026-12-30', ?)",
+    [p1],
+  );
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Maria Oliveira', '12345678901', '5562911112222', 'active', '2026-12-30', ?)",
+    [p1],
+  );
+
+  const calls = [];
+  const fakeFetch = async (_url, init) => {
+    calls.push(JSON.parse(init.body));
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'Olá! Temos o plano Musculacao Mensal por R$ 129,00.' }] } }],
+      }),
+    };
+  };
+
+  const accessService = new AccessService(store, null, null);
+  const gatewayService = new GatewayService(store, accessService);
+  const bot1 = new WhatsappBotService(store, { fetchFn: fakeFetch, gatewayService });
+
+  // Contato com DDD 64 nao deve receber dados da Maria de DDD 11
+  await bot1.handleIncomingMessage({ phone: '5564999998888', text: 'Quais os planos?' });
+  const sysPrompt = calls[0].contents[0].parts[0].text;
+  assert.doesNotMatch(sysPrompt, /Maria Silva/);
+  assert.match(sysPrompt, /Musculacao Mensal/);
+
+  // Simula reinicio do servidor criando nova instancia do bot: deve carregar historico do SQLite apenas deste telefone
+  bot1.recordChatMessage({ phone: '5564999998888', direction: 'in', senderType: 'customer', body: 'Quais os planos?' });
+  bot1.recordChatMessage({ phone: '5511977776666', direction: 'in', senderType: 'customer', body: 'Segredo de outro chat' });
+  const bot2 = new WhatsappBotService(store, { fetchFn: fakeFetch, gatewayService });
+  await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'E o horario?' });
+  const reloadedContents = JSON.stringify(calls[1].contents);
+  assert.match(reloadedContents, /Quais os planos\?/);
+  assert.doesNotMatch(reloadedContents, /Segredo de outro chat/);
+
+  // Busca parcial por "Maria" no pagamento nao deve enumerar alunas nem finais de CPF
+  await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'Quero pagar' });
+  const enumAttempt = await bot2.handleIncomingMessage({ phone: '5564999998888', text: 'Maria' });
+  assert.doesNotMatch(enumAttempt.reply, /Maria Silva/);
+  assert.doesNotMatch(enumAttempt.reply, /Maria Oliveira/);
+  assert.doesNotMatch(enumAttempt.reply, /7766|8901/);
+
+  // Handoff grava handoff_summary e resumeContact limpa
+  const handoff = await bot2.handleIncomingMessage({ phone: '5564955554444', text: 'Quero falar com atendente' });
+  assert.equal(handoff.requiresHuman, true);
+  const chatRow = store.get('SELECT needs_human, handoff_summary FROM whatsapp_chats WHERE phone = ?', ['5564955554444']);
+  assert.equal(Number(chatRow.needs_human), 1);
+  assert.match(chatRow.handoff_summary, /Solicitou atendente/);
+  bot2.resumeContact('5564955554444');
+  const resumedRow = store.get('SELECT needs_human, handoff_summary FROM whatsapp_chats WHERE phone = ?', ['5564955554444']);
+  assert.equal(Number(resumedRow.needs_human), 0);
+  assert.equal(resumedRow.handoff_summary, null);
+});

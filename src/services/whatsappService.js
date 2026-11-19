@@ -91,8 +91,10 @@ function localDateIso(offsetDays = 0, now = new Date()) {
 }
 
 export class WhatsappService {
-  constructor(store, { authDir, sleepFn = sleep, onReceiptMedia = null, onBotMessage = null } = {}) {
+  constructor(store, { authDir, sleepFn = sleep, onReceiptMedia = null, onBotMessage = null, botDebounceMs = 2500 } = {}) {
     this.store = store;
+    this.botDebounceMs = Math.max(0, Number(botDebounceMs) || 0);
+    this._botDebounceMap = new Map();
     this.authDir = authDir || null;
     this.sleep = sleepFn;
     this.onReceiptMedia = onReceiptMedia;
@@ -372,23 +374,15 @@ export class WhatsappService {
               audioMimeType = audioMsg.mimetype || 'audio/ogg';
             }
             if (incomingText || audioBuffer?.length) {
-              const botResult = await this.onBotMessage.handleIncomingMessage({
-                phone: senderPhone,
-                text: incomingText,
+              this._dispatchToBot({
+                sock,
+                jid,
+                senderPhone,
+                incomingText,
                 audioBuffer,
                 audioMimeType,
                 pushName: msg.pushName || '',
               });
-              if (botResult?.reply) {
-                const sent = await sock.sendMessage(jid, { text: botResult.reply });
-                const sentId = sent?.key?.id;
-                if (sentId) {
-                  this._sentBotMessageIds.add(sentId);
-                  if (this._sentBotMessageIds.size > 500) {
-                    this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
-                  }
-                }
-              }
             }
           }
 
@@ -1144,6 +1138,66 @@ export class WhatsappService {
     } finally {
       this._queueCancel = null;
       this.queueRunning = false;
+    }
+  }
+
+  _dispatchToBot({ sock, jid, senderPhone, incomingText, audioBuffer, audioMimeType, pushName }) {
+    if (!this.onBotMessage) return;
+    if (audioBuffer?.length || this.botDebounceMs <= 0) {
+      this._flushBotBuffer({ sock, jid, senderPhone, texts: incomingText ? [incomingText] : [], audioBuffer, audioMimeType, pushName }).catch(() => {});
+      return;
+    }
+
+    const existing = this._botDebounceMap.get(senderPhone);
+    if (existing) {
+      clearTimeout(existing.timer);
+      if (incomingText) existing.texts.push(incomingText);
+      existing.jid = jid || existing.jid;
+      existing.pushName = pushName || existing.pushName;
+      existing.timer = setTimeout(() => {
+        this._botDebounceMap.delete(senderPhone);
+        this._flushBotBuffer(existing).catch(() => {});
+      }, this.botDebounceMs);
+      return;
+    }
+
+    const entry = {
+      sock,
+      jid,
+      senderPhone,
+      texts: incomingText ? [incomingText] : [],
+      audioBuffer: null,
+      audioMimeType: '',
+      pushName,
+      timer: null,
+    };
+    entry.timer = setTimeout(() => {
+      this._botDebounceMap.delete(senderPhone);
+      this._flushBotBuffer(entry).catch(() => {});
+    }, this.botDebounceMs);
+    this._botDebounceMap.set(senderPhone, entry);
+  }
+
+  async _flushBotBuffer({ sock, jid, senderPhone, texts = [], audioBuffer = null, audioMimeType = '', pushName = '' }) {
+    if (!this.onBotMessage) return;
+    const combinedText = texts.map((t) => String(t || '').trim()).filter(Boolean).join('\n');
+    if (!combinedText && !audioBuffer?.length) return;
+    const botResult = await this.onBotMessage.handleIncomingMessage({
+      phone: senderPhone,
+      text: combinedText,
+      audioBuffer,
+      audioMimeType,
+      pushName,
+    });
+    if (botResult?.reply) {
+      const sent = await sock.sendMessage(jid, { text: botResult.reply });
+      const sentId = sent?.key?.id;
+      if (sentId) {
+        this._sentBotMessageIds.add(sentId);
+        if (this._sentBotMessageIds.size > 500) {
+          this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+        }
+      }
     }
   }
 }

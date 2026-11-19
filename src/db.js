@@ -537,6 +537,7 @@ export class DatabaseStore {
         member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
         bot_paused INTEGER NOT NULL DEFAULT 0,
         needs_human INTEGER NOT NULL DEFAULT 0,
+        handoff_summary TEXT,
         unread_count INTEGER NOT NULL DEFAULT 0,
         last_message TEXT,
         last_message_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
@@ -826,6 +827,9 @@ export class DatabaseStore {
     });
     this.ensureColumns('membership_charges', {
       source: "TEXT NOT NULL DEFAULT 'auto'",
+    });
+    this.ensureColumns('whatsapp_chats', {
+      handoff_summary: 'TEXT',
     });
     this.ensureColumns('whatsapp_chat_messages', {
       media_type: 'TEXT',

@@ -566,14 +566,26 @@
         </div>
         <div class="chat-layout">
           <aside class="card chat-sidebar">
-            <input id="chatSearchInput" type="search" placeholder="Buscar nome ou telefone..." style="margin-bottom:10px;" />
+            <input id="chatSearchInput" type="search" placeholder="Buscar nome ou telefone..." style="margin-bottom:8px;" />
+            <div id="chatFilterBar" class="inline-actions" style="margin-bottom:10px;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-primary btn-sm chat-filter-btn" data-chat-filter="all">Todos</button>
+              <button type="button" class="btn btn-secondary btn-sm chat-filter-btn" data-chat-filter="human">Atendente</button>
+              <button type="button" class="btn btn-secondary btn-sm chat-filter-btn" data-chat-filter="unread">Não lidos</button>
+            </div>
             <div id="chatList" class="chat-list"></div>
           </aside>
           <div class="card chat-main">
             <div id="chatHeader" class="chat-header">
               <div class="muted">Selecione uma conversa ao lado para visualizar e responder.</div>
             </div>
+            <div id="chatHandoffBanner" class="hidden" style="padding:8px 12px;margin:8px 12px 0;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);font-size:13px;"></div>
             <div id="chatMessages" class="chat-messages"></div>
+            <div id="chatQuickReplies" class="inline-actions hidden" style="padding:6px 12px 0;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Olá! Tudo bem? Como posso te ajudar hoje?">Boas-vindas</button>
+              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Para matrícula na Musculação, você pode fazer direto por aqui: https://sistema.academiaoxigenio.com/matricula.html">Link Matrícula</button>
+              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Para pagar sua mensalidade pelo WhatsApp, é só me enviar *quero pagar* que o sistema gera o Pix ou link de pagamento!">Pagamento MP</button>
+              <button type="button" class="btn btn-secondary btn-sm chat-quick-btn" data-quick-text="Já verifiquei por aqui! Se precisar de mais alguma coisa, é só chamar.">Encerrar</button>
+            </div>
             <form id="chatReplyForm" class="chat-reply-form hidden">
               <input id="chatReplyInput" type="text" placeholder="Digite sua resposta para o WhatsApp..." autocomplete="off" required />
               <button type="submit" class="btn btn-primary">Enviar</button>
