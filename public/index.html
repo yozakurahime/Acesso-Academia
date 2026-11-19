@@ -70,8 +70,8 @@
       <nav class="nav-menu" aria-label="Navegação principal">
         <div class="nav-group">
           <p>Recepção</p>
-          <button class="tab active" data-tab="dashboard" aria-current="page" title="Visão geral"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Visão geral</span></button>
-          <button class="tab" data-tab="balcao" title="Balcão"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg><span class="tab-label">Balcão</span></button>
+          <button class="tab active" data-tab="balcao" aria-current="page" title="Balcão"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg><span class="tab-label">Balcão</span></button>
+          <button class="tab" data-tab="dashboard" title="Visão geral"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Visão geral</span></button>
           <button class="tab" data-tab="members" title="Alunos"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span class="tab-label">Alunos</span></button>
           <button class="tab" data-tab="chat" title="Atendimento WhatsApp"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span class="tab-label">Atendimento <span id="chatNavBadge" class="badge badge-pending hidden" style="margin-left:4px;">0</span></span></button>
           <button class="tab" data-tab="logs" title="Controle de acesso"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg><span class="tab-label">Controle de acesso</span></button>
@@ -131,7 +131,7 @@
       <div id="toast" class="toast" role="status" aria-atomic="true"></div>
 
       <!-- PAGINA INICIAL -->
-      <section id="tab-dashboard" class="tab-panel active">
+      <section id="tab-dashboard" class="tab-panel">
         <div class="page-title">
           <div><time id="receptionDate" class="reception-date"></time><h2>Visão geral</h2></div>
           <div class="inline-actions">
@@ -257,7 +257,7 @@
       </section>
 
       <!-- BALCÃO -->
-      <section id="tab-balcao" class="tab-panel">
+      <section id="tab-balcao" class="tab-panel active">
         <div class="page-title">
           <div class="operations-heading"><h2>Balcão</h2><p>Atendimento rápido da recepção: cadastro, pagamento e consulta de alunos.</p></div>
           <div class="inline-actions">
@@ -2507,7 +2507,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261119.6"></script>
-  <script src="/app.js?v=20261119.6"></script>
+  <script src="/receipt-print.js?v=20261119.7"></script>
+  <script src="/app.js?v=20261119.7"></script>
 </body>
 </html>

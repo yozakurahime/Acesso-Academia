@@ -24,7 +24,7 @@ const state = {
   selectedFaceBase64: null,
   webcamStream: null,
   logsTimer: null,
-  activeTab: 'dashboard',
+  activeTab: 'balcao',
   authRole: 'admin',
 };
 
@@ -61,7 +61,7 @@ function applyRoleUi(role) {
     document.querySelectorAll(`.tab[data-tab="${tab}"]`).forEach((el) => el.classList.toggle('hidden', isInstructor));
   }
   if (!isTabAllowedForRole(state.activeTab, effectiveRole)) {
-    switchTab('dashboard');
+    switchTab('balcao');
   }
 }
 
@@ -397,8 +397,8 @@ function loadTab(tabName) {
 const VOLATILE_TABS = new Set(['dashboard', 'balcao', 'billing', 'cash', 'logs', 'reports', 'settings']);
 
 function switchTab(tabName, { updateHash = true } = {}) {
-  let target = Object.hasOwn(tabLoaders, tabName) ? tabName : 'dashboard';
-  if (!isTabAllowedForRole(target)) target = 'dashboard';
+  let target = Object.hasOwn(tabLoaders, tabName) ? tabName : 'balcao';
+  if (!isTabAllowedForRole(target)) target = 'balcao';
   if (state.activeTab !== target) stopPaymentAutoPoll();
   state.activeTab = target;
   if (VOLATILE_TABS.has(target)) tabRequests.delete(target);
@@ -426,7 +426,7 @@ function switchTab(tabName, { updateHash = true } = {}) {
 
 function getTabFromHash() {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
-  return Object.hasOwn(tabLoaders, raw) ? raw : 'dashboard';
+  return Object.hasOwn(tabLoaders, raw) ? raw : 'balcao';
 }
 
 window.addEventListener('hashchange', () => {
@@ -4306,7 +4306,7 @@ function finishPaymentAndReturnHome() {
   if (memberEl) memberEl.value = '';
   if (whatsappBox) whatsappBox.classList.add('hidden');
   renderPixChargeBox(null);
-  switchTab('dashboard');
+  switchTab('balcao');
 }
 
 document.getElementById('paymentForm').addEventListener('submit', async (e) => {
