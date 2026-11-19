@@ -3381,16 +3381,162 @@ async function loadPayments() {
   loadOpenDebts().catch(() => {});
 }
 
-// --- Produtos & Vendas ---
+// --- Produtos & Vendas (PDV) ---
+let posSelectedCategory = 'all';
+
 function updateSalePreview() {
   const prodId = Number(document.getElementById('saleProduct').value);
   const qty = Math.max(1, Number(document.getElementById('saleQty').value) || 1);
   const prod = state.products.find((p) => p.id === prodId);
   const total = prod ? prod.price_cents * qty : 0;
   document.getElementById('saleTotalPreview').textContent = `Total: ${fmtMoney(total)}`;
+  document.querySelectorAll('.pos-product-card').forEach((card) => {
+    card.classList.toggle('active', Number(card.dataset.posProdId) === prodId);
+  });
 }
 document.getElementById('saleProduct').addEventListener('change', updateSalePreview);
 document.getElementById('saleQty').addEventListener('input', updateSalePreview);
+
+document.getElementById('saleQtyMinus')?.addEventListener('click', () => {
+  const input = document.getElementById('saleQty');
+  if (!input) return;
+  input.value = String(Math.max(1, (Number(input.value) || 1) - 1));
+  updateSalePreview();
+});
+
+document.getElementById('saleQtyPlus')?.addEventListener('click', () => {
+  const input = document.getElementById('saleQty');
+  if (!input) return;
+  input.value = String((Number(input.value) || 1) + 1);
+  updateSalePreview();
+});
+
+function renderPosCatalog() {
+  const grid = document.getElementById('posProductGrid');
+  const pillsEl = document.getElementById('posCategoryPills');
+  if (!grid) return;
+
+  const categories = Array.from(new Set(
+    (state.products || []).map((p) => String(p.category || 'Geral').trim() || 'Geral'),
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  if (posSelectedCategory !== 'all' && !categories.includes(posSelectedCategory)) {
+    posSelectedCategory = 'all';
+  }
+
+  if (pillsEl) {
+    pillsEl.innerHTML = ['all', ...categories].map((cat) => {
+      const active = cat === posSelectedCategory;
+      const label = cat === 'all' ? 'Todas' : cat;
+      return `<button type="button" class="btn ${active ? 'btn-primary' : 'btn-secondary'} btn-sm pos-cat-pill" data-pos-cat="${escapeHtml(cat)}">${escapeHtml(label)}</button>`;
+    }).join('');
+  }
+
+  const q = String(document.getElementById('posProductSearch')?.value || '').trim().toLowerCase();
+  const selectedId = Number(document.getElementById('saleProduct')?.value || 0);
+  const filtered = (state.products || []).filter((p) => {
+    const cat = String(p.category || 'Geral').trim() || 'Geral';
+    if (posSelectedCategory !== 'all' && cat !== posSelectedCategory) return false;
+    if (!q) return true;
+    return `${p.name || ''} ${cat}`.toLowerCase().includes(q);
+  });
+
+  grid.innerHTML = filtered.length
+    ? filtered.map((p) => {
+        const stock = Number(p.stock || 0);
+        const stockBadge = stock <= 0
+          ? '<span class="badge badge-blocked">Esgotado</span>'
+          : stock <= 5
+            ? `<span class="badge badge-pending">Est: ${stock}</span>`
+            : `<span class="badge badge-active">Est: ${stock}</span>`;
+        const activeClass = p.id === selectedId ? ' active' : '';
+        return `
+          <button type="button" class="pos-product-card${activeClass}" data-pos-prod-id="${p.id}" ${stock <= 0 ? 'disabled' : ''}>
+            <strong style="font-size:13.5px;">${escapeHtml(p.name)}</strong>
+            <span class="muted" style="font-size:11.5px;">${escapeHtml(p.category || 'Geral')}</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;">
+              <span class="pos-product-price">${fmtMoney(p.price_cents)}</span>
+              ${stockBadge}
+            </div>
+          </button>`;
+      }).join('')
+    : '<div class="muted" style="padding:12px;">Nenhum produto encontrado.</div>';
+}
+
+function renderStockTable() {
+  const body = document.getElementById('productsBody');
+  if (!body) return;
+  const mode = document.getElementById('stockFilterMode')?.value || 'all';
+  const q = String(document.getElementById('stockSearchInput')?.value || '').trim().toLowerCase();
+  const filtered = (state.products || []).filter((p) => {
+    const stock = Number(p.stock || 0);
+    if (mode === 'low' && (stock <= 0 || stock > 5)) return false;
+    if (mode === 'out' && stock > 0) return false;
+    if (!q) return true;
+    return `${p.name || ''} ${p.category || ''}`.toLowerCase().includes(q);
+  });
+
+  body.innerHTML = filtered.length
+    ? filtered.map((p) => {
+        const stock = Number(p.stock || 0);
+        const badge = stock <= 0
+          ? '<span class="badge badge-blocked">Esgotado (0)</span>'
+          : stock <= 5
+            ? `<span class="badge badge-pending">Baixo (${stock})</span>`
+            : `<span class="badge badge-active">${stock}</span>`;
+        return `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td>${escapeHtml(p.category || 'Geral')}</td><td>${fmtMoney(p.price_cents)}</td><td>${badge}</td></tr>`;
+      }).join('')
+    : '<tr><td colspan="4" class="muted">Nenhum produto encontrado.</td></tr>';
+}
+
+function updatePosStats() {
+  const setTxt = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  const products = state.products || [];
+  const lowCount = products.filter((p) => Number(p.stock || 0) <= 5).length;
+  const todayIso = new Intl.DateTimeFormat('sv-SE').format(new Date());
+  const todaySales = (state.salesList || []).filter((s) => String(s.sold_at || '').slice(0, 10) === todayIso);
+  const revenueToday = todaySales.reduce((acc, s) => acc + Number(s.total_cents || 0), 0);
+
+  setTxt('posStatProducts', String(products.length));
+  setTxt('posStatLowStock', String(lowCount));
+  setTxt('posStatSalesToday', String(todaySales.length));
+  setTxt('posStatRevenueToday', fmtMoney(revenueToday));
+}
+
+document.getElementById('posProductSearch')?.addEventListener('input', renderPosCatalog);
+document.getElementById('posCategoryPills')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.pos-cat-pill');
+  if (!btn) return;
+  posSelectedCategory = btn.dataset.posCat || 'all';
+  renderPosCatalog();
+});
+document.getElementById('posProductGrid')?.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-pos-prod-id]');
+  if (!card || card.disabled) return;
+  const prodId = Number(card.dataset.posProdId);
+  const selectEl = document.getElementById('saleProduct');
+  const qtyEl = document.getElementById('saleQty');
+  if (!selectEl) return;
+  if (Number(selectEl.value) === prodId && qtyEl) {
+    qtyEl.value = String((Number(qtyEl.value) || 1) + 1);
+  } else {
+    selectEl.value = String(prodId);
+    if (qtyEl) qtyEl.value = '1';
+  }
+  updateSalePreview();
+});
+document.getElementById('stockFilterMode')?.addEventListener('change', renderStockTable);
+document.getElementById('stockSearchInput')?.addEventListener('input', renderStockTable);
+document.getElementById('btnToggleNewProduct')?.addEventListener('click', () => {
+  document.getElementById('newProductPanel')?.classList.toggle('hidden');
+  document.getElementById('prodName')?.focus();
+});
+document.getElementById('btnCloseNewProduct')?.addEventListener('click', () => {
+  document.getElementById('newProductPanel')?.classList.add('hidden');
+});
 
 async function loadProducts() {
   const [products, sales] = await Promise.all([api('/api/products'), api('/api/sales')]);
@@ -3401,18 +3547,12 @@ async function loadProducts() {
         .map((p) => `<option value="${p.id}">${escapeHtml(p.name)} — ${fmtMoney(p.price_cents)} (est: ${p.stock})</option>`)
         .join('')
     : '<option value="">Nenhum produto cadastrado</option>';
-  updateSalePreview();
-
-  document.getElementById('productsBody').innerHTML = state.products.length
-    ? state.products
-        .map(
-          (p) =>
-            `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.category)}</td><td>${fmtMoney(p.price_cents)}</td><td>${p.stock}</td></tr>`,
-        )
-        .join('')
-    : '<tr><td colspan="4" class="muted">Nenhum produto cadastrado.</td></tr>';
-
   state.salesList = sales;
+  updateSalePreview();
+  renderPosCatalog();
+  renderStockTable();
+  updatePosStats();
+
   document.getElementById('salesHistoryBody').innerHTML = sales.length
     ? sales
         .slice(0, 20)
@@ -4290,6 +4430,7 @@ document.getElementById('productForm').addEventListener('submit', async (e) => {
         }),
       });
       e.target.reset();
+      document.getElementById('newProductPanel')?.classList.add('hidden');
       showToast('Produto cadastrado!');
       await loadProducts();
     } catch (err) {
