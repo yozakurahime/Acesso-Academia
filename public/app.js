@@ -330,6 +330,7 @@ function loadOnce(loader) {
 
 const tabLoaders = {
   dashboard: () => Promise.all([loadDashboard(), loadOnce(loadSettings), loadOnce(loadDevices), loadCurrentCash()]),
+  balcao: () => Promise.all([loadOnce(loadMembers), loadCurrentCash()]),
   members: () => Promise.all([loadOnce(loadMembers), loadOnce(loadPlans), loadOnce(loadGymStructure)]),
   billing: () => Promise.all([
     loadOnce(loadMembers), loadOnce(loadPlans), loadOnce(loadSettings),
@@ -393,7 +394,7 @@ function loadTab(tabName) {
   return request;
 }
 
-const VOLATILE_TABS = new Set(['dashboard', 'billing', 'cash', 'logs', 'reports', 'settings']);
+const VOLATILE_TABS = new Set(['dashboard', 'balcao', 'billing', 'cash', 'logs', 'reports', 'settings']);
 
 function switchTab(tabName, { updateHash = true } = {}) {
   let target = Object.hasOwn(tabLoaders, tabName) ? tabName : 'dashboard';
@@ -711,6 +712,11 @@ async function runQuickMemberSearch(rawQuery = '') {
 document.getElementById('quickSearchForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const rawQuery = document.getElementById('quickSearch')?.value?.trim() || '';
+  await runQuickMemberSearch(rawQuery);
+});
+document.getElementById('balcaoQuickSearchForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const rawQuery = document.getElementById('balcaoQuickSearch')?.value?.trim() || '';
   await runQuickMemberSearch(rawQuery);
 });
 
@@ -3247,6 +3253,11 @@ async function loadCurrentCash() {
   if (billingCashBadge) {
     billingCashBadge.textContent = session ? 'Caixa: Aberto' : 'Caixa: Fechado';
     billingCashBadge.className = `badge ${session ? 'badge-active' : 'badge-pending'}`;
+  }
+  const balcaoCashBadge = document.getElementById('balcaoCashBadge');
+  if (balcaoCashBadge) {
+    balcaoCashBadge.textContent = session ? 'Caixa: Aberto' : 'Caixa: Fechado';
+    balcaoCashBadge.className = `badge ${session ? 'badge-active' : 'badge-pending'}`;
   }
 
   if (!session) {

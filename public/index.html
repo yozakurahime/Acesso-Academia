@@ -71,6 +71,7 @@
         <div class="nav-group">
           <p>Recepção</p>
           <button class="tab active" data-tab="dashboard" aria-current="page" title="Visão geral"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Visão geral</span></button>
+          <button class="tab" data-tab="balcao" title="Balcão"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg><span class="tab-label">Balcão</span></button>
           <button class="tab" data-tab="members" title="Alunos"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span class="tab-label">Alunos</span></button>
           <button class="tab" data-tab="chat" title="Atendimento WhatsApp"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span class="tab-label">Atendimento <span id="chatNavBadge" class="badge badge-pending hidden" style="margin-left:4px;">0</span></span></button>
           <button class="tab" data-tab="logs" title="Controle de acesso"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg><span class="tab-label">Controle de acesso</span></button>
@@ -137,25 +138,6 @@
             <button type="button" id="btnRefreshDashboard" class="btn btn-secondary"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-button-label>Atualizar</span></button>
             <a class="btn btn-secondary display-link" href="/catraca.html" target="_blank" rel="noopener">Tela da catraca <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
           </div>
-        </div>
-
-        <div class="dashboard-primary-ctas">
-          <button type="button" class="dash-hero-cta dash-hero-cta--register" data-go="members" data-focus="mName">
-            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span>
-            <span class="dash-hero-cta-text">
-              <strong>CADASTRAR ALUNO</strong>
-              <small>Novo cadastro, plano e Face ID</small>
-            </span>
-            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
-          </button>
-          <button type="button" class="dash-hero-cta dash-hero-cta--pay" data-go="billing" data-focus="pMemberSearch">
-            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></span>
-            <span class="dash-hero-cta-text">
-              <strong>RECEBER PAGAMENTO</strong>
-              <small>Mensalidade, Pix, cartão ou dinheiro</small>
-            </span>
-            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
-          </button>
         </div>
 
         <div class="cards overview-cards dashboard-primary">
@@ -272,6 +254,45 @@
             <div><button type="submit" class="btn btn-primary">Liberar visitante</button></div>
           </form>
         </details>
+      </section>
+
+      <!-- BALCÃO -->
+      <section id="tab-balcao" class="tab-panel">
+        <div class="page-title">
+          <div class="operations-heading"><h2>Balcão</h2><p>Atendimento rápido da recepção: cadastro, pagamento e consulta de alunos.</p></div>
+          <div class="inline-actions">
+            <button type="button" id="balcaoCashBadge" class="badge badge-pending" data-go="cash" style="cursor:pointer;border:0;">Caixa: —</button>
+          </div>
+        </div>
+
+        <div class="dashboard-primary-ctas">
+          <button type="button" class="dash-hero-cta dash-hero-cta--register" data-go="members" data-focus="mName">
+            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span>
+            <span class="dash-hero-cta-text">
+              <strong>CADASTRAR ALUNO</strong>
+              <small>Novo cadastro, plano e Face ID</small>
+            </span>
+            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </button>
+          <button type="button" class="dash-hero-cta dash-hero-cta--pay" data-go="billing" data-focus="pMemberSearch">
+            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></span>
+            <span class="dash-hero-cta-text">
+              <strong>RECEBER PAGAMENTO</strong>
+              <small>Mensalidade, Pix, cartão ou dinheiro</small>
+            </span>
+            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Buscar aluno rapidamente</h2>
+          </div>
+          <form id="balcaoQuickSearchForm" class="quick-search">
+            <div class="quick-search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="balcaoQuickSearch" aria-label="Nome, CPF ou telefone do aluno" placeholder="Digite nome, CPF ou telefone do aluno..." /></div>
+            <button type="submit" class="btn btn-primary">Buscar aluno <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          </form>
+        </div>
       </section>
 
       <!-- ALUNOS -->
@@ -2486,7 +2507,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261119.5"></script>
-  <script src="/app.js?v=20261119.5"></script>
+  <script src="/receipt-print.js?v=20261119.6"></script>
+  <script src="/app.js?v=20261119.6"></script>
 </body>
 </html>
