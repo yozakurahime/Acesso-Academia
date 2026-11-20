@@ -22,6 +22,7 @@ const state = {
   selectedProfileMember: null,
   selectedFaceMemberId: null,
   selectedFaceBase64: null,
+  pendingFaceAfterPaymentId: null,
   webcamStream: null,
   logsTimer: null,
   activeTab: 'balcao',
@@ -809,6 +810,7 @@ async function renderBalcaoQuickResults(rawQuery = '') {
           </div>
           <div class="balcao-result-actions">
             <button type="button" class="btn btn-secondary btn-sm" data-balcao-profile="${m.id}">Abrir ficha</button>
+            <button type="button" class="btn ${m.face_enrolled ? 'btn-secondary' : 'btn-primary'} btn-sm" data-balcao-face="${m.id}">${m.face_enrolled ? 'FaceID' : 'Cadastrar FaceID'}</button>
             <button type="button" class="btn btn-success btn-sm" data-balcao-pay="${m.id}">Receber</button>
             <button type="button" class="btn btn-primary btn-sm" data-balcao-release="${m.id}">Liberar catraca</button>
           </div>
@@ -823,12 +825,20 @@ document.getElementById('balcaoQuickResults')?.addEventListener('click', async (
     openProfile(Number(profileBtn.dataset.balcaoProfile));
     return;
   }
+  const faceBtn = event.target.closest('[data-balcao-face]');
+  if (faceBtn) {
+    const id = Number(faceBtn.dataset.balcaoFace);
+    const member = state.allMembers.find((m) => Number(m.id) === id);
+    if (member) openFaceModal(member.id, member.name);
+    return;
+  }
   const payBtn = event.target.closest('[data-balcao-pay]');
   if (payBtn) {
     const id = Number(payBtn.dataset.balcaoPay);
     const member = state.allMembers.find((m) => Number(m.id) === id);
     await switchTab('billing');
     if (member && typeof selectBillingMember === 'function') selectBillingMember(member);
+    document.getElementById('paymentForm')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
   const releaseBtn = event.target.closest('[data-balcao-release]');
@@ -1632,6 +1642,7 @@ function selectBillingMember(member) {
   }
   state.billingChangePlanOpen = false;
   state.billingFinalAmountEdited = false;
+  state.billingDiffDebtDueDate = '';
   document.getElementById('pMemberSearch').value = memberLabel(member);
   document.getElementById('pMember').value = String(member.id);
   document.getElementById('whatsappCheckoutBox').classList.add('hidden');
@@ -1884,9 +1895,15 @@ function renderBillingSummary() {
             </label>
             <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
               <input type="radio" name="billingLowerMode" value="debt" ${lowerMode === 'debt' ? 'checked' : ''} />
-              <span>Débito (${fmtMoney(absDiff)} pendente)</span>
+              <span>Fiado / Débito (${fmtMoney(absDiff)} pendente)</span>
             </label>
           </div>
+          ${lowerMode === 'debt' ? `
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;margin-top:2px;">
+              <span>Data combinada p/ quitar pendência (opcional)</span>
+              <input type="date" id="billingDiffDebtDueDate" value="${escapeHtml(state.billingDiffDebtDueDate || '')}" />
+            </label>
+          ` : ''}
         </div>
       `;
     }
@@ -1945,6 +1962,7 @@ document.getElementById('billingSummary')?.addEventListener('click', (event) => 
   if (!clearBtn) return;
   state.billingChangePlanOpen = false;
   state.billingFinalAmountEdited = false;
+  state.billingDiffDebtDueDate = '';
   document.getElementById('pMemberSearch').value = '';
   document.getElementById('pMember').value = '';
   document.getElementById('billingMemberResults')?.classList.add('hidden');
@@ -1976,26 +1994,34 @@ document.getElementById('billingDiffBox')?.addEventListener('change', (e) => {
     state.billingExcessAsCredit = e.target.checked;
   } else if (e.target.name === 'billingLowerMode') {
     state.billingLowerMode = e.target.value;
+    renderBillingSummary();
+  } else if (e.target.id === 'billingDiffDebtDueDate') {
+    state.billingDiffDebtDueDate = e.target.value || '';
   }
 });
 document.getElementById('billingQuickAdjust')?.addEventListener('click', (event) => {
   const btn = event.target.closest('[data-billing-discount]');
   if (!btn) return;
+  const asideFinalInput = document.getElementById('billingAsideFinalAmount');
+  if (!asideFinalInput) return;
   const amountField = document.getElementById('pAmount');
-  if (!amountField || amountField.disabled) return;
+  const member = state.allMembers.find((entry) => entry.id === Number(document.getElementById('pMember')?.value));
   const planId = Number(document.getElementById('pPlan')?.value);
   const plan = state.plans.find((p) => p.id === planId);
-  const baseReais = plan ? plan.price_cents / 100 : Number(amountField.value || 0);
+  const baseReais = member?.next_charge?.amount
+    ? member.next_charge.amount / 100
+    : (plan ? plan.price_cents / 100 : Number(amountField?.value || asideFinalInput.value || 0));
   const spec = btn.dataset.billingDiscount;
-  state.billingFinalAmountEdited = false;
   if (spec === 'reset') {
-    if (plan) amountField.value = (plan.price_cents / 100).toFixed(2);
+    state.billingFinalAmountEdited = false;
   } else if (spec === 'flat:10') {
-    const cur = Number(amountField.value || baseReais);
-    amountField.value = Math.max(0.01, cur - 10).toFixed(2);
+    const cur = Number(asideFinalInput.value || baseReais);
+    asideFinalInput.value = Math.max(0.01, cur - 10).toFixed(2);
+    state.billingFinalAmountEdited = true;
   } else if (spec === 'pct:10') {
-    const cur = Number(amountField.value || baseReais);
-    amountField.value = Math.max(0.01, cur * 0.9).toFixed(2);
+    const cur = Number(asideFinalInput.value || baseReais);
+    asideFinalInput.value = Math.max(0.01, cur * 0.9).toFixed(2);
+    state.billingFinalAmountEdited = true;
   }
   renderBillingSummary();
 });
@@ -3252,8 +3278,40 @@ function updateCloseCashDiff() {
 document.getElementById('closeCashAmount').addEventListener('input', updateCloseCashDiff);
 
 let returnToBillingAfterOpening = false;
+let pendingBillingAutoSubmit = false;
 
-async function openCashFromBilling() {
+function syncBillingOpenCashStaffOptions() {
+  const selectEl = document.getElementById('billingOpenCashStaff');
+  if (!selectEl) return;
+  const sourceEl = document.getElementById('openCashStaff');
+  const prevValue = selectEl.value || sourceEl?.value || '';
+  if (state.staff?.length) {
+    selectEl.innerHTML = state.staff
+      .map((s) => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.role)})</option>`)
+      .join('');
+  } else if (sourceEl?.innerHTML) {
+    selectEl.innerHTML = sourceEl.innerHTML;
+  }
+  if (prevValue && [...selectEl.options].some((o) => o.value === prevValue)) {
+    selectEl.value = prevValue;
+  }
+}
+
+async function openCashFromBilling({ autoSubmit = false } = {}) {
+  pendingBillingAutoSubmit = Boolean(autoSubmit);
+  if (!state.staff?.length) {
+    await loadStaff().catch(() => {});
+  }
+  syncBillingOpenCashStaffOptions();
+  const amountEl = document.getElementById('billingOpenCashAmount');
+  const notesEl = document.getElementById('billingOpenCashNotes');
+  if (amountEl) amountEl.value = '0.00';
+  if (notesEl) notesEl.value = '';
+  const modal = document.getElementById('billingOpenCashModal');
+  if (modal) {
+    showModal('billingOpenCashModal', 'billingOpenCashStaff');
+    return;
+  }
   returnToBillingAfterOpening = true;
   document.getElementById('cashOpeningNotice').classList.remove('hidden');
   if (!await switchTab('cash') || state.activeTab !== 'cash') return;
@@ -3279,10 +3337,51 @@ async function resumeBillingAfterOpening() {
     await switchTab('billing');
   }
   document.getElementById('paymentForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  document.getElementById('pMethod').focus();
+  const submitBtn = document.getElementById('btnSubmitPayment');
+  if (submitBtn && !submitBtn.disabled) {
+    submitBtn.focus();
+  } else {
+    const methodCard = document.querySelector('#pMethodCards .billing-method-card.active, #pMethodCards .billing-method-card');
+    if (methodCard) methodCard.focus();
+  }
 }
 
-document.getElementById('btnOpenCashForPayment').addEventListener('click', openCashFromBilling);
+document.getElementById('btnOpenCashForPayment').addEventListener('click', () => {
+  openCashFromBilling({ autoSubmit: false });
+});
+document.getElementById('btnCloseBillingOpenCash')?.addEventListener('click', () => {
+  pendingBillingAutoSubmit = false;
+  hideModal('billingOpenCashModal');
+});
+document.getElementById('billingOpenCashForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await withLoading(e.target, async () => {
+    try {
+      await api('/api/cash/open', {
+        method: 'POST',
+        body: JSON.stringify({
+          staff_id: document.getElementById('billingOpenCashStaff')?.value || null,
+          opening_cents: toCents(document.getElementById('billingOpenCashAmount')?.value || 0),
+          notes: document.getElementById('billingOpenCashNotes')?.value || '',
+        }),
+      });
+      showToast('Caixa aberto!');
+      await loadCurrentCash().catch(() => {});
+      if (tabRequests.has('cash')) loadCash().catch(() => {});
+      const shouldAutoSubmit = pendingBillingAutoSubmit;
+      pendingBillingAutoSubmit = false;
+      hideModal('billingOpenCashModal', false);
+      if (shouldAutoSubmit) {
+        document.getElementById('paymentForm')?.requestSubmit();
+      } else {
+        const submitBtn = document.getElementById('btnSubmitPayment');
+        if (submitBtn && !submitBtn.disabled) submitBtn.focus();
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
 
 const CASH_MOVEMENT_TYPE_META = {
   in: { label: 'Suprimento', cls: 'badge-active', sign: '+' },
@@ -3800,9 +3899,12 @@ async function loadProducts() {
 // --- Equipe / Atendentes ---
 async function loadStaff() {
   state.staff = await api('/api/staff');
-  document.getElementById('openCashStaff').innerHTML = state.staff
+  const staffOptionsHtml = state.staff
     .map((s) => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.role)})</option>`)
     .join('');
+  document.getElementById('openCashStaff').innerHTML = staffOptionsHtml;
+  const billingCashStaff = document.getElementById('billingOpenCashStaff');
+  if (billingCashStaff) billingCashStaff.innerHTML = staffOptionsHtml;
   renderTeamDirectory();
 }
 
@@ -4125,9 +4227,11 @@ async function loadDevices() {
   renderReaders();
 }
 
-// --- Cadastro em etapas (Wizard) & Submits ---
+// --- Cadastro em etapas (Wizard 2 etapas) & Submits ---
 let memberWizardStep = 1;
 let maxMemberWizardStep = 1;
+let memberNameForceConfirmed = false;
+let memberNameCheckTimer = null;
 
 function updateMemberWizardSummaries() {
   const name = document.getElementById('mName').value.trim();
@@ -4151,27 +4255,24 @@ function updateMemberWizardSummaries() {
         : '<strong>Plano:</strong> Sem plano contratado (bloqueado para entrar)',
   ].join(' · ');
 
-  const step3Summary = document.getElementById('mStep3Summary');
-  if (step3Summary) step3Summary.innerHTML = selectionText;
-
-  const step4Summary = document.getElementById('mStep4Summary');
-  if (step4Summary) {
-    step4Summary.innerHTML = `<strong>Aluno:</strong> ${escapeHtml(name || '—')} · ${selectionText}`;
+  const step2Summary = document.getElementById('mStep2Summary');
+  if (step2Summary) {
+    step2Summary.innerHTML = `<strong>Aluno:</strong> ${escapeHtml(name || '—')} · ${selectionText}`;
   }
 
   const classSelect = document.getElementById('mClass');
   const classHint = document.getElementById('mClassHint');
   if (classHint) {
     classHint.textContent = classSelect.disabled
-      ? 'Nenhuma turma cadastrada para esta modalidade — você pode avançar para o pagamento normalmente.'
-      : 'Selecione uma turma abaixo ou avance sem turma vinculada.';
+      ? 'Nenhuma turma cadastrada para esta modalidade — você pode confirmar normalmente.'
+      : 'Selecione uma turma acima ou confirme sem turma vinculada.';
   }
 }
 
 function setMemberWizardStep(step) {
   memberWizardStep = step;
   if (step > maxMemberWizardStep) maxMemberWizardStep = step;
-  for (let i = 1; i <= 4; i += 1) {
+  for (let i = 1; i <= 2; i += 1) {
     document.getElementById(`memberStep${i}`)?.classList.toggle('hidden', i !== step);
   }
   document.querySelectorAll('#memberWizardSteps .wizard-step').forEach((el) => {
@@ -4181,10 +4282,9 @@ function setMemberWizardStep(step) {
     el.disabled = s > maxMemberWizardStep;
     el.setAttribute('aria-current', s === step ? 'step' : 'false');
   });
+  if (step === 2) renderClassOptions('mModality', 'mClass');
   updateMemberWizardSummaries();
   if (step === 1) document.getElementById('mName')?.focus();
-  if (step === 2) document.getElementById('mDoc')?.focus();
-  if (step === 4) document.getElementById('mClass')?.focus();
 }
 
 document.getElementById('memberWizardSteps')?.addEventListener('click', (event) => {
@@ -4192,7 +4292,6 @@ document.getElementById('memberWizardSteps')?.addEventListener('click', (event) 
   if (!stepBtn || stepBtn.disabled) return;
   const targetStep = Number(stepBtn.dataset.wizardStep);
   if (!targetStep || targetStep === memberWizardStep || targetStep > maxMemberWizardStep) return;
-  if (targetStep === 4) renderClassOptions('mModality', 'mClass');
   setMemberWizardStep(targetStep);
 });
 
@@ -4223,6 +4322,8 @@ function resetMemberWizard() {
   const form = document.getElementById('memberForm');
   form?.reset();
   maxMemberWizardStep = 1;
+  memberNameForceConfirmed = false;
+  clearTimeout(memberNameCheckTimer);
   state.memberPickerModality = '';
   setMemberPartnerProvider('');
   setCpfFieldState(document.getElementById('mDoc'), document.getElementById('mDocFeedback'), 'neutral', '');
@@ -4238,7 +4339,47 @@ function resetMemberWizard() {
   setMemberWizardStep(1);
 }
 
-async function verifyAndAdvanceMemberName() {
+async function checkMemberNameDuplicate({ silent = false } = {}) {
+  const nameInput = document.getElementById('mName');
+  const name = nameInput.value.trim();
+  const alertEl = document.getElementById('mNameCheckAlert');
+  if (!name || memberNameForceConfirmed) {
+    if (alertEl) {
+      alertEl.classList.add('hidden');
+      alertEl.classList.remove('is-error');
+    }
+    return { ok: true };
+  }
+  try {
+    const check = await api(`/api/members/check-name?name=${encodeURIComponent(name)}`);
+    if (!check.exactMatch) {
+      alertEl.classList.add('hidden');
+      alertEl.classList.remove('is-error');
+      return { ok: true };
+    }
+    alertEl.classList.remove('hidden');
+    alertEl.classList.add('is-error');
+    const listItems = check.matches
+      .map(
+        (m) =>
+          `<li><strong>${escapeHtml(m.name)}</strong> (#${m.id}${m.document ? ` · CPF ${escapeHtml(m.document)}` : ''}) ` +
+          `<button type="button" class="btn btn-secondary btn-sm" data-open-existing="${escapeHtml(m.name)}">Ver na lista</button></li>`,
+      )
+      .join('');
+    alertEl.innerHTML =
+      `<strong>Já existe um cadastro com este nome:</strong><ul>${listItems}</ul>` +
+      `<div class="inline-actions" style="margin-top:6px;">` +
+      `<span class="muted">Altere o nome, abra o cadastro existente ou confirme se é outra pessoa:</span>` +
+      `<button type="button" class="btn btn-primary btn-sm" data-force-name="1">Continuar mesmo assim</button>` +
+      `</div>`;
+    return { ok: false };
+  } catch (err) {
+    if (!silent) showToast(err.message, true);
+    return { ok: !silent ? false : true };
+  }
+}
+
+async function verifyAndAdvanceMemberStep1() {
   const nameInput = document.getElementById('mName');
   const name = nameInput.value.trim();
   if (!name) {
@@ -4246,51 +4387,57 @@ async function verifyAndAdvanceMemberName() {
     nameInput.focus();
     return;
   }
-  const alertEl = document.getElementById('mNameCheckAlert');
   const btn = document.getElementById('btnMemberStep1Next');
   await withLoading(btn, async () => {
-    try {
-      const check = await api(`/api/members/check-name?name=${encodeURIComponent(name)}`);
-      if (!check.exactMatch) {
-        alertEl.classList.add('hidden');
-        setMemberWizardStep(2);
-        return;
-      }
-      alertEl.classList.remove('hidden');
-      alertEl.classList.add('is-error');
-      const listItems = check.matches
-        .map(
-          (m) =>
-            `<li><strong>${escapeHtml(m.name)}</strong> (#${m.id}${m.document ? ` · CPF ${escapeHtml(m.document)}` : ''}) ` +
-            `<button type="button" class="btn btn-secondary btn-sm" data-open-existing="${escapeHtml(m.name)}">Ver na lista</button></li>`,
-        )
-        .join('');
-      alertEl.innerHTML = `<strong>Já existe um cadastro com este nome:</strong><ul>${listItems}</ul><span class="muted">Altere o nome ou abra o cadastro existente.</span>`;
-    } catch (err) {
-      showToast(err.message, true);
+    const nameResult = await checkMemberNameDuplicate({ silent: false });
+    if (!nameResult.ok) {
+      nameInput.focus();
+      return;
     }
+    const cpfCheck = await validateCpfField('mDoc', 'mDocFeedback', {
+      excludeId: 0,
+      remoteCheck: true,
+      showEmptyError: true,
+    });
+    if (!cpfCheck.valid) {
+      showToast(cpfCheck.message, true);
+      document.getElementById('mDoc').focus();
+      return;
+    }
+    setMemberWizardStep(2);
   });
 }
 
 document.getElementById('mName').addEventListener('input', () => {
+  memberNameForceConfirmed = false;
   maxMemberWizardStep = 1;
   const alertEl = document.getElementById('mNameCheckAlert');
   alertEl.classList.add('hidden');
   alertEl.classList.remove('is-error');
+  clearTimeout(memberNameCheckTimer);
+  const val = document.getElementById('mName').value.trim();
+  if (val.length >= 3) {
+    memberNameCheckTimer = setTimeout(() => {
+      checkMemberNameDuplicate({ silent: true });
+    }, 450);
+  }
 });
 
-document.getElementById('mDoc')?.addEventListener('input', () => {
-  if (maxMemberWizardStep > 2) maxMemberWizardStep = 2;
+document.getElementById('mName').addEventListener('blur', () => {
+  clearTimeout(memberNameCheckTimer);
+  if (memberWizardStep === 1 && document.getElementById('mName').value.trim() && !memberNameForceConfirmed) {
+    checkMemberNameDuplicate({ silent: true });
+  }
 });
 
 document.getElementById('mName').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && memberWizardStep === 1) {
     e.preventDefault();
-    verifyAndAdvanceMemberName(false);
+    verifyAndAdvanceMemberStep1();
   }
 });
 
-document.getElementById('btnMemberStep1Next').addEventListener('click', () => verifyAndAdvanceMemberName(false));
+document.getElementById('btnMemberStep1Next').addEventListener('click', () => verifyAndAdvanceMemberStep1());
 
 document.getElementById('mNameCheckAlert').addEventListener('click', (e) => {
   const openBtn = e.target.closest('button[data-open-existing]');
@@ -4304,43 +4451,31 @@ document.getElementById('mNameCheckAlert').addEventListener('click', (e) => {
     return;
   }
   if (e.target.closest('button[data-force-name]')) {
-    verifyAndAdvanceMemberName(true);
+    memberNameForceConfirmed = true;
+    const alertEl = document.getElementById('mNameCheckAlert');
+    alertEl.classList.add('hidden');
+    alertEl.classList.remove('is-error');
+    showToast('Homônimo confirmado. Complete o CPF para continuar.');
   }
 });
 
 document.getElementById('btnMemberStep2Back').addEventListener('click', () => setMemberWizardStep(1));
-document.getElementById('btnMemberStep2Next').addEventListener('click', async () => {
-  const cpfCheck = await validateCpfField('mDoc', 'mDocFeedback', {
-    excludeId: 0,
-    remoteCheck: true,
-    showEmptyError: true,
-  });
-  if (!cpfCheck.valid) {
-    showToast(cpfCheck.message, true);
-    document.getElementById('mDoc').focus();
-    return;
-  }
-  setMemberWizardStep(3);
-});
-document.getElementById('btnMemberStep3Back').addEventListener('click', () => setMemberWizardStep(2));
-document.getElementById('btnMemberStep3Next').addEventListener('click', () => {
-  const partnerProvider = document.getElementById('mPartnerProvider')?.value || '';
-  const wellhubId = document.getElementById('mWellhubId')?.value.trim() || '';
+
+document.getElementById('memberForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (memberWizardStep !== 2) return;
+  const partnerProvider = document.getElementById('mPartnerProvider')?.value || null;
+  const wellhubId = document.getElementById('mWellhubId')?.value.trim() || null;
   if (partnerProvider === 'wellhub' && !wellhubId) {
     showToast('Informe o ID do Wellhub (Gympass) para continuar.', true);
     document.getElementById('mWellhubId')?.focus();
     return;
   }
-  renderClassOptions('mModality', 'mClass');
-  setMemberWizardStep(4);
-});
-document.getElementById('btnMemberStep4Back').addEventListener('click', () => setMemberWizardStep(3));
-
-document.getElementById('memberForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (memberWizardStep !== 4) return;
-  const partnerProvider = document.getElementById('mPartnerProvider')?.value || null;
-  const wellhubId = document.getElementById('mWellhubId')?.value.trim() || null;
+  const selectedPlanId = document.getElementById('mPlan').value || null;
+  if (!partnerProvider && !selectedPlanId) {
+    const proceedWithoutPlan = confirm('Nenhum plano selecionado. O aluno será cadastrado bloqueado para entrar na catraca. Deseja continuar sem plano?');
+    if (!proceedWithoutPlan) return;
+  }
   await withLoading(e.target, async () => {
     try {
       const created = await api('/api/members', {
@@ -4353,7 +4488,7 @@ document.getElementById('memberForm').addEventListener('submit', async (e) => {
           phone: document.getElementById('mPhone').value,
           modality_id: document.getElementById('mModality').value || null,
           class_id: document.getElementById('mClass').value || null,
-          plan_id: partnerProvider ? null : (document.getElementById('mPlan').value || null),
+          plan_id: partnerProvider ? null : selectedPlanId,
           partner_provider: partnerProvider,
           wellhub_id: partnerProvider === 'wellhub' ? wellhubId : null,
         }),
@@ -4362,10 +4497,15 @@ document.getElementById('memberForm').addEventListener('submit', async (e) => {
       setMemberFormOpen(false);
       await Promise.all([loadMembers(), loadDashboard(), loadGymStructure()]);
       if (partnerProvider) {
+        state.pendingFaceAfterPaymentId = null;
         showToast(`Aluno #${created.id} (${partnerProvider === 'wellhub' ? 'Wellhub' : 'TotalPass'}) cadastrado e ativo!`);
+        openFaceModal(created.id, created.name);
       } else if (!created.plan_id) {
+        state.pendingFaceAfterPaymentId = null;
         showToast(`Aluno #${created.id} cadastrado sem plano contratado (bloqueado para entrar).`);
+        openFaceModal(created.id, created.name);
       } else {
+        state.pendingFaceAfterPaymentId = created.id;
         showToast(`Aluno #${created.id} cadastrado! Avançando para o pagamento.`);
         await jumpToPaymentForMember(created);
       }
@@ -4441,7 +4581,10 @@ document.getElementById('closeCashForm').addEventListener('submit', async (e) =>
   });
 });
 
-function finishPaymentAndReturnHome() {
+function finishPaymentAndReturnHome(options = {}) {
+  const { keepPendingFace = false } = options;
+  if (!keepPendingFace) state.pendingFaceAfterPaymentId = null;
+  state.billingDiffDebtDueDate = '';
   const searchEl = document.getElementById('pMemberSearch');
   const memberEl = document.getElementById('pMember');
   const whatsappBox = document.getElementById('whatsappCheckoutBox');
@@ -4449,7 +4592,17 @@ function finishPaymentAndReturnHome() {
   if (memberEl) memberEl.value = '';
   if (whatsappBox) whatsappBox.classList.add('hidden');
   renderPixChargeBox(null);
+  const balcaoQuickSearch = document.getElementById('balcaoQuickSearch');
+  const balcaoQuickResults = document.getElementById('balcaoQuickResults');
+  if (balcaoQuickSearch) balcaoQuickSearch.value = '';
+  if (balcaoQuickResults) {
+    balcaoQuickResults.innerHTML = '';
+    balcaoQuickResults.classList.add('hidden');
+  }
   switchTab('balcao');
+  if (!keepPendingFace && !state.pendingFaceAfterPaymentId) {
+    balcaoQuickSearch?.focus();
+  }
 }
 
 document.getElementById('paymentForm').addEventListener('submit', async (e) => {
@@ -4501,7 +4654,11 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
       } else if (finalPaidCents < netExpectedCents) {
         const lowerMode = document.querySelector('input[name="billingLowerMode"]:checked')?.value || state.billingLowerMode || 'discount';
         if (lowerMode === 'debt') {
-          extraPayload = { debt_cents: netExpectedCents - finalPaidCents };
+          const diffDebtDueDate = document.getElementById('billingDiffDebtDueDate')?.value || state.billingDiffDebtDueDate || null;
+          extraPayload = {
+            debt_cents: netExpectedCents - finalPaidCents,
+            ...(diffDebtDueDate ? { debt_due_date: diffDebtDueDate } : {}),
+          };
         } else {
           amountToSend = finalPaidCents + creditUsedPreview;
         }
@@ -4520,6 +4677,7 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
         }),
       });
       state.billingFinalAmountEdited = false;
+      state.billingDiffDebtDueDate = '';
       const debtMsg = res.debt ? ` (Saldo pendente / fiado registrado: ${fmtMoney(res.debt.amount_cents)})` : '';
       showToast(
         res.sync?.synced
@@ -4531,15 +4689,25 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
         document.getElementById('pSplitToggle').checked = false;
         resetSplitBox();
       }
-      await Promise.all([loadPayments(), loadOpenDebts(), loadMembers(), loadDashboard(), tabRequests.has('cash') ? loadCash() : loadCurrentCash()]).catch(() => {
-        showToast('Pagamento gravado. Recarregue a página para atualizar os dados.', true);
-      });
       if (isAutoPrintReceiptEnabled() && res.payment) {
         openPaymentReceipt(res.payment, member, { autoPrint: true });
       }
+      const shouldOpenFaceAfterPayment = state.pendingFaceAfterPaymentId === memberId;
+      state.pendingFaceAfterPaymentId = null;
+      const updatedMember = state.allMembers.find((entry) => entry.id === memberId) || member;
       finishPaymentAndReturnHome();
+      if (shouldOpenFaceAfterPayment && updatedMember && !updatedMember.face_enrolled) {
+        openFaceModal(updatedMember.id, updatedMember.name);
+      }
+      Promise.allSettled([
+        loadPayments(),
+        loadOpenDebts(),
+        loadMembers(),
+        loadDashboard(),
+        tabRequests.has('cash') ? loadCash() : loadCurrentCash(),
+      ]).catch(() => {});
     } catch (err) {
-      if (err.code === 'CASH_CLOSED') await openCashFromBilling();
+      if (err.code === 'CASH_CLOSED') await openCashFromBilling({ autoSubmit: true });
       else showToast(err.message, true);
     }
   });
@@ -6136,22 +6304,11 @@ function closeFaceModal() {
   hideModal('faceModal');
 }
 
-window.openFaceModal = (id, name) => {
-  stopWebcam({ clearMirror: true });
-  state.faceCapture = Symbol();
-  state.selectedFaceMemberId = id;
-  state.selectedFaceMemberName = name;
-  state.selectedFaceBase64 = null;
-  document.getElementById('faceModalTitle').textContent = `FaceID — ${name}`;
-  document.getElementById('facePreview').classList.add('hidden');
-  document.getElementById('btnSaveFace').disabled = true;
-  document.getElementById('faceFileInput').value = '';
-  showModal('faceModal', 'btnCloseFaceModal');
-};
-
-document.getElementById('btnCloseFaceModal').addEventListener('click', closeFaceModal);
-
-document.getElementById('btnStartCam').addEventListener('click', async () => {
+async function startFaceWebcam({ silent = false } = {}) {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    if (!silent) showToast('Webcam não disponível neste navegador.', true);
+    return;
+  }
   const capture = state.faceCapture = Symbol();
   try {
     stopWebcam({ clearMirror: true });
@@ -6168,9 +6325,27 @@ document.getElementById('btnStartCam').addEventListener('click', async () => {
     document.getElementById('btnSnapCam').classList.remove('hidden');
     startFaceMirror(video, state.selectedFaceMemberName || '');
   } catch (err) {
-    if (state.faceCapture === capture) showToast(`Erro na webcam: ${err.message}`, true);
+    if (!silent && state.faceCapture === capture) showToast(`Erro na webcam: ${err.message}`, true);
   }
-});
+}
+
+window.openFaceModal = (id, name) => {
+  stopWebcam({ clearMirror: true });
+  state.faceCapture = Symbol();
+  state.selectedFaceMemberId = id;
+  state.selectedFaceMemberName = name;
+  state.selectedFaceBase64 = null;
+  document.getElementById('faceModalTitle').textContent = `FaceID — ${name}`;
+  document.getElementById('facePreview').classList.add('hidden');
+  document.getElementById('btnSaveFace').disabled = true;
+  document.getElementById('faceFileInput').value = '';
+  showModal('faceModal', 'btnCloseFaceModal');
+  startFaceWebcam({ silent: true });
+};
+
+document.getElementById('btnCloseFaceModal').addEventListener('click', closeFaceModal);
+
+document.getElementById('btnStartCam').addEventListener('click', () => startFaceWebcam({ silent: false }));
 
 document.getElementById('btnSnapCam').addEventListener('click', () => {
   const video = document.getElementById('webcamVideo');
@@ -6284,7 +6459,7 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
 });
 
 // Fechar modais ao clicar fora (apenas se mousedown também começou no backdrop) ou pressionar Escape
-['profileModal', 'faceModal', 'receiptPreviewModal', 'newEnrollmentModal'].forEach((modalId) => {
+['profileModal', 'faceModal', 'receiptPreviewModal', 'billingOpenCashModal', 'newEnrollmentModal'].forEach((modalId) => {
   const modalEl = document.getElementById(modalId);
   let backdropPressed = false;
   modalEl?.addEventListener('mousedown', (e) => {
@@ -6295,7 +6470,10 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
       if (modalId === 'faceModal') closeFaceModal();
       else if (modalId === 'profileModal') closeProfileModal();
       else if (modalId === 'newEnrollmentModal') closeNewEnrollmentModal();
-      else hideModal(modalId);
+      else {
+        if (modalId === 'billingOpenCashModal') pendingBillingAutoSubmit = false;
+        hideModal(modalId);
+      }
     }
     backdropPressed = false;
   });
@@ -6304,11 +6482,16 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
 document.addEventListener('keydown', (e) => {
   const modal = document.querySelector('#loginOverlay:not(.hidden)') ||
     document.querySelector('#newEnrollmentModal:not(.hidden)') ||
+    document.querySelector('#billingOpenCashModal:not(.hidden)') ||
     document.querySelector('#receiptPreviewModal:not(.hidden)') ||
     document.querySelector('#faceModal:not(.hidden)') ||
     document.querySelector('#profileModal:not(.hidden)');
   if (e.key === 'Escape') {
     if (modal?.id === 'newEnrollmentModal') closeNewEnrollmentModal();
+    if (modal?.id === 'billingOpenCashModal') {
+      pendingBillingAutoSubmit = false;
+      hideModal(modal.id);
+    }
     if (modal?.id === 'receiptPreviewModal') hideModal(modal.id);
     if (modal?.id === 'faceModal') closeFaceModal();
     if (modal?.id === 'profileModal') closeProfileModal();
