@@ -1,4 +1,5 @@
 const display = document.getElementById('display');
+const mainCard = display?.querySelector('.turnstile-main-card');
 const statusLabel = document.getElementById('displayStatus');
 const title = document.getElementById('displayTitle');
 const message = document.getElementById('displayMessage');
@@ -7,12 +8,14 @@ const heroWrap = document.getElementById('displayHeroWrap');
 const avatarImg = document.getElementById('displayAvatar');
 const preview = document.getElementById('displayPreview');
 const fullscreen = document.getElementById('fullscreen');
+const progressWrap = document.getElementById('displayProgressWrap');
 const progress = document.getElementById('displayProgress');
 const goalDots = document.getElementById('displayGoalDots');
 const planAlert = document.getElementById('displayPlanAlert');
 const workoutCard = document.getElementById('displayWorkoutCard');
 const workoutTitle = document.getElementById('displayWorkoutTitle');
 const workoutMeta = document.getElementById('displayWorkoutMeta');
+const idleWidgets = display?.querySelector('.turnstile-idle-widgets');
 const ranking = document.getElementById('displayRanking');
 const rankingList = document.getElementById('displayRankingList');
 const challengeBox = document.getElementById('displayChallenge');
@@ -82,6 +85,73 @@ let offlineFailures = 0;
 let wakeLock = null;
 let idleOccupancy = null;
 let challengeData = null;
+let deniedLockUntil = 0;
+let audioCtx = null;
+const MIN_DENIED_DISPLAY_MS = 4200;
+const isSoundMuted = (() => {
+  const param = new URLSearchParams(window.location.search).get('mute');
+  return param === '1' || param === 'true';
+})();
+
+function getAudioContext() {
+  if (isSoundMuted) return null;
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) {
+    try {
+      audioCtx = new Ctx();
+    } catch {
+      return null;
+    }
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+
+function playToneSequence(notes) {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  try {
+    const baseTime = ctx.currentTime + 0.01;
+    notes.forEach(({ freq, start, duration, type = 'sine', gain = 0.14 }) => {
+      const osc = ctx.createOscillator();
+      const amp = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, baseTime + start);
+      amp.gain.setValueAtTime(0.0001, baseTime + start);
+      amp.gain.exponentialRampToValueAtTime(gain, baseTime + start + 0.015);
+      amp.gain.exponentialRampToValueAtTime(0.0001, baseTime + start + duration);
+      osc.connect(amp);
+      amp.connect(ctx.destination);
+      osc.start(baseTime + start);
+      osc.stop(baseTime + start + duration + 0.02);
+    });
+  } catch {
+    // Ignora falhas de autoplay sem bloquear a UI.
+  }
+}
+
+function playFeedbackSound(state) {
+  if (isSoundMuted) return;
+  if (state === 'allowed') {
+    playToneSequence([
+      { freq: 523.25, start: 0, duration: 0.09, type: 'sine', gain: 0.14 },
+      { freq: 659.25, start: 0.08, duration: 0.15, type: 'sine', gain: 0.16 },
+    ]);
+  } else if (state === 'denied' || state === 'error') {
+    playToneSequence([
+      { freq: 260, start: 0, duration: 0.14, type: 'triangle', gain: 0.18 },
+      { freq: 185, start: 0.14, duration: 0.22, type: 'triangle', gain: 0.20 },
+    ]);
+  } else if (state === 'unrecognized') {
+    playToneSequence([
+      { freq: 440, start: 0, duration: 0.08, type: 'sine', gain: 0.12 },
+      { freq: 392, start: 0.09, duration: 0.11, type: 'sine', gain: 0.12 },
+    ]);
+  }
+}
 
 function getTimeGreeting() {
   const h = new Date().getHours();
@@ -205,21 +275,54 @@ function formatTurnstileMessages(state, event, defaults) {
   };
 }
 
+function resolveDisplayRole(state, event) {
+  if (state !== 'allowed') return '';
+  if (!event?.firstName) return 'manual';
+  const role = event?.accessRole || 'student';
+  if (role === 'instructor') return 'instructor';
+  if (role === 'staff' || role === 'user') return 'staff';
+  if (event?.isVisitor) return 'visitor';
+  return 'student';
+}
+
+function triggerCardEnterAnimation() {
+  if (!mainCard) return;
+  mainCard.classList.remove('is-entering');
+  void mainCard.offsetWidth;
+  mainCard.classList.add('is-entering');
+}
+
 function render(state, event) {
   const view = event ? `${state}:${event.id}` : state;
   if (lastView === view) return;
   const isNewEvent = Boolean(event && lastView !== view);
   lastView = view;
   clearTimeout(resetTimer);
+  if (state !== 'denied') deniedLockUntil = 0;
 
   const [symbol, statusText, titleText, messageText] = screens[state];
   const copy = formatTurnstileMessages(state, event, [statusText, titleText, messageText]);
   display.dataset.state = state;
+  document.body.dataset.state = state;
+  const displayRole = resolveDisplayRole(state, event);
+  if (displayRole) {
+    display.dataset.role = displayRole;
+    document.body.dataset.role = displayRole;
+  } else {
+    delete display.dataset.role;
+    delete document.body.dataset.role;
+  }
   icon.textContent = symbol;
   preview.hidden = !event?.preview;
   statusLabel.textContent = copy.status;
   title.textContent = copy.title;
   message.textContent = copy.message;
+  if (isNewEvent || state !== 'idle') {
+    triggerCardEnterAnimation();
+  }
+  if (isNewEvent) {
+    playFeedbackSound(state);
+  }
 
   // Foto do aluno (FaceID ou foto de perfil)
   if (avatarImg && heroWrap) {
@@ -272,6 +375,10 @@ function render(state, event) {
     }
   }
 
+  if (progressWrap) {
+    progressWrap.classList.toggle('is-empty', progress.hidden && (!goalDots || goalDots.hidden));
+  }
+
   // Ficha do dia do aluno
   if (workoutCard && workoutTitle && workoutMeta) {
     const wk = state === 'allowed' ? event?.workoutSummary : null;
@@ -297,15 +404,26 @@ function render(state, event) {
   renderOccupancyBadge(event?.occupancyInfo ?? event?.occupancy);
   updateIdleWidgetsVisibility();
 
+  const rawRemainingMs = Number(event?.remainingMs);
+  const effectiveRemainingMs = (isNewEvent && state === 'denied')
+    ? Math.max(Number.isFinite(rawRemainingMs) ? rawRemainingMs : 0, MIN_DENIED_DISPLAY_MS)
+    : rawRemainingMs;
+
+  if (isNewEvent && state === 'denied') {
+    deniedLockUntil = Date.now() + effectiveRemainingMs;
+  }
+
   if (isNewEvent) {
-    animateTimerBar(event.remainingMs, event.totalMs);
+    animateTimerBar(effectiveRemainingMs, Math.max(Number(event?.totalMs || 0), effectiveRemainingMs));
   } else if (!event && timerBar) {
     timerBar.hidden = true;
   }
 
-  const remainingMs = Number(event?.remainingMs);
-  if (event && remainingMs > 0) {
-    resetTimer = setTimeout(() => render('idle'), remainingMs);
+  if (event && effectiveRemainingMs > 0) {
+    resetTimer = setTimeout(() => {
+      deniedLockUntil = 0;
+      render('idle');
+    }, effectiveRemainingMs);
   }
 }
 
@@ -317,6 +435,17 @@ function updateIdleWidgetsVisibility() {
   }
   if (portalQrBox) portalQrBox.hidden = !isIdle;
   if (quoteBox) quoteBox.hidden = !isIdle;
+  if (idleWidgets) {
+    const hasChallenge = Boolean(challengeBox && !challengeBox.hidden);
+    const hasVisibleWidget = Boolean(
+      !ranking.hidden
+      || hasChallenge
+      || (portalQrBox && !portalQrBox.hidden)
+      || (quoteBox && !quoteBox.hidden)
+    );
+    idleWidgets.classList.toggle('no-challenge', !hasChallenge);
+    idleWidgets.classList.toggle('is-empty', !hasVisibleWidget);
+  }
 }
 
 const DAILY_QUOTES = [
@@ -479,13 +608,16 @@ async function pollDisplay() {
     offlineFailures = 0;
     if (event?.outcome === 'face_mirror') {
       if (Date.now() - faceMirrorChannelActiveAt > 1500) updateFaceMirror(event);
-      render('idle');
+      if (Date.now() >= deniedLockUntil) render('idle');
     } else if (event && Object.hasOwn(screens, event.outcome)) {
       updateFaceMirror(null);
+      if (event.outcome === 'idle' && Date.now() < deniedLockUntil) {
+        return;
+      }
       render(event.outcome, event);
     } else {
       if (Date.now() - faceMirrorChannelActiveAt > 1500) updateFaceMirror(null);
-      render('idle');
+      if (Date.now() >= deniedLockUntil) render('idle');
     }
   } catch (err) {
     if (controller.signal.aborted || err?.name === 'AbortError') return;
@@ -527,9 +659,15 @@ document.addEventListener('visibilitychange', () => {
   requestKioskWakeLock();
 });
 
-if (document.fullscreenEnabled) {
-  fullscreen.hidden = false;
+if (document.fullscreenEnabled && fullscreen) {
+  const syncFullscreenButton = () => {
+    const isFullscreen = Boolean(document.fullscreenElement);
+    fullscreen.hidden = isFullscreen;
+    fullscreen.textContent = isFullscreen ? 'Sair da tela cheia' : 'Tela cheia';
+  };
+  syncFullscreenButton();
   fullscreen.addEventListener('click', async () => {
+    getAudioContext();
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await document.documentElement.requestFullscreen();
@@ -537,10 +675,10 @@ if (document.fullscreenEnabled) {
       fullscreen.textContent = 'Use F11 para tela cheia';
     }
   });
-  document.addEventListener('fullscreenchange', () => {
-    fullscreen.textContent = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
-  });
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
 }
+
+window.addEventListener('pointerdown', () => getAudioContext(), { once: true, passive: true });
 
 updateClock();
 setInterval(updateClock, 1000);

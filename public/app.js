@@ -330,7 +330,7 @@ function loadOnce(loader) {
 
 const tabLoaders = {
   dashboard: () => Promise.all([loadDashboard(), loadOnce(loadSettings), loadOnce(loadDevices), loadCurrentCash()]),
-  balcao: () => Promise.all([loadOnce(loadMembers), loadCurrentCash()]),
+  balcao: () => Promise.all([loadOnce(loadMembers), loadCurrentCash(), loadBalcaoRecentLogs().catch(() => {})]),
   members: () => Promise.all([loadOnce(loadMembers), loadOnce(loadPlans), loadOnce(loadGymStructure)]),
   billing: () => Promise.all([
     loadOnce(loadMembers), loadOnce(loadPlans), loadOnce(loadSettings),
@@ -637,6 +637,8 @@ document.querySelectorAll('[data-go]').forEach((button) => {
       if (expandEl?.dataset?.settingsCat && typeof activateSettingsCategory === 'function') {
         activateSettingsCategory(expandEl.dataset.settingsCat);
         expandEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (expandEl && 'open' in expandEl) {
+        expandEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       if (focus) document.getElementById(focus)?.focus();
     }
@@ -714,10 +716,135 @@ document.getElementById('quickSearchForm')?.addEventListener('submit', async (ev
   const rawQuery = document.getElementById('quickSearch')?.value?.trim() || '';
   await runQuickMemberSearch(rawQuery);
 });
+function renderBalcaoRecentLogs(logs = []) {
+  const tbody = document.getElementById('balcaoLogsBody');
+  if (!tbody) return;
+  const rows = (logs || []).slice(0, 6);
+  tbody.innerHTML = rows.length
+    ? rows
+        .map((l) => {
+          const event = Number(l.event_code);
+          const tone = [7, 11, 12].includes(event) ? 'badge-active' : [3, 6].includes(event) ? 'badge-blocked' : 'badge-neutral';
+          return `<tr><td><strong>${escapeHtml(l.member_name || '—')}</strong></td><td><span class="badge ${tone}">${escapeHtml(l.event_label)}</span></td><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td></tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="3" class="empty-cell">Nenhuma passagem registrada.</td></tr>';
+}
+
+async function loadBalcaoRecentLogs() {
+  const [data, occupancy] = await Promise.all([
+    api('/api/dashboard'),
+    api('/api/occupancy').catch(() => null),
+  ]);
+  updateSidebarLiveOccupancy(occupancy, data.recentLogs?.[0] || null);
+  renderBalcaoRecentLogs(data.recentLogs || []);
+}
+
+document.getElementById('btnBalcaoRefreshLogs')?.addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
+  try {
+    await loadBalcaoRecentLogs();
+    showToast('Passagens atualizadas.');
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}));
+
+async function renderBalcaoQuickResults(rawQuery = '') {
+  const box = document.getElementById('balcaoQuickResults');
+  if (!box) return;
+  const cleanQuery = String(rawQuery || '').trim();
+  if (!cleanQuery) {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+    return;
+  }
+  if (sharedLoads.has(loadMembers)) {
+    await sharedLoads.get(loadMembers).catch(() => {});
+  } else if (!state.memberSearchIndex.length) {
+    await loadMembers().catch(() => {});
+  }
+  const q = normalizeSearch(cleanQuery);
+  const digits = numericSearch(q);
+  const matches = state.memberSearchIndex
+    .filter((entry) =>
+      entry.name.includes(q) ||
+      (digits && (entry.documentDigits.includes(digits) || entry.phoneDigits.includes(digits))) ||
+      String(entry.member.id) === q.replace(/^#/, ''),
+    )
+    .slice(0, 8);
+
+  box.classList.remove('hidden');
+  if (!matches.length) {
+    box.innerHTML = `
+      <div class="balcao-result-item">
+        <div class="balcao-result-meta">
+          <strong>Nenhum aluno encontrado para "${escapeHtml(cleanQuery)}"</strong>
+          <small class="muted">Deseja iniciar um novo cadastro com este dado?</small>
+        </div>
+        <div class="balcao-result-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="btnBalcaoCreateNew">+ Cadastrar "${escapeHtml(cleanQuery)}"</button>
+        </div>
+      </div>`;
+    document.getElementById('btnBalcaoCreateNew')?.addEventListener('click', async () => {
+      await switchTab('members');
+      openNewMemberWithQuery(cleanQuery);
+    });
+    return;
+  }
+
+  const statusTone = { active: 'badge-active', blocked: 'badge-blocked', pending: 'badge-pending' };
+  const statusLabel = { active: 'Ativo', blocked: 'Bloqueado', pending: 'Pendente' };
+  box.innerHTML = matches
+    .map(({ member: m }) => {
+      const st = m.access_status || m.status || 'pending';
+      const due = m.valid_until ? `Venc: ${fmtDate(m.valid_until)}` : 'Sem plano ativo';
+      return `
+        <div class="balcao-result-item">
+          <div class="balcao-result-meta">
+            <div class="balcao-result-title">
+              <strong>${escapeHtml(m.name)}</strong>
+              <span class="badge ${statusTone[st] || 'badge-neutral'}">${statusLabel[st] || escapeHtml(st)}</span>
+            </div>
+            <small class="muted">${escapeHtml(m.plan_name || 'Sem plano')} · ${escapeHtml(due)}</small>
+          </div>
+          <div class="balcao-result-actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-balcao-profile="${m.id}">Abrir ficha</button>
+            <button type="button" class="btn btn-success btn-sm" data-balcao-pay="${m.id}">Receber</button>
+            <button type="button" class="btn btn-primary btn-sm" data-balcao-release="${m.id}">Liberar catraca</button>
+          </div>
+        </div>`;
+    })
+    .join('');
+}
+
+document.getElementById('balcaoQuickResults')?.addEventListener('click', async (event) => {
+  const profileBtn = event.target.closest('[data-balcao-profile]');
+  if (profileBtn) {
+    openProfile(Number(profileBtn.dataset.balcaoProfile));
+    return;
+  }
+  const payBtn = event.target.closest('[data-balcao-pay]');
+  if (payBtn) {
+    const id = Number(payBtn.dataset.balcaoPay);
+    const member = state.allMembers.find((m) => Number(m.id) === id);
+    await switchTab('billing');
+    if (member && typeof selectBillingMember === 'function') selectBillingMember(member);
+    return;
+  }
+  const releaseBtn = event.target.closest('[data-balcao-release]');
+  if (releaseBtn) {
+    document.getElementById('btnRelease')?.click();
+  }
+});
+
+document.getElementById('balcaoQuickSearch')?.addEventListener('input', (event) => {
+  renderBalcaoQuickResults(event.currentTarget.value);
+});
+
 document.getElementById('balcaoQuickSearchForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
   const rawQuery = document.getElementById('balcaoQuickSearch')?.value?.trim() || '';
-  await runQuickMemberSearch(rawQuery);
+  await renderBalcaoQuickResults(rawQuery);
 });
 
 // --- Dashboard ---
@@ -2619,11 +2746,11 @@ function openNewEnrollmentModal() {
   state.newEnrSelectedPlanId = enrollment?.plan_id || m?.plan_id || null;
   renderNewEnrModalityPills();
   renderNewEnrPlanCards();
-  modal.classList.remove('hidden');
+  showModal('newEnrollmentModal', 'btnCloseNewEnrollment');
 }
 
-function closeNewEnrollmentModal() {
-  document.getElementById('newEnrollmentModal')?.classList.add('hidden');
+function closeNewEnrollmentModal(restoreFocus = true) {
+  hideModal('newEnrollmentModal', restoreFocus);
 }
 
 async function submitNewEnrollment(planId, startsOn) {
@@ -2680,11 +2807,8 @@ document.getElementById('btnBackNewEnrollment')?.addEventListener('click', () =>
   document.getElementById('newEnrollmentStep2')?.classList.add('hidden');
   document.getElementById('newEnrollmentStep1')?.classList.remove('hidden');
 });
-document.getElementById('btnCloseNewEnrollment')?.addEventListener('click', closeNewEnrollmentModal);
-document.getElementById('btnCancelNewEnrollment')?.addEventListener('click', closeNewEnrollmentModal);
-document.getElementById('newEnrollmentModal')?.addEventListener('click', (e) => {
-  if (e.target.id === 'newEnrollmentModal') closeNewEnrollmentModal();
-});
+document.getElementById('btnCloseNewEnrollment')?.addEventListener('click', () => closeNewEnrollmentModal());
+document.getElementById('btnCancelNewEnrollment')?.addEventListener('click', () => closeNewEnrollmentModal());
 document.getElementById('btnConfirmNewEnrollment')?.addEventListener('click', async () => {
   const startsOn = document.getElementById('newEnrStartDate')?.value || null;
   await submitNewEnrollment(state.newEnrSelectedPlanId, startsOn);
@@ -6141,7 +6265,7 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
 });
 
 // Fechar modais ao clicar fora (apenas se mousedown também começou no backdrop) ou pressionar Escape
-['profileModal', 'faceModal', 'receiptPreviewModal'].forEach((modalId) => {
+['profileModal', 'faceModal', 'receiptPreviewModal', 'newEnrollmentModal'].forEach((modalId) => {
   const modalEl = document.getElementById(modalId);
   let backdropPressed = false;
   modalEl?.addEventListener('mousedown', (e) => {
@@ -6151,6 +6275,7 @@ document.getElementById('btnSyncControlIdUsers').addEventListener('click', async
     if (backdropPressed && e.target.id === modalId) {
       if (modalId === 'faceModal') closeFaceModal();
       else if (modalId === 'profileModal') closeProfileModal();
+      else if (modalId === 'newEnrollmentModal') closeNewEnrollmentModal();
       else hideModal(modalId);
     }
     backdropPressed = false;

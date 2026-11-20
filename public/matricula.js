@@ -12,6 +12,7 @@
   const openCameraBtn = document.getElementById('openCameraBtn');
   const uploadPhotoBtn = document.getElementById('uploadPhotoBtn');
   const captureBtn = document.getElementById('captureBtn');
+  const retakePhotoBtn = document.getElementById('retakePhotoBtn');
   const photoFileInput = document.getElementById('photoFileInput');
   const cameraVideo = document.getElementById('cameraVideo');
   const photoPreview = document.getElementById('photoPreview');
@@ -35,6 +36,37 @@
 
   function formatMoney(cents) {
     return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function formatPhoneMask(val) {
+    const d = String(val || '').replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 2) return d;
+    if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  }
+
+  function formatCpfMask(val) {
+    const d = String(val || '').replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+
+  function isValidCpf(digits) {
+    const cpf = String(digits || '').replace(/\D/g, '');
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    let sum = 0;
+    for (let i = 0; i < 9; i += 1) sum += Number(cpf[i]) * (10 - i);
+    let check1 = (sum * 10) % 11;
+    if (check1 === 10) check1 = 0;
+    if (check1 !== Number(cpf[9])) return false;
+    sum = 0;
+    for (let i = 0; i < 10; i += 1) sum += Number(cpf[i]) * (11 - i);
+    let check2 = (sum * 10) % 11;
+    if (check2 === 10) check2 = 0;
+    return check2 === Number(cpf[10]);
   }
 
   function isKidsSwimText(text) {
@@ -145,6 +177,10 @@
   }
 
   async function loadOptions() {
+    modalitySelect.disabled = true;
+    planSelect.disabled = true;
+    modalitySelect.innerHTML = '<option value="">Carregando modalidades...</option>';
+    planSelect.innerHTML = '<option value="">Carregando planos...</option>';
     try {
       const res = await fetch('/api/public/enrollment-options');
       if (!res.ok) throw new Error('Falha ao carregar opções.');
@@ -170,8 +206,17 @@
         planSelect.appendChild(opt);
       }
 
+      const requestedPlan = new URLSearchParams(window.location.search).get('plan');
+      if (requestedPlan && Array.from(planSelect.options).some((o) => o.value === requestedPlan)) {
+        planSelect.value = requestedPlan;
+      }
+
+      modalitySelect.disabled = false;
+      planSelect.disabled = false;
       updateModeUI();
     } catch {
+      modalitySelect.innerHTML = '<option value="">Erro ao carregar</option>';
+      planSelect.innerHTML = '<option value="">Erro ao carregar</option>';
       formError.hidden = false;
       formError.textContent = 'Não foi possível carregar os planos e modalidades.';
     }
@@ -179,6 +224,13 @@
 
   modalitySelect.addEventListener('change', updateModeUI);
   classSelect.addEventListener('change', updateModeUI);
+
+  document.getElementById('phoneInput')?.addEventListener('input', (e) => {
+    e.target.value = formatPhoneMask(e.target.value);
+  });
+  docInput?.addEventListener('input', (e) => {
+    e.target.value = formatCpfMask(e.target.value);
+  });
 
   openCameraBtn.addEventListener('click', async () => {
     clearFormError();
@@ -206,6 +258,16 @@
     capturedBase64 = compressImageToBase64(cameraVideo);
     photoPreview.src = capturedBase64;
     photoPreview.hidden = false;
+    if (retakePhotoBtn) retakePhotoBtn.hidden = false;
+    stopCamera();
+  });
+
+  retakePhotoBtn?.addEventListener('click', () => {
+    capturedBase64 = null;
+    photoPreview.src = '';
+    photoPreview.hidden = true;
+    retakePhotoBtn.hidden = true;
+    photoFileInput.value = '';
     stopCamera();
   });
 
@@ -228,6 +290,7 @@
         capturedBase64 = compressImageToBase64(img);
         photoPreview.src = capturedBase64;
         photoPreview.hidden = false;
+        if (retakePhotoBtn) retakePhotoBtn.hidden = false;
         stopCamera();
         photoFileInput.value = '';
       };
@@ -308,8 +371,8 @@
       phoneInput.focus();
       return;
     }
-    if (!docWrap.hidden && docDigits.length !== 11) {
-      showFormError('Informe um CPF válido com 11 dígitos.');
+    if (!docWrap.hidden && !isValidCpf(docDigits)) {
+      showFormError('Informe um CPF válido.');
       docInput.focus();
       return;
     }
@@ -352,6 +415,7 @@
       enrollForm.hidden = true;
       resultCard.hidden = false;
       resultMessage.textContent = data.message || 'Concluído!';
+      resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
       if (data.mode === 'request') {
         resultTitle.textContent = 'Solicitação de Vaga Enviada';

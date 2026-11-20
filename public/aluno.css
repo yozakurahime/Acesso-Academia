@@ -370,10 +370,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 5px;
-  min-height: 28px;
+  padding: 6px 10px;
+  min-height: 40px;
   border: 1px dashed var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -382,6 +382,67 @@
   cursor: pointer;
 }
 .exercise-load-btn:hover { border-color: var(--primary); color: var(--accent-text); }
+.exercise-load-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+.exercise-load-inline input {
+  width: 78px;
+  min-height: 38px;
+  padding: 4px 8px;
+  font-size: 14px;
+}
+.exercise-load-inline .btn {
+  min-height: 38px;
+  padding: 6px 9px;
+}
+.student-boot-loader {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.student-boot-card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 28px 32px;
+  border-radius: 18px;
+  text-align: center;
+}
+.student-boot-card p { margin: 0; color: var(--muted); font-size: 14px; font-weight: 600; }
+.student-boot-spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  animation: st-spin 0.8s linear infinite;
+}
+@keyframes st-spin { to { transform: rotate(360deg); } }
+.calendar-day {
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--secondary-bg);
+  border: 1px solid transparent;
+  color: var(--text);
+}
+.calendar-day.is-hit {
+  font-weight: 700;
+  background: var(--accent-soft);
+  border-color: var(--primary);
+  color: var(--accent-text);
+}
+.calendar-day.is-today {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.btn.is-busy { opacity: 0.72; cursor: wait; }
 .student-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
 #stTabPayments > .student-action-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 165px), 1fr)); }
 
@@ -481,7 +542,10 @@
   }
   #studentPortalView {
     display: block;
-    padding-bottom: calc(var(--portal-nav-height) + env(safe-area-inset-bottom) + 74px);
+    padding-bottom: calc(var(--portal-nav-height) + env(safe-area-inset-bottom) + 16px);
+  }
+  #studentPortalView.has-floating-rest {
+    padding-bottom: calc(var(--portal-nav-height) + env(safe-area-inset-bottom) + 84px);
   }
   .student-rail {
     position: static;

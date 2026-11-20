@@ -53,14 +53,14 @@ function escapeText(str) {
         const unit = periodUnit(p.duration_days);
         const priceStr = formatBrl(p.price_cents);
         const tag = isFeatured ? 'Mais procurado' : (p.duration_days >= 360 ? 'Anual' : (p.duration_days >= 55 ? `${p.duration_days} dias` : 'Mensal'));
-        const waText = encodeURIComponent(`Olá! Tenho interesse no plano ${cleanName} (R$ ${priceStr}).`);
+        const enrollHref = `/matricula?plan=${encodeURIComponent(p.id)}`;
         return `
           <article class="plan-card${isFeatured ? ' featured' : ''}">
             <span class="plan-tag">${escapeText(tag)}</span>
             <h3>${escapeText(cleanName)}</h3>
             <div class="plan-price">R$ ${escapeText(priceStr)} <span>/ ${escapeText(unit)}</span></div>
             <p class="plan-desc">Sem taxa de matrícula e sem fidelidade.</p>
-            <a class="btn ${isFeatured ? 'btn-primary' : 'btn-secondary'}" href="https://wa.me/5562981020169?text=${waText}" target="_blank" rel="noopener">Matricular pelo WhatsApp</a>
+            <a class="btn ${isFeatured ? 'btn-primary' : 'btn-secondary'}" href="${enrollHref}">Matricular online</a>
           </article>
         `;
       }).join('');

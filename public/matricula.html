@@ -6,28 +6,28 @@
     <title>Matrícula Online — Academia Oxigênio</title>
     <style>
       :root {
-        --bg: #0b0f17;
-        --card: #131a26;
-        --border: rgba(255, 255, 255, 0.1);
+        --bg: #07080b;
+        --card: #101218;
+        --border: rgba(255, 255, 255, 0.11);
         --text: #f8fafc;
-        --muted: #94a3b8;
-        --gold: #f59e0b;
-        --gold-dark: #d97706;
+        --muted: #a1a1aa;
+        --primary: #ff6a00;
+        --primary-dark: #ea580c;
         --ok: #22c55e;
         --err: #ef4444;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        background: radial-gradient(circle at top, #1b2232 0%, var(--bg) 55%);
+        font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: radial-gradient(circle at top, rgba(255, 106, 0, 0.14) 0%, var(--bg) 52%);
         color: var(--text);
         min-height: 100vh;
         padding: 20px 14px 48px;
       }
       .wrap { max-width: 680px; margin: 0 auto; }
       .brand { text-align: center; margin-bottom: 20px; }
-      .brand h1 { margin: 0 0 6px; font-size: 1.65rem; color: var(--gold); }
+      .brand h1 { margin: 0 0 6px; font-size: 1.65rem; color: var(--primary); }
       .brand p { margin: 0; color: var(--muted); font-size: 0.95rem; }
       .card {
         background: var(--card);
@@ -46,11 +46,11 @@
         padding: 11px 12px;
         border-radius: 10px;
         border: 1px solid var(--border);
-        background: #0d131d;
+        background: #0b0e14;
         color: var(--text);
         font-size: 0.95rem;
       }
-      input:focus, select:focus, textarea:focus { outline: 2px solid var(--gold); border-color: transparent; }
+      input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
       .field { margin-bottom: 12px; }
       .notice {
         border-radius: 12px;
@@ -59,12 +59,12 @@
         line-height: 1.45;
         margin-bottom: 14px;
       }
-      .notice.warn { background: rgba(245, 158, 11, 0.14); border: 1px solid rgba(245, 158, 11, 0.35); color: #fde68a; }
+      .notice.warn { background: rgba(255, 106, 0, 0.14); border: 1px solid rgba(255, 106, 0, 0.38); color: #fed7aa; }
       .notice.ok { background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.35); color: #bbf7d0; }
       .notice.err { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fecaca; }
       .photo-rules {
         background: rgba(255, 255, 255, 0.04);
-        border: 1px dashed rgba(245, 158, 11, 0.45);
+        border: 1px dashed rgba(255, 106, 0, 0.45);
         border-radius: 12px;
         padding: 12px 14px;
         margin-bottom: 12px;
@@ -85,8 +85,8 @@
         cursor: pointer;
         text-decoration: none;
       }
-      .btn-primary { background: var(--gold); color: #111827; width: 100%; }
-      .btn-primary:hover { background: var(--gold-dark); color: #fff; }
+      .btn-primary { background: var(--primary); color: #ffffff; width: 100%; }
+      .btn-primary:hover { background: var(--primary-dark); color: #fff; }
       .btn-secondary { background: #1e293b; color: #fff; border: 1px solid var(--border); }
       .btn-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
       .preview-box {
@@ -100,7 +100,7 @@
         height: 180px;
         object-fit: cover;
         border-radius: 14px;
-        border: 2px solid var(--gold);
+        border: 2px solid var(--primary);
         background: #000;
       }
       .pix-box { text-align: center; }
@@ -154,11 +154,11 @@
           </div>
           <div class="field">
             <label for="phoneInput">WhatsApp *</label>
-            <input id="phoneInput" type="tel" required placeholder="(62) 99999-9999" />
+            <input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel" maxlength="15" required placeholder="(62) 99999-9999" />
           </div>
           <div class="field" id="docWrap">
             <label for="docInput">CPF *</label>
-            <input id="docInput" type="text" placeholder="000.000.000-00" />
+            <input id="docInput" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" />
           </div>
           <div class="field" id="birthWrap">
             <label for="birthInput">Data de nascimento</label>
@@ -193,6 +193,7 @@
             <button type="button" id="uploadPhotoBtn" class="btn btn-secondary">Enviar / Tirar Foto</button>
             <input id="photoFileInput" type="file" accept="image/*" capture="user" hidden />
             <button type="button" id="captureBtn" class="btn btn-primary" style="width:auto;" hidden>Capturar Foto</button>
+            <button type="button" id="retakePhotoBtn" class="btn btn-secondary" hidden>Trocar foto</button>
           </div>
           <div class="preview-box">
             <video id="cameraVideo" autoplay playsinline muted hidden></video>
@@ -222,6 +223,6 @@
       </section>
     </main>
 
-    <script src="/matricula.js"></script>
+    <script src="/matricula.js?v=20261120.1"></script>
   </body>
 </html>

@@ -2,6 +2,7 @@ const studentState = {
   data: null,
   selectedWorkoutId: null,
   activePixChargeId: null,
+  pixPollTimer: null,
   restTimers: {},
   modalExerciseKey: null,
   modalSpeed: 1,
@@ -36,11 +37,19 @@ function sanitizeQrImageSrc(val) {
   return '';
 }
 
+function stopPortalPixPolling() {
+  if (studentState.pixPollTimer) {
+    clearInterval(studentState.pixPollTimer);
+    studentState.pixPollTimer = null;
+  }
+}
+
 function clearAllRestTimers() {
   Object.values(studentState.restTimers).forEach(({ interval }) => clearInterval(interval));
   studentState.restTimers = {};
   studentState.activeRestExerciseId = null;
   document.getElementById('stFloatingRestBar')?.classList.add('hidden');
+  document.getElementById('studentPortalView')?.classList.remove('has-floating-rest');
 }
 
 function formatTimerMmSs(totalSec) {
@@ -53,11 +62,13 @@ function formatTimerMmSs(totalSec) {
 function syncFloatingRestBar() {
   const bar = document.getElementById('stFloatingRestBar');
   const timeEl = document.getElementById('stFloatingRestTime');
+  const portal = document.getElementById('studentPortalView');
   if (!bar || !timeEl) return;
   const entries = Object.entries(studentState.restTimers);
   if (!entries.length) {
     studentState.activeRestExerciseId = null;
     bar.classList.add('hidden');
+    portal?.classList.remove('has-floating-rest');
     return;
   }
   const [exId, timer] = entries[entries.length - 1];
@@ -65,6 +76,7 @@ function syncFloatingRestBar() {
   const rem = remainingRestSeconds(timer);
   timeEl.textContent = formatTimerMmSs(rem);
   bar.classList.remove('hidden');
+  portal?.classList.add('has-floating-rest');
 }
 
 function switchStudentTab(tab) {
@@ -82,6 +94,7 @@ function switchStudentTab(tab) {
 
 function resetStudentUi() {
   clearAllRestTimers();
+  stopPortalPixPolling();
   studentState.data = null;
   studentState.selectedWorkoutId = null;
   studentState.activePixChargeId = null;
@@ -101,13 +114,22 @@ function resetStudentUi() {
   switchStudentTab('workouts');
 }
 
-async function withBusyButton(btn, fn) {
+async function withBusyButton(btn, fn, busyText = '') {
   if (btn?.disabled) return;
-  if (btn) btn.disabled = true;
+  const prevText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    if (busyText) btn.textContent = busyText;
+  }
   try {
     return await fn();
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+      if (busyText && btn.textContent === busyText) btn.textContent = prevText;
+    }
   }
 }
 
@@ -547,7 +569,8 @@ function renderFitness() {
       const iso = `${yr}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const hit = visitSet.has(iso);
       const isToday = iso === refDate;
-      cells += `<div style="text-align:center;padding:6px 0;border-radius:8px;font-size:12px;font-weight:${hit ? '700' : '500'};background:${hit ? 'rgba(245,158,11,0.22)' : 'rgba(148,163,184,0.08)'};border:1px solid ${isToday ? '#f59e0b' : (hit ? 'rgba(245,158,11,0.5)' : 'transparent')};color:${hit ? '#fde68a' : 'inherit'};">${d}</div>`;
+      const cls = ['calendar-day', hit ? 'is-hit' : '', isToday ? 'is-today' : ''].filter(Boolean).join(' ');
+      cells += `<div class="${cls}">${d}</div>`;
     }
     monthCalEl.innerHTML = cells;
   }
@@ -793,18 +816,29 @@ async function resizeImageToDataUrl(file, maxSize = 480) {
 }
 
 async function loadStudentPortal() {
-  const status = await api('/api/student/auth/status');
-  document.getElementById('stLoginGymName').textContent = status.gymName || 'Academia Oxigênio';
-  if (!status.authenticated) {
-    document.getElementById('studentLoginView').classList.remove('hidden');
-    document.getElementById('studentPortalView').classList.add('hidden');
-    return;
+  const bootLoader = document.getElementById('stBootLoader');
+  try {
+    const status = await api('/api/student/auth/status');
+    document.getElementById('stLoginGymName').textContent = status.gymName || 'Academia Oxigênio';
+    if (!status.authenticated) {
+      document.getElementById('studentLoginView').classList.remove('hidden');
+      document.getElementById('studentPortalView').classList.add('hidden');
+      return;
+    }
+    studentState.data = status;
+    document.getElementById('studentLoginView').classList.add('hidden');
+    document.getElementById('studentPortalView').classList.remove('hidden');
+    renderPortal();
+    await loadStudentExtras();
+  } catch (err) {
+    if (!studentState.data?.member) {
+      document.getElementById('studentLoginView')?.classList.remove('hidden');
+      document.getElementById('studentPortalView')?.classList.add('hidden');
+    }
+    throw err;
+  } finally {
+    bootLoader?.classList.add('hidden');
   }
-  studentState.data = status;
-  document.getElementById('studentLoginView').classList.add('hidden');
-  document.getElementById('studentPortalView').classList.remove('hidden');
-  renderPortal();
-  await loadStudentExtras();
 }
 
 function renderGamification(data) {
@@ -964,7 +998,7 @@ document.getElementById('studentLoginForm').addEventListener('submit', async (e)
     } catch (err) {
       showToast(err.message, true);
     }
-  });
+  }, 'Entrando...');
 });
 
 async function clearStudentOfflineCache() {
@@ -1083,25 +1117,33 @@ document.getElementById('stWorkoutPills').addEventListener('click', (e) => {
 });
 
 document.getElementById('stExercisesGrid').addEventListener('click', async (e) => {
+  const cancelLoadBtn = e.target.closest('[data-cancel-load-ex]');
+  if (cancelLoadBtn) {
+    const form = cancelLoadBtn.closest('.exercise-load-inline');
+    const dd = form?.parentElement;
+    if (dd) {
+      const exerciseId = Number(cancelLoadBtn.dataset.cancelLoadEx);
+      const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === Number(studentState.selectedWorkoutId));
+      const ex = (current?.exercises || []).find((item) => Number(item.id) === exerciseId);
+      dd.innerHTML = `<button type="button" class="exercise-load-btn" data-edit-load-ex="${exerciseId}" title="Toque para anotar ou atualizar sua carga">${esc(ex?.load_kg || '+ Anotar')} ✎</button>`;
+    }
+    return;
+  }
   const loadBtn = e.target.closest('[data-edit-load-ex]');
   if (loadBtn) {
     const exerciseId = Number(loadBtn.dataset.editLoadEx);
     const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === Number(studentState.selectedWorkoutId));
     const ex = (current?.exercises || []).find((item) => Number(item.id) === exerciseId);
-    if (!ex) return;
-    const nextLoad = window.prompt(`Carga usada em "${ex.exercise_name}" (ex: 20kg, 45kg, Placa 6):`, ex.load_kg || '');
-    if (nextLoad === null) return;
-    try {
-      const updated = await api(`/api/student/me/exercises/${exerciseId}/load`, {
-        method: 'PUT',
-        body: JSON.stringify({ load_kg: nextLoad }),
-      });
-      ex.load_kg = updated.load_kg;
-      loadBtn.textContent = `${updated.load_kg || '+ Anotar'} ✎`;
-      showToast('Carga anotada no treino!');
-    } catch (err) {
-      showToast(err.message, true);
-    }
+    const dd = loadBtn.parentElement;
+    if (!ex || !dd) return;
+    dd.innerHTML = `<form class="exercise-load-inline" data-save-load-ex="${exerciseId}">
+      <input type="text" inputmode="decimal" maxlength="24" placeholder="Ex: 20kg" value="${esc(ex.load_kg || '')}" aria-label="Carga em ${esc(ex.exercise_name)}" />
+      <button type="submit" class="btn btn-primary btn-sm" aria-label="Salvar carga">✓</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-cancel-load-ex="${exerciseId}" aria-label="Cancelar edição">×</button>
+    </form>`;
+    const input = dd.querySelector('input');
+    input?.focus();
+    input?.select();
     return;
   }
   const restBtn = e.target.closest('[data-rest-ex]');
@@ -1122,7 +1164,48 @@ document.getElementById('stExercisesGrid').addEventListener('click', async (e) =
   }
 });
 
-document.getElementById('btnResetWorkoutCheck')?.addEventListener('click', () => {
+document.getElementById('stExercisesGrid').addEventListener('submit', async (e) => {
+  const form = e.target.closest('.exercise-load-inline');
+  if (!form) return;
+  e.preventDefault();
+  const exerciseId = Number(form.dataset.saveLoadEx);
+  const input = form.querySelector('input');
+  const saveBtn = form.querySelector('button[type="submit"]');
+  const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === Number(studentState.selectedWorkoutId));
+  const ex = (current?.exercises || []).find((item) => Number(item.id) === exerciseId);
+  const dd = form.parentElement;
+  if (!ex || !dd) return;
+  const nextLoad = (input?.value || '').trim();
+  await withBusyButton(saveBtn, async () => {
+    try {
+      const updated = await api(`/api/student/me/exercises/${exerciseId}/load`, {
+        method: 'PUT',
+        body: JSON.stringify({ load_kg: nextLoad }),
+      });
+      ex.load_kg = updated.load_kg;
+      dd.innerHTML = `<button type="button" class="exercise-load-btn" data-edit-load-ex="${exerciseId}" title="Toque para anotar ou atualizar sua carga">${esc(updated.load_kg || '+ Anotar')} ✎</button>`;
+      showToast('Carga anotada no treino!');
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('btnResetWorkoutCheck')?.addEventListener('click', (e) => {
+  const btn = e.currentTarget;
+  if (btn.dataset.confirm !== '1') {
+    btn.dataset.confirm = '1';
+    btn.textContent = 'Confirmar limpeza?';
+    clearTimeout(btn._confirmTimer);
+    btn._confirmTimer = setTimeout(() => {
+      delete btn.dataset.confirm;
+      btn.textContent = 'Limpar dia';
+    }, 4000);
+    return;
+  }
+  clearTimeout(btn._confirmTimer);
+  delete btn.dataset.confirm;
+  btn.textContent = 'Limpar dia';
   localStorage.removeItem(doneStorageKey());
   renderWorkouts();
   showToast('Marcações do dia reiniciadas.');
@@ -1285,6 +1368,32 @@ document.getElementById('stPasswordForm').addEventListener('submit', async (e) =
   });
 });
 
+function startPortalPixPolling(chargeId) {
+  stopPortalPixPolling();
+  let attempts = 0;
+  studentState.pixPollTimer = setInterval(async () => {
+    attempts += 1;
+    if (attempts > 60 || Number(studentState.activePixChargeId) !== Number(chargeId)) {
+      stopPortalPixPolling();
+      return;
+    }
+    try {
+      const res = await api(`/api/student/me/pix/${chargeId}/check`, { method: 'POST' });
+      if (res.paid || res.status === 'paid') {
+        stopPortalPixPolling();
+        document.getElementById('stPixBox')?.classList.add('hidden');
+        showToast('Pagamento confirmado! Matrícula renovada.');
+        await loadStudentPortal();
+      } else if (res.status === 'expired' || res.status === 'cancelled') {
+        stopPortalPixPolling();
+        document.getElementById('stPixInfo').textContent = 'Pix expirado ou cancelado. Gere um novo código para pagar.';
+      }
+    } catch {}
+  }, 5000);
+}
+
+window.addEventListener('pagehide', stopPortalPixPolling);
+
 document.getElementById('btnStCheckout').addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
   try {
     const memberId = studentState.data?.member?.id;
@@ -1301,7 +1410,7 @@ document.getElementById('btnStCheckout').addEventListener('click', (event) => wi
   } catch (err) {
     showToast(err.message, true);
   }
-}));
+}, 'Abrindo...'));
 
 document.getElementById('btnStCheckCheckout').addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
   const box = document.getElementById('stCheckoutBox');
@@ -1319,7 +1428,7 @@ document.getElementById('btnStCheckCheckout').addEventListener('click', (event) 
   } catch (err) {
     showToast(err.message, true);
   }
-}));
+}, 'Verificando...'));
 
 document.getElementById('btnStGeneratePix').addEventListener('click', async (e) => {
   await withBusyButton(e.currentTarget, async () => {
@@ -1331,7 +1440,7 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
       });
       studentState.activePixChargeId = charge.id;
       document.getElementById('stPixBox').classList.remove('hidden');
-      document.getElementById('stPixInfo').textContent = `Valor: ${fmtMoney(charge.amount_cents)} · Status: ${charge.status}`;
+      document.getElementById('stPixInfo').textContent = `Valor: ${fmtMoney(charge.amount_cents)} · Aguardando pagamento (verificação automática ativa)`;
       document.getElementById('stPixCode').value = charge.qr_code || charge.qr_code_text || '';
       const qrImg = document.getElementById('stPixQr');
       const qrSrc = sanitizeQrImageSrc(charge.qr_base64 || charge.qr_code_base64);
@@ -1342,11 +1451,12 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
         qrImg.src = '';
         qrImg.classList.add('hidden');
       }
-      showToast('Pix gerado! Faça o pagamento e clique em Verificar.');
+      if (charge.id) startPortalPixPolling(charge.id);
+      showToast('Pix gerado! Assim que você pagar, confirmaremos automaticamente.');
     } catch (err) {
       showToast(err.message, true);
     }
-  });
+  }, 'Gerando Pix...');
 });
 
 document.getElementById('btnStCopyPix').addEventListener('click', async () => {
@@ -1368,6 +1478,7 @@ document.getElementById('btnStCheckPix').addEventListener('click', async (e) => 
     try {
       const res = await api(`/api/student/me/pix/${studentState.activePixChargeId}/check`, { method: 'POST' });
       if (res.paid || res.status === 'paid') {
+        stopPortalPixPolling();
         showToast('Pagamento confirmado! Matrícula renovada.');
         document.getElementById('stPixBox').classList.add('hidden');
         await loadStudentPortal();
@@ -1377,7 +1488,7 @@ document.getElementById('btnStCheckPix').addEventListener('click', async (e) => 
     } catch (err) {
       showToast(err.message, true);
     }
-  });
+  }, 'Verificando...');
 });
 
 document.getElementById('btnStSubscribeCard').addEventListener('click', async (e) => {
@@ -1398,7 +1509,7 @@ document.getElementById('btnStSubscribeCard').addEventListener('click', async (e
     } catch (err) {
       showToast(err.message, true);
     }
-  });
+  }, 'Gerando link...');
 });
 
 loadStudentPortal().catch((err) => showToast(err.message, true));
@@ -1443,7 +1554,7 @@ document.getElementById('stBookingForm')?.addEventListener('submit', async (e) =
     const label = next === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro';
     toggleBtn?.setAttribute('aria-label', label);
     toggleBtn?.setAttribute('title', label);
-    const themeColor = next === 'dark' ? '#211a17' : '#f7f4ef';
+    const themeColor = next === 'dark' ? '#07080b' : '#f5f5f7';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
   };
   try {
