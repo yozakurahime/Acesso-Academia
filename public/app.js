@@ -2443,7 +2443,6 @@ window.openProfile = async (id) => {
     document.getElementById('profPlanSection').classList.toggle('hidden', team);
     document.getElementById('profStudentDetails').classList.toggle('hidden', team);
     document.getElementById('btnProfPay').classList.toggle('hidden', team);
-    document.getElementById('btnProfToggleStatus').classList.toggle('hidden', team);
     document.getElementById('btnConvertVisitor')?.classList.toggle('hidden', team || !m.is_visitor);
     const today = billingDateFormat.format(new Date());
     const accessStatus = team ? 'active' : m.status === 'blocked' || (enrollment?.ends_on && enrollment.ends_on < today && !data.inGrace)
@@ -2459,10 +2458,6 @@ window.openProfile = async (id) => {
       m.last_sync_error ? `Aviso catraca: ${m.last_sync_error}` : null,
     ].filter(Boolean);
     document.getElementById('profPlanSummary').textContent = planSummaryParts.join(' • ');
-
-    const toggleBtn = document.getElementById('btnProfToggleStatus');
-    toggleBtn.textContent = m.status === 'active' ? 'Bloquear' : 'Liberar';
-    toggleBtn.className = `btn btn-sm ${m.status === 'active' ? 'btn-danger' : 'btn-warning'}`;
 
     const photoImg = document.getElementById('profPhoto');
     const photoEmpty = document.getElementById('profPhotoEmpty');
@@ -3154,16 +3149,6 @@ document.getElementById('btnProfChangePhoto').addEventListener('click', () => {
 
 document.getElementById('btnProfPay').addEventListener('click', () => {
   if (state.selectedProfileMember) jumpToPaymentForMember(state.selectedProfileMember);
-});
-
-document.getElementById('btnProfToggleStatus').addEventListener('click', async () => {
-  const m = state.selectedProfileMember;
-  if (!m) return;
-  const nextStatus = m.status === 'active' ? 'blocked' : 'active';
-  await toggleMemberStatus(m.id, nextStatus, m.name);
-  if (!document.getElementById('profileModal').classList.contains('hidden')) {
-    await openProfile(m.id);
-  }
 });
 
 document.getElementById('btnProfDelete')?.addEventListener('click', async (e) => {

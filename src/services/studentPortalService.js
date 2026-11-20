@@ -1,7 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt, scryptSync } from 'node:crypto';
 import { hashPassword, verifyPassword } from './authService.js';
+
+function hashInviteCode(code) {
+  const salt = randomBytes(16).toString('hex');
+  const derived = scryptSync(String(code), salt, 64).toString('hex');
+  return `${salt}:${derived}`;
+}
 import { studentFitnessProgress } from './fitnessProgress.js';
 
 function onlyDigits(value) {
@@ -86,10 +92,14 @@ export class StudentPortalService {
   }
 
   issueInvite(memberId) {
-    const code = randomBytes(12).toString('base64url');
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 4; i += 1) {
+      code += alphabet[randomInt(alphabet.length)];
+    }
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
     const result = this.store.run("UPDATE members SET portal_invite_hash = ?, portal_invite_expires_at = ? WHERE id = ? AND access_role = 'student' AND portal_password_hash IS NULL",
-      [hashPassword(code), expiresAt, Number(memberId)]);
+      [hashInviteCode(code), expiresAt, Number(memberId)]);
     if (!result.changes) throw new Error('Aluno não encontrado ou já possui senha.');
     return { code, expiresAt };
   }
@@ -112,7 +122,7 @@ export class StudentPortalService {
       return this._sanitizeMember(member);
     }
 
-    if (member.portal_invite_expires_at <= Date.now() || !verifyPassword(provided, member.portal_invite_hash)) {
+    if (member.portal_invite_expires_at <= Date.now() || !verifyPassword(provided.toUpperCase(), member.portal_invite_hash)) {
       throw new Error('Identificador ou credencial inválidos. Solicite um convite à recepção.');
     }
     this.store.run('UPDATE members SET portal_invite_hash = NULL, portal_invite_expires_at = NULL WHERE id = ?', [member.id]);
