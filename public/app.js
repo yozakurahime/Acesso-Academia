@@ -5452,7 +5452,7 @@ function stopPaymentAutoPoll() {
   paymentPollDeadline = 0;
 }
 
-function startPaymentAutoPoll({ type, id }) {
+function startPaymentAutoPoll({ type, id, stayOnMember = false }) {
   stopPaymentAutoPoll();
   if (!id) return;
   paymentPollDeadline = Date.now() + 2 * 60 * 1000;
@@ -5479,10 +5479,11 @@ function startPaymentAutoPoll({ type, id }) {
         const res = await api(`/api/gateways/mp/point-orders/${id}/check`, { method: 'POST' });
         if (res.paid) {
           stopPaymentAutoPoll();
-          showToast('Pagamento na Point Smart confirmado e baixado!');
+          const keepMember = stayOnMember || Boolean(document.getElementById('pSplitToggle')?.checked);
+          showToast(keepMember ? 'Pagamento na maquininha confirmado! Finalize o restante na tela.' : 'Pagamento na Point Smart confirmado e baixado!');
           await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
           if (isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
-          finishPaymentAndReturnHome();
+          if (!keepMember) finishPaymentAndReturnHome();
           return;
         }
         if (['canceled', 'failed', 'expired'].includes(res.status)) {
@@ -7994,10 +7995,11 @@ function addSplitRow(preferredCode = null, amountValue = '') {
     .join('');
   const row = document.createElement('div');
   row.className = 'split-row';
-  row.style.cssText = 'display:grid;grid-template-columns:1fr 130px auto;gap:8px;align-items:center;';
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 120px auto auto;gap:8px;align-items:center;';
   row.innerHTML = `
     <select class="split-method" aria-label="Forma de pagamento">${optionsHtml}</select>
     <input type="number" min="0" step="0.01" class="split-amount" placeholder="0,00" value="${escapeHtml(amountValue)}" aria-label="Valor nesta forma (R$)" />
+    <button type="button" class="btn btn-secondary btn-sm split-send-point" title="Enviar este valor para a maquininha">Maquininha</button>
     <button type="button" class="btn btn-secondary btn-sm split-remove" title="Remover forma" aria-label="Remover forma">&times;</button>
   `;
   container.appendChild(row);
@@ -8057,7 +8059,39 @@ document.getElementById('btnAddSplitRow')?.addEventListener('click', () => {
 
 document.getElementById('pSplitRows')?.addEventListener('input', () => renderBillingSummary());
 document.getElementById('pSplitRows')?.addEventListener('change', () => renderBillingSummary());
-document.getElementById('pSplitRows')?.addEventListener('click', (e) => {
+document.getElementById('pSplitRows')?.addEventListener('click', async (e) => {
+  const sendPoint = e.target.closest('.split-send-point');
+  if (sendPoint) {
+    const memberId = document.getElementById('pMember').value;
+    if (!memberId) {
+      showToast('Selecione o aluno primeiro.', true);
+      document.getElementById('pMemberSearch')?.focus();
+      return;
+    }
+    const row = sendPoint.closest('.split-row');
+    const amountCents = toCents(row?.querySelector('.split-amount')?.value || 0);
+    if (amountCents <= 0) {
+      showToast('Informe um valor válido nesta linha para enviar à maquininha.', true);
+      row?.querySelector('.split-amount')?.focus();
+      return;
+    }
+    const paymentMethod = row?.querySelector('.split-method')?.value || 'credit';
+    const planId = document.getElementById('pPlan').value || null;
+    await withLoading(sendPoint, async () => {
+      try {
+        const order = await api('/api/gateways/mp/point-orders', {
+          method: 'POST',
+          body: JSON.stringify({ member_id: memberId, plan_id: planId, amount_cents: amountCents, payment_method: paymentMethod }),
+        });
+        showToast(`Cobrança de ${fmtMoney(amountCents)} enviada para a maquininha!`);
+        await loadPointOrders();
+        if (order?.id) startPaymentAutoPoll({ type: 'point', id: order.id, stayOnMember: true });
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
   const rm = e.target.closest('.split-remove');
   if (!rm) return;
   const rows = document.querySelectorAll('#pSplitRows .split-row');
