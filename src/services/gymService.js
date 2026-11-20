@@ -25,11 +25,34 @@ export class GymService {
     if (!member) throw new Error('Aluno nao encontrado.');
 
     const payments = this.store.all(
-      `SELECT pay.*, p.name AS plan_name
+      `SELECT pay.*, p.name AS plan_name, s.name AS staff_name
        FROM payments pay
        LEFT JOIN plans p ON p.id = pay.plan_id
+       LEFT JOIN staff s ON s.id = pay.staff_id
        WHERE pay.member_id = ?
-       ORDER BY pay.id DESC LIMIT 20`,
+       ORDER BY pay.id DESC LIMIT 50`,
+      [id],
+    );
+
+    const gatewayCharges = this.store.all(
+      `SELECT gc.id, gc.provider, gc.external_id, gc.plan_id, gc.amount_cents,
+              gc.status, gc.payment_id, gc.created_at, gc.paid_at,
+              p.name AS plan_name
+       FROM gateway_charges gc
+       LEFT JOIN plans p ON p.id = gc.plan_id
+       WHERE gc.member_id = ?
+       ORDER BY gc.id DESC LIMIT 30`,
+      [id],
+    );
+
+    const pointOrders = this.store.all(
+      `SELECT po.id, po.order_id, po.terminal_id, po.plan_id, po.amount_cents,
+              po.payment_method, po.status, po.payment_id, po.created_at, po.paid_at,
+              p.name AS plan_name
+       FROM point_orders po
+       LEFT JOIN plans p ON p.id = po.plan_id
+       WHERE po.member_id = ?
+       ORDER BY po.id DESC LIMIT 30`,
       [id],
     );
 
@@ -71,7 +94,7 @@ export class GymService {
        ORDER BY due ASC, id ASC`,
       [id],
     );
-    return { member: { ...profileMember, has_portal_password: Boolean(portal_password_hash) }, payments, logs, classes, modalities, planEnrollment, inGrace, weeklyGoal, openCharges };
+    return { member: { ...profileMember, has_portal_password: Boolean(portal_password_hash) }, payments, gatewayCharges, pointOrders, logs, classes, modalities, planEnrollment, inGrace, weeklyGoal, openCharges };
   }
 
   updateMember(memberId, data) {

@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
   <link rel="icon" href="/oxigenio.jpg" />
-  <link rel="stylesheet" href="/styles.css?v=20261120.5" />
-  <link rel="stylesheet" href="/admin.css?v=20261120.5" />
-  <link rel="stylesheet" href="/admin-operations.css?v=20261120.5" />
+  <link rel="stylesheet" href="/styles.css?v=20261120.6" />
+  <link rel="stylesheet" href="/admin.css?v=20261120.6" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261120.6" />
 </head>
 <body class="workspace-app">
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
@@ -2251,7 +2251,19 @@
         </section>
 
         <section class="panel" style="margin-top:16px;">
-          <h3>Últimos Pagamentos</h3>
+          <div class="panel-header" style="flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+            <h3 style="margin:0;">Histórico Financeiro</h3>
+            <span id="profPaymentsCountBadge" class="badge badge-neutral">0 registros</span>
+          </div>
+          <div id="profPaymentFilters" class="prof-enr-filters" style="margin-bottom:12px;">
+            <button type="button" class="prof-enr-filter active" data-prof-pay-filter="all">Todos</button>
+            <button type="button" class="prof-enr-filter" data-prof-pay-filter="pix">Pix</button>
+            <button type="button" class="prof-enr-filter" data-prof-pay-filter="credit">Crédito</button>
+            <button type="button" class="prof-enr-filter" data-prof-pay-filter="debit">Débito</button>
+            <button type="button" class="prof-enr-filter" data-prof-pay-filter="cash">Dinheiro</button>
+            <button type="button" class="prof-enr-filter" data-prof-pay-filter="avulso">Avulso</button>
+            <button type="button" class="prof-enr-filter" data-prof-pay-filter="cancelled">Cancelados / Pendentes</button>
+          </div>
           <ul id="profPaymentsList" class="simple-list"></ul>
         </section>
       </div>
@@ -2540,7 +2552,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261120.5"></script>
-  <script src="/app.js?v=20261120.5"></script>
+  <script src="/receipt-print.js?v=20261120.6"></script>
+  <script src="/app.js?v=20261120.6"></script>
 </body>
 </html>

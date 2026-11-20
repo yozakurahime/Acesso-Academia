@@ -2442,17 +2442,13 @@ window.openProfile = async (id) => {
     renderProfileEnrollmentTable(data);
 
     state.selectedProfilePayments = data.payments || [];
-    document.getElementById('profPaymentsList').innerHTML = data.payments.length
-      ? data.payments
-          .map(
-            (p) =>
-              `<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                <span>${escapeHtml(fmtDateTime(p.paid_at))} — ${fmtMoney(p.amount_cents)} (${escapeHtml(methodName(p.method))})</span>
-                <button type="button" class="btn btn-secondary btn-sm" data-print-prof-payment="${p.id}">Recibo</button>
-              </li>`,
-          )
-          .join('')
-      : '<li class="muted">Nenhum pagamento registrado.</li>';
+    state.selectedProfileGatewayCharges = data.gatewayCharges || [];
+    state.selectedProfilePointOrders = data.pointOrders || [];
+    state.profilePaymentFilter = 'all';
+    document.querySelectorAll('#profPaymentFilters [data-prof-pay-filter]').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.profPayFilter === 'all');
+    });
+    renderProfilePayments();
 
     document.getElementById('profWorkoutsSection').classList.toggle('hidden', m.access_role !== 'student');
     document.getElementById('profContractSection')?.classList.toggle('hidden', m.access_role !== 'student');
@@ -2600,6 +2596,154 @@ document.getElementById('profEnrFilters')?.addEventListener('click', (e) => {
       planEnrollment: state.selectedProfileEnrollment,
     });
   }
+});
+
+function normalizeProfilePaymentBucket(methodCode) {
+  const code = String(methodCode || '').trim().toLowerCase();
+  if (code === 'pix') return 'pix';
+  if (code === 'credit' || code === 'credito' || code === 'credit_card') return 'credit';
+  if (code === 'debit' || code === 'debito' || code === 'debit_card') return 'debit';
+  if (code === 'cash' || code === 'dinheiro') return 'cash';
+  return code || 'other';
+}
+
+function formatProfileGatewayStatus(status) {
+  const s = String(status || '').trim().toLowerCase();
+  if (s === 'paid' || s === 'approved' || s === 'finished') return { label: 'Pago', cls: 'badge-active', isClosedBad: false };
+  if (s === 'cancelled' || s === 'canceled') return { label: 'Cancelado', cls: 'badge-blocked', isClosedBad: true };
+  if (s === 'refunded' || s === 'charged_back') return { label: 'Estornado', cls: 'badge-blocked', isClosedBad: true };
+  if (s === 'expired') return { label: 'Expirado', cls: 'badge-blocked', isClosedBad: true };
+  if (s === 'rejected' || s === 'failed' || s === 'error') return { label: 'Recusado / Erro', cls: 'badge-blocked', isClosedBad: true };
+  return { label: 'Pendente', cls: 'badge-pending', isClosedBad: true };
+}
+
+function renderProfilePayments() {
+  const listEl = document.getElementById('profPaymentsList');
+  if (!listEl) return;
+  const filter = state.profilePaymentFilter || 'all';
+  const payments = state.selectedProfilePayments || [];
+  const linkedPaymentIds = new Set(payments.map((p) => Number(p.id)));
+  const entries = [];
+
+  for (const p of payments) {
+    const statusLower = String(p.status || 'paid').trim().toLowerCase();
+    const isPaid = statusLower === 'paid';
+    const isAvulso = !p.plan_id;
+    const methodBucket = normalizeProfilePaymentBucket(p.method);
+    const statusBadge = isPaid
+      ? { label: 'Pago', cls: 'badge-active' }
+      : statusLower === 'refunded'
+        ? { label: 'Estornado', cls: 'badge-blocked' }
+        : { label: 'Cancelado', cls: 'badge-blocked' };
+    entries.push({
+      sortAt: p.paid_at || '',
+      sortId: Number(p.id) || 0,
+      methodBucket,
+      isAvulso,
+      isCancelledOrPending: !isPaid,
+      html: `
+        <li style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong>${fmtMoney(p.amount_cents)}</strong>
+              <span class="badge badge-neutral">${escapeHtml(methodName(p.method))}</span>
+              <span class="badge ${statusBadge.cls}">${statusBadge.label}</span>
+              ${isAvulso ? '<span class="badge badge-pending">Avulso</span>' : ''}
+            </div>
+            <span class="muted" style="font-size:12px;">
+              ${escapeHtml(fmtDateTime(p.paid_at))}
+              ${p.plan_name ? ` · ${escapeHtml(p.plan_name)}` : ''}
+              ${p.notes ? ` · ${escapeHtml(p.notes)}` : ''}
+              ${p.staff_name ? ` · por ${escapeHtml(p.staff_name)}` : ''}
+            </span>
+          </div>
+          ${isPaid ? `<button type="button" class="btn btn-secondary btn-sm" data-print-prof-payment="${p.id}">Recibo</button>` : ''}
+        </li>`,
+    });
+  }
+
+  for (const gc of (state.selectedProfileGatewayCharges || [])) {
+    if (gc.payment_id && linkedPaymentIds.has(Number(gc.payment_id))) continue;
+    const st = formatProfileGatewayStatus(gc.status);
+    entries.push({
+      sortAt: gc.paid_at || gc.created_at || '',
+      sortId: Number(gc.id) || 0,
+      methodBucket: 'pix',
+      isAvulso: !gc.plan_id,
+      isCancelledOrPending: st.isClosedBad,
+      html: `
+        <li style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong>${fmtMoney(gc.amount_cents)}</strong>
+              <span class="badge badge-neutral">Pix / Online</span>
+              <span class="badge ${st.cls}">${st.label}</span>
+              ${!gc.plan_id ? '<span class="badge badge-pending">Avulso</span>' : ''}
+            </div>
+            <span class="muted" style="font-size:12px;">
+              ${escapeHtml(fmtDateTime(gc.paid_at || gc.created_at))}
+              ${gc.plan_name ? ` · ${escapeHtml(gc.plan_name)}` : ''}
+              · Cobrança #${gc.id}
+            </span>
+          </div>
+        </li>`,
+    });
+  }
+
+  for (const po of (state.selectedProfilePointOrders || [])) {
+    if (po.payment_id && linkedPaymentIds.has(Number(po.payment_id))) continue;
+    const st = formatProfileGatewayStatus(po.status);
+    const methodBucket = normalizeProfilePaymentBucket(po.payment_method);
+    entries.push({
+      sortAt: po.paid_at || po.created_at || '',
+      sortId: Number(po.id) || 0,
+      methodBucket,
+      isAvulso: !po.plan_id,
+      isCancelledOrPending: st.isClosedBad,
+      html: `
+        <li style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong>${fmtMoney(po.amount_cents)}</strong>
+              <span class="badge badge-neutral">Maquininha · ${escapeHtml(methodName(po.payment_method))}</span>
+              <span class="badge ${st.cls}">${st.label}</span>
+              ${!po.plan_id ? '<span class="badge badge-pending">Avulso</span>' : ''}
+            </div>
+            <span class="muted" style="font-size:12px;">
+              ${escapeHtml(fmtDateTime(po.paid_at || po.created_at))}
+              ${po.plan_name ? ` · ${escapeHtml(po.plan_name)}` : ''}
+              · Pedido #${po.id}
+            </span>
+          </div>
+        </li>`,
+    });
+  }
+
+  entries.sort((a, b) => String(b.sortAt).localeCompare(String(a.sortAt)) || b.sortId - a.sortId);
+
+  const filtered = entries.filter((entry) => {
+    if (filter === 'all') return true;
+    if (filter === 'avulso') return entry.isAvulso;
+    if (filter === 'cancelled') return entry.isCancelledOrPending;
+    return entry.methodBucket === filter;
+  });
+
+  const badgeEl = document.getElementById('profPaymentsCountBadge');
+  if (badgeEl) {
+    badgeEl.textContent = `${filtered.length} registro${filtered.length === 1 ? '' : 's'}`;
+  }
+
+  listEl.innerHTML = filtered.length
+    ? filtered.map((e) => e.html).join('')
+    : '<li class="muted">Nenhum pagamento encontrado neste filtro.</li>';
+}
+
+document.getElementById('profPaymentFilters')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-prof-pay-filter]');
+  if (!btn) return;
+  state.profilePaymentFilter = btn.dataset.profPayFilter || 'all';
+  document.querySelectorAll('#profPaymentFilters [data-prof-pay-filter]').forEach((b) => b.classList.toggle('active', b === btn));
+  renderProfilePayments();
 });
 
 document.getElementById('btnTogglePlanEnrollmentForm')?.addEventListener('click', () => {
