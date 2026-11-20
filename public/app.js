@@ -8552,7 +8552,43 @@ document.getElementById('cbBookingsBody')?.addEventListener('click', async (e) =
 let activeSettingsCategory = 'general';
 let lastFocusedWaTemplate = null;
 
-function activateSettingsCategory(category = 'general') {
+let activeSettingsSubIndex = 0;
+
+function getCategorySubCards(category) {
+  return [...document.querySelectorAll(`#settingsContent .settings-card[data-settings-cat="${category}"]`)].filter(
+    (card) => !card.classList.contains('hidden'),
+  );
+}
+
+function renderSettingsSubNav(category, subIndex = 0) {
+  const subNav = document.getElementById('settingsSubNav');
+  const cards = getCategorySubCards(category);
+  document.querySelectorAll('#settingsContent .settings-card').forEach((card) => {
+    card.classList.remove('settings-sub-hidden');
+  });
+  if (!subNav || cards.length <= 1) {
+    if (subNav) {
+      subNav.classList.add('hidden');
+      subNav.innerHTML = '';
+    }
+    activeSettingsSubIndex = 0;
+    return;
+  }
+  const safeIdx = Math.max(0, Math.min(subIndex, cards.length - 1));
+  activeSettingsSubIndex = safeIdx;
+  subNav.classList.remove('hidden');
+  subNav.innerHTML = cards
+    .map((card, idx) => {
+      const title = card.querySelector('h3')?.textContent?.trim() || `Seção ${idx + 1}`;
+      return `<button type="button" class="settings-subnav-btn ${idx === safeIdx ? 'active' : ''}" role="tab" aria-selected="${idx === safeIdx ? 'true' : 'false'}" data-settings-sub="${idx}">${escapeHtml(title)}</button>`;
+    })
+    .join('');
+  cards.forEach((card, idx) => {
+    card.classList.toggle('settings-sub-hidden', idx !== safeIdx);
+  });
+}
+
+function activateSettingsCategory(category = 'general', subIndex = 0) {
   activeSettingsCategory = category;
   const searchInput = document.getElementById('settingsSearchInput');
   if (searchInput && searchInput.value) {
@@ -8567,6 +8603,7 @@ function activateSettingsCategory(category = 'general') {
   document.querySelectorAll('#settingsContent [data-settings-cat]').forEach((el) => {
     el.classList.toggle('settings-cat-hidden', el.dataset.settingsCat !== category);
   });
+  renderSettingsSubNav(category, subIndex);
 }
 
 function filterSettingsContent(rawQuery) {
@@ -8576,9 +8613,14 @@ function filterSettingsContent(rawQuery) {
   if (clearBtn) clearBtn.classList.toggle('hidden', !query);
 
   if (!query) {
-    activateSettingsCategory(activeSettingsCategory);
+    activateSettingsCategory(activeSettingsCategory, activeSettingsSubIndex);
     return;
   }
+
+  document.getElementById('settingsSubNav')?.classList.add('hidden');
+  document.querySelectorAll('#settingsContent .settings-card').forEach((card) => {
+    card.classList.remove('settings-sub-hidden');
+  });
 
   document.querySelectorAll('#settingsNav .settings-nav-btn').forEach((btn) => {
     btn.classList.remove('active');
@@ -8622,7 +8664,14 @@ function filterSettingsContent(rawQuery) {
 document.getElementById('settingsNav')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.settings-nav-btn[data-settings-cat]');
   if (!btn) return;
-  activateSettingsCategory(btn.dataset.settingsCat);
+  activateSettingsCategory(btn.dataset.settingsCat, 0);
+});
+
+document.getElementById('settingsSubNav')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.settings-subnav-btn[data-settings-sub]');
+  if (!btn) return;
+  const idx = Number(btn.dataset.settingsSub) || 0;
+  activateSettingsCategory(activeSettingsCategory, idx);
 });
 
 document.getElementById('settingsSearchInput')?.addEventListener('input', (e) => {

@@ -1487,8 +1487,37 @@ input.is-cpf-error {
   text-align: center;
   padding: 28px 16px;
 }
-.settings-cat-hidden {
+.settings-cat-hidden,
+.settings-sub-hidden {
   display: none !important;
+}
+.settings-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-subnav-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.settings-subnav-btn:hover {
+  border-color: var(--primary);
+}
+.settings-subnav-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
 }
 
 /* ===== BILLING HERO SEARCH, STEPS & FOCUSED LAYOUT ===== */
