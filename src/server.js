@@ -125,17 +125,34 @@ async function start() {
     return Boolean(rawHost) && (rawHost === adminHost || rawHost.startsWith('sistema.'));
   };
   const STUDENT_HOST_ASSETS = new Set([
-    '/', '/aluno', '/aluno/', '/aluno.html', '/aluno.css', '/aluno.js', '/styles.css',
-    '/exercises.js', '/exercise-catalog.js', '/oxigenio.jpg', '/manifest.json', '/sw.js', '/favicon.ico',
+    '/', '/aluno', '/aluno/', '/aluno.html', '/aluno.css', '/aluno.js',
+    '/matricula', '/matricula/', '/matricula.html', '/matricula.js',
+    '/landing', '/landing/', '/landing.html',
+    '/styles.css', '/exercises.js', '/exercise-catalog.js', '/oxigenio.jpg',
+    '/manifest.json', '/sw.js', '/favicon.ico',
   ]);
   app.use((req, res, next) => {
     const isAlunoPath = req.path === '/aluno' || req.path === '/aluno/' || req.path === '/aluno.html';
+    const isMatriculaPath = req.path === '/matricula' || req.path === '/matricula/' || req.path === '/matricula.html';
+    const isLandingPath = req.path === '/landing' || req.path === '/landing/' || req.path === '/landing.html';
+    const isCatracaPath = req.path === '/catraca' || req.path === '/catraca/';
     if (isAdminRemoteHost(req) && isAlunoPath) {
       return res.redirect(302, studentPortalUrl);
     }
     if (!isStudentPortalHost(req)) {
-      if (req.method === 'GET' && (req.path === '/aluno' || req.path === '/aluno/')) {
-        return res.sendFile(path.join(rootDir, 'public', 'aluno.html'));
+      if (req.method === 'GET') {
+        if (req.path === '/aluno' || req.path === '/aluno/') {
+          return res.sendFile(path.join(rootDir, 'public', 'aluno.html'));
+        }
+        if (req.path === '/matricula' || req.path === '/matricula/') {
+          return res.sendFile(path.join(rootDir, 'public', 'matricula.html'));
+        }
+        if (req.path === '/landing' || req.path === '/landing/') {
+          return res.sendFile(path.join(rootDir, 'public', 'landing.html'));
+        }
+        if (isCatracaPath) {
+          return res.sendFile(path.join(rootDir, 'public', 'catraca.html'));
+        }
       }
       return next();
     }
@@ -146,11 +163,14 @@ async function start() {
     if (isAlunoPath) {
       return res.sendFile(path.join(rootDir, 'public', 'aluno.html'));
     }
-    if (req.path === '/' || req.path === '/index.html') {
+    if (isMatriculaPath) {
+      return res.sendFile(path.join(rootDir, 'public', 'matricula.html'));
+    }
+    if (req.path === '/' || req.path === '/index.html' || isLandingPath) {
       const landingFile = path.join(rootDir, 'public', 'landing.html');
       return res.sendFile(fs.existsSync(landingFile) ? landingFile : path.join(rootDir, 'public', 'aluno.html'));
     }
-    if (req.path.startsWith('/api/student/') || req.path === '/api/health' || req.path === '/api/public/plans' || /^\/api\/exercise-catalog\/[^/]+\/video$/.test(req.path)) {
+    if (req.path.startsWith('/api/student/') || req.path.startsWith('/api/public/') || req.path === '/api/health' || /^\/api\/exercise-catalog\/[^/]+\/video$/.test(req.path)) {
       return next();
     }
     if (req.method === 'GET' && (STUDENT_HOST_ASSETS.has(req.path) || req.path.startsWith('/landing-assets/') || req.path.startsWith('/icons/'))) {

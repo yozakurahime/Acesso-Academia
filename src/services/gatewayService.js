@@ -92,10 +92,14 @@ export class GatewayService {
   getMpAuth(settings = this.store.getSettings()) {
     const token = String(settings.mp_access_token || '').trim();
     if (!token) {
-      throw new Error('Access Token do Mercado Pago não configurado em Configurações.');
+      const err = new Error('Access Token do Mercado Pago não configurado em Configurações.');
+      err.statusCode = 400;
+      throw err;
     }
     if (/^APP_USR-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) {
-      throw new Error('O valor salvo no Mercado Pago é uma Public Key (Chave Pública). Cole o Access Token de Produção em Configurações → Pagamentos Online.');
+      const err = new Error('O valor salvo no Mercado Pago é uma Public Key (Chave Pública). Cole o Access Token de Produção em Configurações → Pagamentos Online.');
+      err.statusCode = 400;
+      throw err;
     }
     return {
       Authorization: `Bearer ${token}`,
