@@ -119,6 +119,7 @@ export class ImportService {
         activatedMembers: 0,
         receiptsImported: 0,
         conflicts: 0,
+        conflictDetails: [],
       };
 
       for (const table of tables) {
@@ -610,7 +611,23 @@ export class ImportService {
 
       const cpfDigits = iCpf >= 0 ? String(row[iCpf] || '').replace(/\D/g, '') : '';
       const member = cpfDigits ? byCpf.get(cpfDigits) : byName.get(normName(name));
-      if (!member) { summary.conflicts += 1; continue; }
+      if (!member) {
+        summary.conflicts += 1;
+        if (Array.isArray(summary.conflictDetails) && summary.conflictDetails.length < 50) {
+          const reason = cpfDigits
+            ? (byCpf.get(cpfDigits) === null ? 'CPF duplicado no cadastro' : 'CPF não encontrado no cadastro de alunos')
+            : (byName.get(normName(name)) === null ? 'Nome duplicado no cadastro (sem CPF)' : 'Nome não encontrado no cadastro de alunos');
+          summary.conflictDetails.push({
+            section: 'Recebimentos',
+            name,
+            document: cpfDigits || null,
+            paidAt: paidIso,
+            amountCents,
+            reason,
+          });
+        }
+        continue;
+      }
 
       const paidTimestamp = `${paidIso} 12:00:00`;
       const payKey = `${member.id}|${amountCents}|${paidIso}`;

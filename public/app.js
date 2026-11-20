@@ -6697,8 +6697,22 @@ document.getElementById('btnImportSca').addEventListener('click', (e) => {
           method: 'POST',
           body: JSON.stringify({ htmlContent: reader.result }),
         });
-        const msg = `SCA importado: ${res.membersImported} aluno(s), ${res.enrollmentsUpdated} matrícula(s), ${res.chargesUpdated || 0} cobrança(s), ${res.plansCreated} plano(s), ${res.classesImported} turma(s), ${res.staffImported} atendente(s), ${res.instructorsImported} professor(es).`;
-        document.getElementById('importResult').textContent = `${msg} ${res.conflicts ?? 0} divergência(s) ignorada(s).`;
+        const msg = `SCA importado: ${res.membersImported} aluno(s), ${res.enrollmentsUpdated} matrícula(s), ${res.chargesUpdated || 0} cobrança(s), ${res.receiptsImported || 0} recebimento(s), ${res.plansCreated} plano(s), ${res.classesImported} turma(s), ${res.staffImported} atendente(s), ${res.instructorsImported} professor(es).`;
+        const importResultEl = document.getElementById('importResult');
+        const details = Array.isArray(res.conflictDetails) ? res.conflictDetails : [];
+        if (importResultEl) {
+          const detailsHtml = details.length
+            ? `<ul class="simple-list" style="margin-top:8px;">${details
+                .map((d) => {
+                  const docText = d.document ? ` · CPF ${escapeHtml(d.document)}` : '';
+                  const amtText = d.amountCents ? ` · ${fmtMoney(d.amountCents)}` : '';
+                  const dateText = d.paidAt ? ` (${escapeHtml(fmtDate(d.paidAt))})` : '';
+                  return `<li><strong>${escapeHtml(d.name || 'Sem nome')}</strong>${docText}${amtText}${dateText} — <span class="muted">${escapeHtml(d.reason || 'Divergência')}</span></li>`;
+                })
+                .join('')}</ul>`
+            : '';
+          importResultEl.innerHTML = `<p style="margin:0;">${escapeHtml(msg)} <strong>${res.conflicts ?? 0} divergência(s) ignorada(s).</strong></p>${detailsHtml}`;
+        }
         showToast(msg);
         input.value = '';
         await Promise.all([loadMembers(), loadPlans(), loadStaff(), loadGymStructure(), loadDashboard()]);
