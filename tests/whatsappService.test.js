@@ -237,3 +237,64 @@ test('WhatsappService enfileira cobranca vencida ontem, check-in de 7 dias e mar
   assert.match(logs[1].message, /g\.page\/r\//);
   assert.match(logs[2].message, /10 treinos/);
 });
+
+test('WhatsappService opera no modo API Oficial Meta (Cloud API) para envio e webhook', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_provider: 'meta_cloud',
+    whatsapp_meta_phone_number_id: '555123456789',
+    whatsapp_meta_access_token: 'meta-token-teste',
+    whatsapp_bot_enabled: '1',
+  });
+
+  const sentCalls = [];
+  const fakeFetch = async (url, init) => {
+    sentCalls.push({ url, body: JSON.parse(init.body) });
+    return { ok: true, status: 200, json: async () => ({ messages: [{ id: 'wamid.1' }] }) };
+  };
+
+  let botReceived = null;
+  const wa = new WhatsappService(store, {
+    sleepFn: async () => {},
+    fetchFn: fakeFetch,
+    botDebounceMs: 0,
+    onBotMessage: {
+      recordChatMessage: () => {},
+      markHumanTakeover: () => {},
+      handleIncomingMessage: async (msg) => {
+        botReceived = msg;
+        return { reply: 'Oi! Aqui é a Hime pela API oficial.' };
+      },
+    },
+  });
+
+  const st = wa.getStatus();
+  assert.equal(st.provider, 'meta_cloud');
+  assert.equal(st.status, 'connected');
+
+  await wa.sendImmediate('62999998888', 'Teste oficial Meta');
+  assert.equal(sentCalls.length, 1);
+  assert.match(sentCalls[0].url, /\/555123456789\/messages$/);
+  assert.equal(sentCalls[0].body.to, '5562999998888');
+  assert.equal(sentCalls[0].body.text.body, 'Teste oficial Meta');
+
+  const whRes = await wa.handleMetaWebhook({
+    entry: [
+      {
+        changes: [
+          {
+            value: {
+              contacts: [{ wa_id: '5562999998888', profile: { name: 'João Teste' } }],
+              messages: [{ id: 'wamid.in.1', from: '5562999998888', type: 'text', text: { body: 'Qual o valor?' } }],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(whRes.processed, 1);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(botReceived?.text, 'Qual o valor?');
+  assert.equal(sentCalls.length, 2);
+  assert.equal(sentCalls[1].body.text.body, 'Oi! Aqui é a Hime pela API oficial.');
+});

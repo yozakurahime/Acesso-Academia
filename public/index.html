@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
   <link rel="icon" href="/oxigenio.jpg" />
-  <link rel="stylesheet" href="/styles.css?v=20261120.10" />
-  <link rel="stylesheet" href="/admin.css?v=20261120.10" />
-  <link rel="stylesheet" href="/admin-operations.css?v=20261120.10" />
+  <link rel="stylesheet" href="/styles.css?v=20261120.12" />
+  <link rel="stylesheet" href="/admin.css?v=20261120.12" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261120.12" />
 </head>
 <body class="workspace-app">
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
@@ -1690,6 +1690,38 @@
 
               <form id="whatsappForm" class="settings-grouped-form" style="margin-top: 14px;">
                 <div class="settings-subblock">
+                  <h4>Modo de Conexão</h4>
+                  <div class="form-grid">
+                    <label>Provedor WhatsApp
+                      <select id="waProviderSelect">
+                        <option value="baileys">Baileys (QR Code — celular conectado)</option>
+                        <option value="meta_cloud">API Oficial Meta (Cloud API — sem risco de ban por QR)</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div id="waMetaCloudFields" class="form-grid hidden" style="margin-top:10px;">
+                    <label>Phone Number ID (Meta)
+                      <input type="text" id="waMetaPhoneNumberId" placeholder="Ex: 512345678901234" autocomplete="off" />
+                    </label>
+                    <label>Access Token Permanente (System User)
+                      <input type="password" id="waMetaAccessToken" placeholder="Cole o token da Meta" autocomplete="off" />
+                    </label>
+                    <label>Verify Token do Webhook (crie uma senha simples)
+                      <input type="text" id="waMetaVerifyToken" placeholder="Ex: oxigenio-meta-webhook" autocomplete="off" />
+                    </label>
+                    <label>App Secret (opcional — valida assinatura)
+                      <input type="password" id="waMetaAppSecret" placeholder="Opcional" autocomplete="off" />
+                    </label>
+                    <label style="grid-column:1 / -1;">URL do Webhook (cole na Meta for Developers)
+                      <div class="inline-actions">
+                        <input type="text" id="waMetaWebhookUrl" readonly value="https://sistema.academiaoxigenio.com/api/whatsapp/webhook" style="flex:1;" />
+                        <button type="button" id="btnCopyMetaWebhook" class="btn btn-secondary btn-sm">Copiar URL</button>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="settings-subblock">
                   <h4>Gatilhos Automáticos</h4>
                   <div class="settings-toggle-grid">
                     <label class="checkbox-label"><input type="checkbox" id="waEnabled" /> Ativar envios automáticos</label>
@@ -2552,7 +2584,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261120.11"></script>
-  <script src="/app.js?v=20261120.11"></script>
+  <script src="/receipt-print.js?v=20261120.12"></script>
+  <script src="/app.js?v=20261120.12"></script>
 </body>
 </html>

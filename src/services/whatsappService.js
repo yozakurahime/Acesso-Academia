@@ -91,12 +91,13 @@ function localDateIso(offsetDays = 0, now = new Date()) {
 }
 
 export class WhatsappService {
-  constructor(store, { authDir, sleepFn = sleep, onReceiptMedia = null, onBotMessage = null, botDebounceMs = 2500 } = {}) {
+  constructor(store, { authDir, sleepFn = sleep, fetchFn = globalThis.fetch, onReceiptMedia = null, onBotMessage = null, botDebounceMs = 2500 } = {}) {
     this.store = store;
     this.botDebounceMs = Math.max(0, Number(botDebounceMs) || 0);
     this._botDebounceMap = new Map();
     this.authDir = authDir || null;
     this.sleep = sleepFn;
+    this.fetchFn = fetchFn;
     this.onReceiptMedia = onReceiptMedia;
     this.onBotMessage = onBotMessage;
     this.sock = null;
@@ -120,22 +121,196 @@ export class WhatsappService {
     this.onBotMessage = handler;
   }
 
+  isMetaCloudMode(settings = this.store.getSettings()) {
+    return String(settings?.whatsapp_provider || 'baileys').trim() === 'meta_cloud';
+  }
+
+  isReadyToSend(settings = this.store.getSettings()) {
+    if (this.isMetaCloudMode(settings)) {
+      return Boolean(
+        String(settings?.whatsapp_meta_phone_number_id || '').trim()
+        && String(settings?.whatsapp_meta_access_token || '').trim(),
+      );
+    }
+    return this.status === 'connected' && Boolean(this.sock);
+  }
+
+  async sendViaMetaCloud(phone, text, settings = this.store.getSettings()) {
+    const normalized = normalizeBrPhone(phone);
+    if (!normalized) throw new Error('Número de WhatsApp inválido.');
+    const phoneNumberId = String(settings?.whatsapp_meta_phone_number_id || '').trim();
+    const token = String(settings?.whatsapp_meta_access_token || '').trim();
+    const version = String(settings?.whatsapp_meta_api_version || 'v21.0').trim() || 'v21.0';
+    if (!phoneNumberId || !token) {
+      throw new Error('Configure o Phone Number ID e o Access Token da Meta Cloud API em Configurações.');
+    }
+    const url = `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`;
+    const res = await this.fetchFn(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: normalized,
+        type: 'text',
+        text: { preview_url: false, body: String(text || '').trim() },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data?.error?.message || `Erro HTTP ${res.status} na Meta Cloud API`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  async _downloadMetaMedia(mediaId, settings = this.store.getSettings()) {
+    const token = String(settings?.whatsapp_meta_access_token || '').trim();
+    const version = String(settings?.whatsapp_meta_api_version || 'v21.0').trim() || 'v21.0';
+    if (!token || !mediaId) return null;
+    const metaRes = await this.fetchFn(
+      `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(mediaId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!metaRes.ok) return null;
+    const metaJson = await metaRes.json().catch(() => null);
+    if (!metaJson?.url) return null;
+    const fileRes = await this.fetchFn(metaJson.url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!fileRes.ok) return null;
+    const ab = await fileRes.arrayBuffer();
+    const buffer = Buffer.from(ab);
+    return { buffer, mimeType: metaJson.mime_type || fileRes.headers.get('content-type') || '' };
+  }
+
+  async handleMetaWebhook(payload) {
+    if (!payload?.entry?.length) return { processed: 0 };
+    const settings = this.store.getSettings();
+    const allowBot = Boolean(this.onBotMessage) && settings.whatsapp_bot_enabled === '1';
+    const allowReceipts = Boolean(this.onReceiptMedia) && settings.whatsapp_receipt_enabled !== '0';
+    let processed = 0;
+
+    for (const entry of payload.entry) {
+      for (const change of entry?.changes || []) {
+        const value = change?.value;
+        const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
+        for (const msg of value?.messages || []) {
+          const msgId = msg?.id;
+          if (msgId) {
+            if (this._seenMediaIds.has(msgId)) continue;
+            this._seenMediaIds.add(msgId);
+            if (this._seenMediaIds.size > 500) {
+              this._seenMediaIds.delete(this._seenMediaIds.values().next().value);
+            }
+          }
+          const senderPhone = normalizeBrPhone(msg?.from);
+          if (!senderPhone) continue;
+          const contactName = contacts.find((c) => normalizeBrPhone(c?.wa_id) === senderPhone)?.profile?.name || '';
+
+          let incomingText = '';
+          if (msg.type === 'text') incomingText = msg.text?.body || '';
+          else if (msg.type === 'button') incomingText = msg.button?.text || '';
+          else if (msg.type === 'interactive') incomingText = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || '';
+          else if (msg.type === 'image') incomingText = msg.image?.caption || '';
+          else if (msg.type === 'document') incomingText = msg.document?.caption || '';
+
+          let mediaType = null;
+          let mediaUrl = null;
+          let audioBuffer = null;
+          let audioMimeType = '';
+
+          const mediaId = msg.image?.id || msg.document?.id || msg.audio?.id || msg.sticker?.id || null;
+          if (mediaId) {
+            try {
+              const dl = await this._downloadMetaMedia(mediaId, settings);
+              if (dl?.buffer?.length && dl.buffer.length <= 8 * 1024 * 1024) {
+                const mimeType = msg.image?.mime_type || msg.document?.mime_type || msg.audio?.mime_type || dl.mimeType || '';
+                if (msg.type === 'audio' || mimeType.startsWith('audio/')) {
+                  audioBuffer = dl.buffer;
+                  audioMimeType = mimeType || 'audio/ogg';
+                  mediaType = 'audio';
+                } else if (msg.type === 'image' || msg.type === 'sticker' || mimeType.startsWith('image/')) {
+                  mediaType = msg.type === 'sticker' ? 'sticker' : 'image';
+                }
+                if (mediaType && dl.buffer.length <= 6 * 1024 * 1024) {
+                  const ext = mediaType === 'audio' ? 'ogg' : mediaType === 'sticker' ? 'webp' : 'jpg';
+                  const mediaDir = path.join(path.dirname(this.store.filePath || path.join(process.cwd(), 'data', 'acesso.sqlite')), 'chat_media');
+                  fs.mkdirSync(mediaDir, { recursive: true });
+                  const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+                  fs.writeFileSync(path.join(mediaDir, safeName), dl.buffer);
+                  mediaUrl = `/api/whatsapp/media/${safeName}`;
+                }
+                if (allowReceipts && (mimeType.startsWith('image/') || mimeType === 'application/pdf')) {
+                  await this.onReceiptMedia({
+                    base64Data: dl.buffer.toString('base64'),
+                    mimeType,
+                    senderPhone,
+                    source: 'whatsapp',
+                  });
+                }
+              }
+            } catch {
+              // ignore media download error
+            }
+          }
+
+          const fallbackText = !incomingText && !mediaUrl && mediaType
+            ? (mediaType === 'image' ? '[Imagem]' : mediaType === 'audio' ? '[Áudio]' : '[Mídia]')
+            : incomingText;
+
+          if ((fallbackText || mediaUrl) && this.onBotMessage?.recordChatMessage) {
+            this.onBotMessage.recordChatMessage({
+              phone: senderPhone,
+              direction: 'in',
+              senderType: 'customer',
+              body: fallbackText,
+              mediaType,
+              mediaUrl,
+              contactName: contactName || null,
+            });
+          }
+
+          const handledOptCommand = incomingText ? this.handleIncomingText(senderPhone, incomingText) : false;
+          if (!handledOptCommand && allowBot && (incomingText || audioBuffer?.length)) {
+            this._dispatchToBot({
+              sock: null,
+              jid: null,
+              senderPhone,
+              incomingText,
+              audioBuffer,
+              audioMimeType,
+              pushName: contactName,
+            });
+          }
+          processed += 1;
+        }
+      }
+    }
+    return { processed };
+  }
+
   async sendChatMessage(phone, text) {
     const normalized = normalizeBrPhone(phone);
     const cleanText = String(text || '').trim();
     if (!normalized) throw new Error('Telefone inválido.');
     if (!cleanText) throw new Error('Mensagem vazia.');
-    if (!this.sock || this.status !== 'connected') {
-      throw new Error('WhatsApp não está conectado.');
-    }
-
-    const jid = `${normalized}@s.whatsapp.net`;
-    const sent = await this.sock.sendMessage(jid, { text: cleanText });
-    const sentId = sent?.key?.id;
-    if (sentId) {
-      this._sentBotMessageIds.add(sentId);
-      if (this._sentBotMessageIds.size > 500) {
-        this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+    const settings = this.store.getSettings();
+    if (this.isMetaCloudMode(settings)) {
+      await this.sendViaMetaCloud(normalized, cleanText, settings);
+    } else {
+      if (!this.sock || this.status !== 'connected') {
+        throw new Error('WhatsApp não está conectado.');
+      }
+      const jid = `${normalized}@s.whatsapp.net`;
+      const sent = await this.sock.sendMessage(jid, { text: cleanText });
+      const sentId = sent?.key?.id;
+      if (sentId) {
+        this._sentBotMessageIds.add(sentId);
+        if (this._sentBotMessageIds.size > 500) {
+          this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+        }
       }
     }
     if (this.onBotMessage) {
@@ -178,10 +353,13 @@ export class WhatsappService {
 
   getStatus() {
     const settings = this.store.getSettings();
+    const metaMode = this.isMetaCloudMode(settings);
+    const metaReady = metaMode && this.isReadyToSend(settings);
     return {
-      status: this.status,
-      phone: this.connectedPhone,
-      qrDataUrl: this.qrDataUrl,
+      provider: metaMode ? 'meta_cloud' : 'baileys',
+      status: metaMode ? (metaReady ? 'connected' : 'disconnected') : this.status,
+      phone: metaMode ? (settings.whatsapp_meta_phone_number_id || null) : this.connectedPhone,
+      qrDataUrl: metaMode ? null : this.qrDataUrl,
       queueLength: this.countQueued(),
       sentToday: this.countSentToday(),
       dailyLimit: Math.max(1, Number(settings.whatsapp_daily_limit || 40)),
@@ -222,6 +400,16 @@ export class WhatsappService {
   }
 
   async connect() {
+    const settings = this.store.getSettings();
+    if (this.isMetaCloudMode(settings)) {
+      if (!this.isReadyToSend(settings)) {
+        throw new Error('Preencha o Phone Number ID e o Access Token da Meta Cloud API em Configurações.');
+      }
+      this.manualDisconnect = false;
+      this.lastError = null;
+      this.processQueue().catch(() => {});
+      return this.getStatus();
+    }
     if (!this.authDir) throw new Error('Diretório de sessão do WhatsApp não configurado.');
     if (this.status === 'connected' || this.status === 'connecting' || this.status === 'qr') {
       return this.getStatus();
@@ -586,7 +774,7 @@ export class WhatsappService {
       refKey: payment?.id ? `pay:${payment.id}` : null,
       message,
     });
-    if (row && this.status === 'connected') {
+    if (row && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
     }
     return row;
@@ -615,7 +803,7 @@ export class WhatsappService {
       refKey: `class_removal:${member.valid_until || 'none'}:${classKey}`,
       message,
     });
-    if (row && this.status === 'connected') {
+    if (row && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
     }
     return row;
@@ -643,7 +831,7 @@ export class WhatsappService {
       refKey: `welcome:${member.id}`,
       message,
     });
-    if (row && this.status === 'connected') {
+    if (row && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
     }
     return row;
@@ -669,7 +857,7 @@ export class WhatsappService {
       refKey: `waitlist:${booking.id}`,
       message,
     });
-    if (row && this.status === 'connected') {
+    if (row && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
     }
     return row;
@@ -1140,7 +1328,7 @@ export class WhatsappService {
     const workoutReviewQueued = this.enqueueWorkoutReviewReminders(now);
     const winBackQueued = this.enqueueWinBackMessages(now);
     const total = dueQueued + overdueQueued + onboardingQueued + milestoneQueued + inactiveQueued + birthdayQueued + classReminderQueued + workoutReviewQueued + winBackQueued;
-    if (total > 0 && this.status === 'connected') {
+    if (total > 0 && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
     }
     return {
@@ -1158,22 +1346,28 @@ export class WhatsappService {
   }
 
   async sendImmediate(phone, message, { kind = 'test', memberId = null } = {}) {
-    if (this.status !== 'connected' || !this.sock) {
-      throw new Error('WhatsApp não está conectado. Leia o QR Code em Configurações primeiro.');
-    }
+    const settings = this.store.getSettings();
+    const metaMode = this.isMetaCloudMode(settings);
     const normalizedPhone = normalizeBrPhone(phone);
     if (!normalizedPhone) {
       throw new Error('Número de WhatsApp inválido. Use DDD + número (ex.: 11999998888).');
     }
-    const [exists] = await this.sock.onWhatsApp(normalizedPhone);
-    if (!exists?.exists) {
-      throw new Error('Este número não possui WhatsApp ativo.');
+    if (metaMode) {
+      await this.sendViaMetaCloud(normalizedPhone, message, settings);
+    } else {
+      if (this.status !== 'connected' || !this.sock) {
+        throw new Error('WhatsApp não está conectado. Leia o QR Code em Configurações primeiro.');
+      }
+      const [exists] = await this.sock.onWhatsApp(normalizedPhone);
+      if (!exists?.exists) {
+        throw new Error('Este número não possui WhatsApp ativo.');
+      }
+      const jid = exists.jid || `${normalizedPhone}@s.whatsapp.net`;
+      await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
+      await this.sleep(1500);
+      await this.sock.sendMessage(jid, { text: String(message || '').trim() });
+      await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
     }
-    const jid = exists.jid || `${normalizedPhone}@s.whatsapp.net`;
-    await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
-    await this.sleep(1500);
-    await this.sock.sendMessage(jid, { text: String(message || '').trim() });
-    await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
 
     const res = this.store.run(
       `INSERT INTO whatsapp_logs (member_id, phone, kind, message, status, sent_at)
@@ -1185,7 +1379,10 @@ export class WhatsappService {
 
   async processQueue() {
     if (this.queueRunning) return;
-    if (this.status !== 'connected' || !this.sock) return;
+    const initSettings = this.store.getSettings();
+    const metaModeInit = this.isMetaCloudMode(initSettings);
+    if (!metaModeInit && (this.status !== 'connected' || !this.sock)) return;
+    if (metaModeInit && !this.isReadyToSend(initSettings)) return;
 
     this.queueRunning = true;
     this.verifiedJids = this.verifiedJids || new Map();
@@ -1212,8 +1409,9 @@ export class WhatsappService {
     try {
       const automatedPlaceholders = AUTOMATED_CAMPAIGN_KINDS.map(() => '?').join(', ');
       let sentInBatch = 0;
-      while (this.status === 'connected' && this.sock && !this.manualDisconnect) {
+      while (!this.manualDisconnect && this.isReadyToSend(this.store.getSettings())) {
         const settings = this.store.getSettings();
+        const metaMode = this.isMetaCloudMode(settings);
         const dailyLimit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
         const allowAutomated = this.countSentToday() < dailyLimit && this.isWithinAllowedWindow(settings);
         const next = allowAutomated
@@ -1225,32 +1423,36 @@ export class WhatsappService {
         if (!next) break;
 
         try {
-          let cached = this.verifiedJids.get(next.phone);
-          if (!cached || Date.now() - cached.checkedAt > 86400000) {
-            const [exists] = await withTimeout(this.sock.onWhatsApp(next.phone), 15000, 'onWhatsApp');
-            cached = {
-              exists: Boolean(exists?.exists),
-              jid: exists?.jid || `${next.phone}@s.whatsapp.net`,
-              checkedAt: Date.now(),
-            };
-            this.verifiedJids.set(next.phone, cached);
-            if (this.verifiedJids.size > 1000) {
-              this.verifiedJids.delete(this.verifiedJids.keys().next().value);
+          if (metaMode) {
+            await withTimeout(this.sendViaMetaCloud(next.phone, next.message, settings), 15000, 'sendViaMetaCloud');
+          } else {
+            let cached = this.verifiedJids.get(next.phone);
+            if (!cached || Date.now() - cached.checkedAt > 86400000) {
+              const [exists] = await withTimeout(this.sock.onWhatsApp(next.phone), 15000, 'onWhatsApp');
+              cached = {
+                exists: Boolean(exists?.exists),
+                jid: exists?.jid || `${next.phone}@s.whatsapp.net`,
+                checkedAt: Date.now(),
+              };
+              this.verifiedJids.set(next.phone, cached);
+              if (this.verifiedJids.size > 1000) {
+                this.verifiedJids.delete(this.verifiedJids.keys().next().value);
+              }
             }
+            if (!cached.exists) {
+              this.store.run(
+                `UPDATE whatsapp_logs SET status = 'skipped', error = 'Número sem WhatsApp' WHERE id = ?`,
+                [next.id],
+              );
+              continue;
+            }
+            const jid = cached.jid;
+            await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
+            await sleepCancelable(1400 + Math.floor(Math.random() * 1800));
+            if (this.status !== 'connected' || !this.sock || this.manualDisconnect) break;
+            await withTimeout(this.sock.sendMessage(jid, { text: next.message }), 15000, 'sendMessage');
+            await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
           }
-          if (!cached.exists) {
-            this.store.run(
-              `UPDATE whatsapp_logs SET status = 'skipped', error = 'Número sem WhatsApp' WHERE id = ?`,
-              [next.id],
-            );
-            continue;
-          }
-          const jid = cached.jid;
-          await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
-          await sleepCancelable(1400 + Math.floor(Math.random() * 1800));
-          if (this.status !== 'connected' || !this.sock || this.manualDisconnect) break;
-          await withTimeout(this.sock.sendMessage(jid, { text: next.message }), 15000, 'sendMessage');
-          await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
 
           this.store.run(
             `UPDATE whatsapp_logs SET status = 'sent', sent_at = datetime('now', 'localtime') WHERE id = ?`,
@@ -1329,12 +1531,16 @@ export class WhatsappService {
       pushName,
     });
     if (botResult?.reply) {
-      const sent = await sock.sendMessage(jid, { text: botResult.reply });
-      const sentId = sent?.key?.id;
-      if (sentId) {
-        this._sentBotMessageIds.add(sentId);
-        if (this._sentBotMessageIds.size > 500) {
-          this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+      if (this.isMetaCloudMode()) {
+        await this.sendViaMetaCloud(senderPhone, botResult.reply);
+      } else if (sock && jid) {
+        const sent = await sock.sendMessage(jid, { text: botResult.reply });
+        const sentId = sent?.key?.id;
+        if (sentId) {
+          this._sentBotMessageIds.add(sentId);
+          if (this._sentBotMessageIds.size > 500) {
+            this._sentBotMessageIds.delete(this._sentBotMessageIds.values().next().value);
+          }
         }
       }
     }

@@ -33,6 +33,8 @@ const SECRET_SETTING_KEYS = [
   'backup_gdrive_client_secret',
   'backup_gdrive_refresh_token',
   'backup_gdrive_service_account_json',
+  'whatsapp_meta_access_token',
+  'whatsapp_meta_app_secret',
 ];
 
 const ALLOWED_SETTINGS_KEYS = new Set([
@@ -75,6 +77,12 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'pix_recipient_key',
   'whatsapp_receipt_enabled',
   'whatsapp_receipt_auto_approve',
+  'whatsapp_provider',
+  'whatsapp_meta_phone_number_id',
+  'whatsapp_meta_access_token',
+  'whatsapp_meta_verify_token',
+  'whatsapp_meta_app_secret',
+  'whatsapp_meta_api_version',
   'mp_access_token',
   'mp_point_access_token',
   'mp_webhook_secret',
@@ -286,6 +294,44 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
     );
     res.set('Cache-Control', 'no-cache').json({ plans });
+  });
+
+  // Webhook oficial Meta WhatsApp Cloud API (verificacao e recebimento)
+  router.get('/whatsapp/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = String(req.query['hub.verify_token'] || '');
+    const challenge = String(req.query['hub.challenge'] || '');
+    const expected = String(store.getSettings()?.whatsapp_meta_verify_token || '').trim();
+    if (mode === 'subscribe' && expected && token === expected) {
+      return res.status(200).type('text/plain').send(challenge);
+    }
+    return res.sendStatus(403);
+  });
+
+  router.post('/whatsapp/webhook', limitWebhook, async (req, res) => {
+    try {
+      const settings = store.getSettings();
+      const appSecret = String(settings?.whatsapp_meta_app_secret || '').trim();
+      if (appSecret) {
+        const sigHeader = String(req.get('x-hub-signature-256') || '').trim();
+        const expectedHex = createHmac('sha256', appSecret)
+          .update(req.rawBody || Buffer.from(JSON.stringify(req.body || {})))
+          .digest('hex');
+        const providedHex = sigHeader.replace(/^sha256=/i, '').toLowerCase();
+        const a = Buffer.from(providedHex);
+        const b = Buffer.from(expectedHex);
+        if (a.length !== b.length || !timingSafeEqual(a, b)) {
+          return res.sendStatus(401);
+        }
+      }
+      if (whatsappService?.handleMetaWebhook) {
+        await whatsappService.handleMetaWebhook(req.body);
+      }
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error('[META WEBHOOK ERROR]', err);
+      return res.status(200).json({ ok: false });
+    }
   });
 
   router.get('/public/enrollment-options', (_req, res) => {

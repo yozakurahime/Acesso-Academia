@@ -4332,6 +4332,14 @@ async function loadSettings() {
   document.getElementById('waGeminiModel').value = s.gemini_model || 'gemini-3.8-flash';
   document.getElementById('waPixName').value = s.pix_recipient_name || '';
   document.getElementById('waPixKey').value = s.pix_recipient_key || '';
+  if (document.getElementById('waProviderSelect')) {
+    document.getElementById('waProviderSelect').value = s.whatsapp_provider || 'baileys';
+    document.getElementById('waMetaPhoneNumberId').value = s.whatsapp_meta_phone_number_id || '';
+    document.getElementById('waMetaAccessToken').value = s.whatsapp_meta_access_token || '';
+    document.getElementById('waMetaVerifyToken').value = s.whatsapp_meta_verify_token || '';
+    document.getElementById('waMetaAppSecret').value = s.whatsapp_meta_app_secret || '';
+    toggleWaProviderFields();
+  }
 
   document.getElementById('gwPosProvider').value = s.pos_provider || 'mercadopago';
   document.getElementById('gwMpToken').value = s.mp_access_token || '';
@@ -5270,6 +5278,30 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+function toggleWaProviderFields() {
+  const provider = document.getElementById('waProviderSelect')?.value || 'baileys';
+  const isMeta = provider === 'meta_cloud';
+  document.getElementById('waMetaCloudFields')?.classList.toggle('hidden', !isMeta);
+  if (isMeta) {
+    document.getElementById('btnWaConnect')?.classList.add('hidden');
+    document.getElementById('btnWaDisconnect')?.classList.add('hidden');
+    document.getElementById('waQrBox')?.classList.add('hidden');
+  }
+}
+
+document.getElementById('waProviderSelect')?.addEventListener('change', toggleWaProviderFields);
+document.getElementById('btnCopyMetaWebhook')?.addEventListener('click', async () => {
+  const input = document.getElementById('waMetaWebhookUrl');
+  if (!input) return;
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showToast('URL do webhook copiada!');
+  } catch {
+    input.select();
+    showToast('Selecione e copie a URL do webhook.');
+  }
+});
+
 function renderWhatsappStatus(st) {
   const badge = document.getElementById('waStatusBadge');
   const phoneInfo = document.getElementById('waPhoneInfo');
@@ -5277,29 +5309,30 @@ function renderWhatsappStatus(st) {
   const qrImg = document.getElementById('waQrImg');
   const btnConnect = document.getElementById('btnWaConnect');
   const btnDisconnect = document.getElementById('btnWaDisconnect');
+  const isMeta = st.provider === 'meta_cloud';
 
   const labels = {
     disconnected: ['Desconectado', 'badge-neutral'],
     connecting: ['Conectando...', 'badge-pending'],
     qr: ['Aguardando QR Code', 'badge-pending'],
-    connected: ['Conectado', 'badge-active'],
+    connected: [isMeta ? 'Conectado (API Oficial Meta)' : 'Conectado', 'badge-active'],
   };
   const [label, cls] = labels[st.status] || labels.disconnected;
   badge.textContent = label;
   badge.className = `badge ${cls}`;
-  phoneInfo.textContent = st.phone ? `(${st.phone})` : st.lastError ? `— ${st.lastError}` : '';
+  phoneInfo.textContent = st.phone ? `(${isMeta ? `ID ${st.phone}` : st.phone})` : st.lastError ? `— ${st.lastError}` : '';
   document.getElementById('waDailyCounter').textContent = `${st.sentToday} / ${st.dailyLimit}`;
   document.getElementById('waQueueCounter').textContent = String(st.queueLength);
 
-  if (st.status === 'qr' && st.qrDataUrl) {
+  if (!isMeta && st.status === 'qr' && st.qrDataUrl) {
     qrImg.src = st.qrDataUrl;
     qrBox.classList.remove('hidden');
   } else {
     qrBox.classList.add('hidden');
   }
 
-  btnConnect.classList.toggle('hidden', st.status === 'connected');
-  btnDisconnect.classList.toggle('hidden', st.status === 'disconnected');
+  btnConnect.classList.toggle('hidden', isMeta || st.status === 'connected');
+  btnDisconnect.classList.toggle('hidden', isMeta || st.status === 'disconnected');
 
   if (waPollTimer) {
     clearTimeout(waPollTimer);
@@ -5459,6 +5492,15 @@ document.getElementById('whatsappForm').addEventListener('submit', async (e) => 
           gemini_model: document.getElementById('waGeminiModel').value.trim() || 'gemini-3.8-flash',
           pix_recipient_name: document.getElementById('waPixName').value,
           pix_recipient_key: document.getElementById('waPixKey').value,
+          whatsapp_provider: document.getElementById('waProviderSelect')?.value || 'baileys',
+          whatsapp_meta_phone_number_id: document.getElementById('waMetaPhoneNumberId')?.value.trim() || '',
+          whatsapp_meta_verify_token: document.getElementById('waMetaVerifyToken')?.value.trim() || '',
+          ...((document.getElementById('waMetaAccessToken')?.value.trim() && document.getElementById('waMetaAccessToken').value.trim() !== '******')
+            ? { whatsapp_meta_access_token: document.getElementById('waMetaAccessToken').value.trim() }
+            : {}),
+          ...((document.getElementById('waMetaAppSecret')?.value.trim() && document.getElementById('waMetaAppSecret').value.trim() !== '******')
+            ? { whatsapp_meta_app_secret: document.getElementById('waMetaAppSecret').value.trim() }
+            : {}),
         }),
       });
       showToast('Regras do WhatsApp salvas!');
