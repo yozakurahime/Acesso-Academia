@@ -713,6 +713,17 @@ export class DatabaseStore {
       );
       CREATE INDEX IF NOT EXISTS idx_member_debts_member_status ON member_debts(member_id, status);
       CREATE INDEX IF NOT EXISTS idx_sales_sold_at ON sales(sold_at);
+
+      CREATE TABLE IF NOT EXISTS partner_access_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER NOT NULL REFERENCES members(id),
+        provider TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        request_date TEXT NOT NULL DEFAULT (date('now', 'localtime')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        resolved_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_partner_access_req_date_status ON partner_access_requests(request_date, status, member_id);
       CREATE INDEX IF NOT EXISTS idx_membership_charges_payment_due ON membership_charges(payment_id, due);
       CREATE INDEX IF NOT EXISTS idx_members_role_status ON members(access_role, status);
       CREATE INDEX IF NOT EXISTS idx_class_enrollments_member ON class_enrollments(member_id);
@@ -940,12 +951,12 @@ export class DatabaseStore {
       mp_point_access_token: process.env.MP_POINT_ACCESS_TOKEN || '',
       mp_point_terminal_id: process.env.MP_POINT_TERMINAL_ID || '',
       wellhub_enabled: '1',
-      wellhub_require_checkin: '0',
+      wellhub_require_checkin: '1',
       wellhub_api_key: '',
       wellhub_gym_id: '',
       wellhub_webhook_secret: '',
       totalpass_enabled: '1',
-      totalpass_require_checkin: '0',
+      totalpass_require_checkin: '1',
       totalpass_api_token: '',
       totalpass_gym_id: '',
       totalpass_webhook_secret: '',
@@ -964,6 +975,12 @@ export class DatabaseStore {
       if (!existing) {
         this.db.run('INSERT INTO settings (key, value) VALUES (?, ?)', [key, String(value)]);
       }
+    }
+
+    if (!this.get("SELECT value FROM settings WHERE key = 'partner_daily_control_v1'")) {
+      this.db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('wellhub_require_checkin', '1')");
+      this.db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('totalpass_require_checkin', '1')");
+      this.db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('partner_daily_control_v1', '1')");
     }
     this.db.run(`UPDATE settings SET value = 'gemini-3.8-flash' WHERE key = 'gemini_model' AND value = 'gemini-2.5-flash'`);
 

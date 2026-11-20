@@ -653,6 +653,12 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         })
       : () => {};
 
+    const unsubscribePartner = typeof accessService.onPartnerRequest === 'function'
+      ? accessService.onPartnerRequest((type, payload) => {
+          res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
+        })
+      : () => {};
+
     const keepAlive = setInterval(() => {
       res.write(': ping\n\n');
     }, 25000);
@@ -661,7 +667,28 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     req.on('close', () => {
       clearInterval(keepAlive);
       unsubscribe();
+      unsubscribePartner();
     });
+  });
+
+  router.get('/partner-requests/pending', (_req, res) => {
+    res.json(accessService.listPendingPartnerRequests());
+  });
+
+  router.post('/partner-requests/:id/approve', async (req, res, next) => {
+    try {
+      res.json(await accessService.approvePartnerRequest(req.params.id));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/partner-requests/:id/cancel', (req, res, next) => {
+    try {
+      res.json(accessService.cancelPartnerRequest(req.params.id));
+    } catch (err) {
+      next(err);
+    }
   });
 
   router.get('/auth/status', (req, res) => {

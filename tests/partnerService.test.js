@@ -19,6 +19,7 @@ async function createEnv() {
 
 test('Wellhub e TotalPass liberam catraca sem matrícula ativa e validam ID Wellhub único', async () => {
   const { store, accessService, gymService } = await createEnv();
+  store.updateSettings({ wellhub_require_checkin: '0', totalpass_require_checkin: '0' });
 
   await assert.rejects(
     accessService.createMember({
@@ -104,7 +105,7 @@ test('Wellhub webhook e TotalPass check-in liberam catraca quando exigência de 
   // Sem check-in hoje -> catraca nega
   const whDenied = await accessService.handleFaceIdentified(wh.controlid_user_id);
   assert.equal(whDenied.allowed, false);
-  assert.match(whDenied.message, /Check-in Wellhub pendente/);
+  assert.match(whDenied.message, /Aguarde a liberação na recepção \(Wellhub\)/);
 
   // Webhook Wellhub registra check-in do dia
   const partnerSvc = new PartnerService(store, async () => ({
@@ -144,7 +145,7 @@ test('Webhook TotalPass confirma endpoint oficial, registra check-in por CPF e l
 
   const denied = await accessService.handleFaceIdentified(tp.controlid_user_id);
   assert.equal(denied.allowed, false);
-  assert.match(denied.message, /Check-in TotalPass pendente/);
+  assert.match(denied.message, /Aguarde a liberação na recepção \(TotalPass\)/);
 
   let confirmedUrl = null;
   const partnerSvc = new PartnerService(store, async (url) => {
@@ -177,4 +178,55 @@ test('Webhook TotalPass confirma endpoint oficial, registra check-in por CPF e l
 
   const allowed = await accessService.handleFaceIdentified(tp.controlid_user_id);
   assert.equal(allowed.allowed, true);
+});
+
+test('Convênio bloqueia por padrão e gera notificação persistente até recepção liberar por 1 dia ou cancelar', async () => {
+  const { store, accessService } = await createEnv();
+  const events = [];
+  const unsub = accessService.onPartnerRequest((type, payload) => events.push({ type, payload }));
+
+  const wh = await accessService.createMember({
+    name: 'Carla Convênio',
+    document: '52998224725',
+    partner_provider: 'wellhub',
+    wellhub_id: 'WH-DIA-01',
+  });
+
+  // 1a tentativa na catraca: bloqueia e cria 1 notificação pendente
+  const firstTry = await accessService.handleFaceIdentified(wh.controlid_user_id);
+  assert.equal(firstTry.allowed, false);
+  assert.equal(firstTry.message, 'Aguarde a liberação na recepção (Wellhub)');
+  assert.equal(accessService.listPendingPartnerRequests().length, 1);
+
+  // 2a tentativa enquanto aguarda: continua bloqueado sem duplicar notificação
+  const secondTry = await accessService.handleFaceIdentified(wh.controlid_user_id);
+  assert.equal(secondTry.allowed, false);
+  const pending = accessService.listPendingPartnerRequests();
+  assert.equal(pending.length, 1);
+
+  // Recepção aprova para hoje -> libera catraca e remove da fila pendente
+  const approved = await accessService.approvePartnerRequest(pending[0].id);
+  assert.equal(approved.approved, true);
+  assert.equal(accessService.listPendingPartnerRequests().length, 0);
+
+  // Hoje passa direto na catraca
+  const allowedToday = await accessService.handleFaceIdentified(wh.controlid_user_id);
+  assert.equal(allowedToday.allowed, true);
+
+  // Simula virada da meia-noite (check-in foi ontem) -> volta a bloquear e pede nova liberação
+  store.run("UPDATE partner_checkins SET checkin_date = date('now', 'localtime', '-1 day') WHERE member_id = ?", [wh.id]);
+  const nextDayTry = await accessService.handleFaceIdentified(wh.controlid_user_id);
+  assert.equal(nextDayTry.allowed, false);
+  assert.equal(nextDayTry.message, 'Aguarde a liberação na recepção (Wellhub)');
+  const pendingNextDay = accessService.listPendingPartnerRequests();
+  assert.equal(pendingNextDay.length, 1);
+
+  // Recepção cancela -> notificação some e acesso continua bloqueado
+  const cancelled = accessService.cancelPartnerRequest(pendingNextDay[0].id);
+  assert.equal(cancelled.cancelled, true);
+  assert.equal(accessService.listPendingPartnerRequests().length, 0);
+  assert.ok(events.some((e) => e.type === 'partner_request'));
+  assert.ok(events.some((e) => e.type === 'partner_request_resolved' && e.payload.status === 'approved'));
+  assert.ok(events.some((e) => e.type === 'partner_request_resolved' && e.payload.status === 'cancelled'));
+  unsub();
 });

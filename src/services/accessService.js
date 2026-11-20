@@ -44,6 +44,7 @@ export class AccessService {
     this.faceMirrorState = null;
     this._turnstileListeners = new Set();
     this._turnstileDeniedListeners = new Set();
+    this._partnerRequestListeners = new Set();
     this._faceInFlight = new Map();
     this._verifiedDeviceUsers = new Map();
     this._capacityLock = Promise.resolve();
@@ -227,6 +228,120 @@ export class AccessService {
     if (typeof listener !== 'function') return () => {};
     this._turnstileDeniedListeners.add(listener);
     return () => this._turnstileDeniedListeners.delete(listener);
+  }
+
+  onPartnerRequest(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this._partnerRequestListeners.add(listener);
+    return () => this._partnerRequestListeners.delete(listener);
+  }
+
+  _emitPartnerRequest(type, payload) {
+    for (const listener of this._partnerRequestListeners) {
+      try {
+        listener(type, payload);
+      } catch {
+        // Ignora falha de cliente SSE desconectado.
+      }
+    }
+  }
+
+  createOrTouchPartnerRequest(member) {
+    if (!member?.id || !member?.partner_provider) return null;
+    const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+    const existing = this.store.get(
+      `SELECT id FROM partner_access_requests
+       WHERE member_id = ? AND provider = ? AND request_date = ? AND status = 'pending'
+       ORDER BY id DESC LIMIT 1`,
+      [member.id, member.partner_provider, today],
+    );
+    let reqId = existing?.id || null;
+    if (reqId) {
+      this.store.run(
+        "UPDATE partner_access_requests SET created_at = datetime('now', 'localtime') WHERE id = ?",
+        [reqId],
+      );
+    } else {
+      const res = this.store.run(
+        `INSERT INTO partner_access_requests (member_id, provider, status, request_date, created_at)
+         VALUES (?, ?, 'pending', ?, datetime('now', 'localtime'))`,
+        [member.id, member.partner_provider, today],
+      );
+      reqId = Number(res.lastInsertRowid);
+    }
+    const row = this.store.get(
+      `SELECT r.*, m.name AS member_name, m.document AS member_document, m.wellhub_id, m.phone AS member_phone
+       FROM partner_access_requests r
+       JOIN members m ON m.id = r.member_id
+       WHERE r.id = ?`,
+      [reqId],
+    );
+    if (row) this._emitPartnerRequest('partner_request', row);
+    return row;
+  }
+
+  listPendingPartnerRequests() {
+    const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+    return this.store.all(
+      `SELECT r.*, m.name AS member_name, m.document AS member_document, m.wellhub_id, m.phone AS member_phone
+       FROM partner_access_requests r
+       JOIN members m ON m.id = r.member_id
+       WHERE r.request_date = ? AND r.status = 'pending'
+       ORDER BY r.id DESC`,
+      [today],
+    );
+  }
+
+  async approvePartnerRequest(requestId) {
+    const id = Number(requestId);
+    const req = this.store.get(
+      `SELECT r.*, m.name AS member_name, m.document AS member_document, m.wellhub_id
+       FROM partner_access_requests r
+       JOIN members m ON m.id = r.member_id
+       WHERE r.id = ?`,
+      [id],
+    );
+    if (!req) {
+      const err = new Error('Solicitação de convênio não encontrada.');
+      err.statusCode = 404;
+      throw err;
+    }
+    this.store.run(
+      "UPDATE partner_access_requests SET status = 'approved', resolved_at = datetime('now', 'localtime') WHERE id = ?",
+      [id],
+    );
+    const identifier = req.provider === 'wellhub' ? req.wellhub_id : req.member_document;
+    const checkin = new PartnerService(this.store).recordCheckin({
+      provider: req.provider,
+      memberId: req.member_id,
+      identifier: identifier || String(req.member_id),
+      source: 'reception',
+    });
+    const firstName = String(req.member_name || 'BEM VINDO').trim().split(/\s+/, 1)[0];
+    let releaseError = null;
+    try {
+      await this.releaseTurnstile(null, firstName);
+    } catch (err) {
+      releaseError = err.message;
+    }
+    this._emitPartnerRequest('partner_request_resolved', { id, member_id: req.member_id, status: 'approved' });
+    return { approved: true, requestId: id, checkin, releaseError };
+  }
+
+  cancelPartnerRequest(requestId) {
+    const id = Number(requestId);
+    const req = this.store.get('SELECT * FROM partner_access_requests WHERE id = ?', [id]);
+    if (!req) {
+      const err = new Error('Solicitação de convênio não encontrada.');
+      err.statusCode = 404;
+      throw err;
+    }
+    this.store.run(
+      "UPDATE partner_access_requests SET status = 'cancelled', resolved_at = datetime('now', 'localtime') WHERE id = ?",
+      [id],
+    );
+    this._emitPartnerRequest('partner_request_resolved', { id, member_id: req.member_id, status: 'cancelled' });
+    return { cancelled: true, requestId: id };
   }
 
   publishTurnstileDisplay(outcome, { member = null, reason = null, preview = false, progress = null, occupancy = null, source = null, direction = null } = {}) {
@@ -875,14 +990,14 @@ export class AccessService {
         if (settings.wellhub_enabled === 'false') return 'Wellhub desativado';
         if (!member.wellhub_id?.trim()) return 'ID Wellhub não informado';
         if (settings.wellhub_require_checkin === '1' && !new PartnerService(this.store).hasCheckinToday(member.id, 'wellhub')) {
-          return 'Check-in Wellhub pendente hoje';
+          return 'Aguarde a liberação na recepção (Wellhub)';
         }
         return null;
       }
       if (settings.totalpass_enabled === 'false') return 'TotalPass desativado';
       if (!member.document?.trim()) return 'CPF TotalPass não informado';
       if (settings.totalpass_require_checkin === '1' && !new PartnerService(this.store).hasCheckinToday(member.id, 'totalpass')) {
-        return 'Check-in TotalPass pendente hoje';
+        return 'Aguarde a liberação na recepção (TotalPass)';
       }
       return null;
     }
@@ -1811,7 +1926,7 @@ export class AccessService {
     }
     const currentMember = this.getMember(member.id);
     let reason = this.getAccessDenial(currentMember);
-    if (reason && /^Check-in (Wellhub|TotalPass) pendente hoje$/.test(reason)) {
+    if (reason && /^Aguarde a liberação na recepção \((Wellhub|TotalPass)\)$/.test(reason)) {
       const hasExternalCreds = currentMember.partner_provider === 'wellhub'
         ? Boolean(settings.wellhub_api_key && settings.wellhub_gym_id)
         : Boolean(settings.totalpass_api_token && settings.totalpass_gym_id);
@@ -1830,6 +1945,9 @@ export class AccessService {
          VALUES (?, ?, ?, 6, ?, datetime('now', 'localtime'))`,
         [member.controlid_user_id, member.id, member.name, `Acesso negado (${reason})`],
       );
+      if (/^Aguarde a liberação na recepção/.test(reason) && currentMember.partner_provider) {
+        this.createOrTouchPartnerRequest(currentMember);
+      }
       this.publishTurnstileDisplay('denied', { reason, member: currentMember });
       return { allowed: false, event: 6, message: reason, member };
     }

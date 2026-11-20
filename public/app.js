@@ -131,6 +131,87 @@ function showToast(msg, isError = false) {
 }
 
 let turnstileEventSource = null;
+let pendingPartnerRequests = [];
+
+function renderPartnerRequestNotifications() {
+  const tray = document.getElementById('partnerRequestNotifications');
+  if (!tray) return;
+  if (!pendingPartnerRequests.length) {
+    tray.innerHTML = '';
+    return;
+  }
+  tray.innerHTML = pendingPartnerRequests
+    .map((req) => {
+      const providerLabel = req.provider === 'wellhub' ? 'Wellhub (Gympass)' : 'TotalPass';
+      const docPart = req.provider === 'wellhub'
+        ? (req.wellhub_id ? `ID ${escapeHtml(req.wellhub_id)}` : '')
+        : (req.member_document ? `CPF ${escapeHtml(req.member_document)}` : '');
+      const timePart = req.created_at ? fmtDateTime(req.created_at) : '';
+      return `
+        <div class="partner-request-card" data-partner-request-id="${req.id}">
+          <div class="partner-request-head">
+            <span class="badge badge-pending">Convênio · ${escapeHtml(providerLabel)}</span>
+            <span class="muted" style="font-size:12px;">${escapeHtml(timePart)}</span>
+          </div>
+          <div class="partner-request-body">
+            <strong>${escapeHtml(req.member_name || 'Aluno de convênio')} (#${req.member_id})</strong>
+            <span class="muted" style="font-size:12px;">${docPart ? `${docPart} · ` : ''}Aguardando liberação na recepção (válido só hoje)</span>
+          </div>
+          <div class="partner-request-actions">
+            <button type="button" class="btn btn-primary btn-sm" data-approve-partner-req="${req.id}">Liberar hoje</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-cancel-partner-req="${req.id}">Cancelar</button>
+          </div>
+        </div>`;
+    })
+    .join('');
+}
+
+async function loadPendingPartnerRequests() {
+  if (window.oxigenioDemo) return;
+  try {
+    const rows = await api('/api/partner-requests/pending');
+    pendingPartnerRequests = Array.isArray(rows) ? rows : [];
+    renderPartnerRequestNotifications();
+  } catch {
+    // Ignora falha silenciosa durante bootstrap/desconexao.
+  }
+}
+
+document.getElementById('partnerRequestNotifications')?.addEventListener('click', async (event) => {
+  const approveBtn = event.target.closest('button[data-approve-partner-req]');
+  if (approveBtn) {
+    const reqId = Number(approveBtn.dataset.approvePartnerReq);
+    await withLoading(approveBtn, async () => {
+      try {
+        const res = await api(`/api/partner-requests/${reqId}/approve`, { method: 'POST' });
+        pendingPartnerRequests = pendingPartnerRequests.filter((r) => Number(r.id) !== reqId);
+        renderPartnerRequestNotifications();
+        showToast(res.releaseError
+          ? `Liberado para hoje! (Aviso na catraca: ${res.releaseError})`
+          : 'Acesso de convênio liberado para hoje e catraca acionada!');
+        await Promise.allSettled([loadDashboard(), loadLogs(), loadBalcaoLogs()]);
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
+
+  const cancelBtn = event.target.closest('button[data-cancel-partner-req]');
+  if (cancelBtn) {
+    const reqId = Number(cancelBtn.dataset.cancelPartnerReq);
+    await withLoading(cancelBtn, async () => {
+      try {
+        await api(`/api/partner-requests/${reqId}/cancel`, { method: 'POST' });
+        pendingPartnerRequests = pendingPartnerRequests.filter((r) => Number(r.id) !== reqId);
+        renderPartnerRequestNotifications();
+        showToast('Solicitação de convênio cancelada.');
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+});
 
 function handleTurnstileReleaseEvent(ev) {
   if (!ev) return;
@@ -166,6 +247,29 @@ function startTurnstileEventsStream() {
       // Ignora payload malformado.
     }
   });
+  es.addEventListener('partner_request', (msg) => {
+    try {
+      const req = JSON.parse(msg.data);
+      if (!req?.id) return;
+      const idx = pendingPartnerRequests.findIndex((r) => Number(r.id) === Number(req.id));
+      if (idx >= 0) pendingPartnerRequests[idx] = req;
+      else pendingPartnerRequests.unshift(req);
+      renderPartnerRequestNotifications();
+    } catch {
+      // Ignora payload malformado.
+    }
+  });
+  es.addEventListener('partner_request_resolved', (msg) => {
+    try {
+      const ev = JSON.parse(msg.data);
+      if (!ev?.id) return;
+      pendingPartnerRequests = pendingPartnerRequests.filter((r) => Number(r.id) !== Number(ev.id));
+      renderPartnerRequestNotifications();
+    } catch {
+      // Ignora payload malformado.
+    }
+  });
+  loadPendingPartnerRequests();
   turnstileEventSource = es;
 }
 
