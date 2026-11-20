@@ -1938,18 +1938,24 @@ function renderBillingSummary() {
 
   const submitBtn = document.querySelector('#paymentForm [type="submit"]');
   const pointBtn = document.getElementById('btnSendPointOrder');
-  const pointPicker = document.getElementById('pointMethodPicker');
+  const quickConfirmBox = document.getElementById('quickConfirmMethods');
   if (typeof renderBillingPlanPicker === 'function') renderBillingPlanPicker();
   const isDisabled = !member || team || finalPaidCents <= 0 || !splitValid;
+  const pointDisabled = !member || team || finalPaidCents <= 0;
   if (pointBtn) {
-    const pointDisabled = !member || team || finalPaidCents <= 0;
     pointBtn.disabled = pointDisabled;
     pointBtn.textContent = pointDisabled
       ? 'Enviar para a maquininha'
       : `Enviar para a maquininha · ${fmtMoney(finalPaidCents)}`;
-    if (pointDisabled && pointPicker) pointPicker.classList.add('hidden');
+  }
+  if (quickConfirmBox) {
+    quickConfirmBox.classList.toggle('hidden', splitActive);
+    quickConfirmBox.querySelectorAll('button[data-quick-confirm]').forEach((btn) => {
+      btn.disabled = pointDisabled;
+    });
   }
   if (submitBtn) {
+    submitBtn.classList.toggle('hidden', !splitActive);
     submitBtn.disabled = isDisabled;
     if (isDisabled) {
       submitBtn.textContent = 'Confirmar recebimento';
@@ -5762,25 +5768,7 @@ async function loadPointOrders() {
     .join('');
 }
 
-document.getElementById('btnSendPointOrder')?.addEventListener('click', () => {
-  const memberId = document.getElementById('pMember').value;
-  if (!memberId) {
-    showToast('Selecione o aluno primeiro.', true);
-    document.getElementById('pMemberSearch')?.focus();
-    return;
-  }
-  const picker = document.getElementById('pointMethodPicker');
-  if (!picker) return;
-  const willOpen = picker.classList.contains('hidden');
-  picker.classList.toggle('hidden', !willOpen);
-  if (willOpen) {
-    picker.querySelector('button[data-point-method]')?.focus();
-  }
-});
-
-document.getElementById('pointMethodPicker')?.addEventListener('click', async (e) => {
-  const methodBtn = e.target.closest('button[data-point-method]');
-  if (!methodBtn) return;
+document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e) => {
   const memberId = document.getElementById('pMember').value;
   if (!memberId) {
     showToast('Selecione o aluno primeiro.', true);
@@ -5794,23 +5782,34 @@ document.getElementById('pointMethodPicker')?.addEventListener('click', async (e
     return;
   }
   const planId = document.getElementById('pPlan').value || null;
-  const paymentMethod = methodBtn.dataset.pointMethod || 'credit';
-  const picker = document.getElementById('pointMethodPicker');
+  const paymentMethod = document.getElementById('pMethod')?.value || 'credit';
+  const btn = e.currentTarget;
 
-  await withLoading(methodBtn, async () => {
+  await withLoading(btn, async () => {
     try {
       const order = await api('/api/gateways/mp/point-orders', {
         method: 'POST',
         body: JSON.stringify({ member_id: memberId, plan_id: planId, amount_cents: amountCents, payment_method: paymentMethod }),
       });
-      picker?.classList.add('hidden');
-      showToast(`Cobrança (${methodName(paymentMethod)}) enviada para a maquininha!`);
+      showToast('Cobrança enviada para a maquininha!');
       await loadPointOrders();
       if (order?.id) startPaymentAutoPoll({ type: 'point', id: order.id });
     } catch (err) {
       showToast(err.message, true);
     }
   });
+});
+
+document.getElementById('quickConfirmMethods')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-quick-confirm]');
+  if (!btn || btn.disabled) return;
+  const method = btn.dataset.quickConfirm;
+  const pMethod = document.getElementById('pMethod');
+  if (pMethod && method) {
+    pMethod.value = method;
+    pMethod.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  document.getElementById('paymentForm')?.requestSubmit();
 });
 
 document.getElementById('pointOrdersList')?.addEventListener('click', async (e) => {

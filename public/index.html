@@ -815,15 +815,13 @@
                     <div id="billingAsideExtra" class="billing-aside-extra hidden"></div>
                     <div class="billing-aside-actions">
                       <button type="button" id="btnSendPointOrder" class="btn btn-primary billing-submit-btn" disabled>Enviar para a maquininha</button>
-                      <div id="pointMethodPicker" class="point-method-picker hidden" role="group" aria-label="Escolha a modalidade na maquininha">
-                        <button type="button" class="btn btn-secondary btn-sm" data-point-method="credit">💳 Crédito</button>
-                        <button type="button" class="btn btn-secondary btn-sm" data-point-method="debit">🏧 Débito</button>
-                        <button type="button" class="btn btn-secondary btn-sm" data-point-method="pix">💠 Pix</button>
+                      <div id="quickConfirmMethods" class="billing-aside-secondary" role="group" aria-label="Confirmar recebimento por forma de pagamento">
+                        <button type="button" class="btn btn-secondary" data-quick-confirm="pix" disabled>💠 Confirmar Pix</button>
+                        <button type="button" class="btn btn-secondary" data-quick-confirm="credit" disabled>💳 Confirmar Crédito</button>
+                        <button type="button" class="btn btn-secondary" data-quick-confirm="debit" disabled>🏧 Confirmar Débito</button>
+                        <button type="button" class="btn btn-secondary" data-quick-confirm="cash" disabled>💵 Confirmar Dinheiro</button>
                       </div>
-                      <div class="billing-aside-secondary">
-                        <button type="submit" id="btnSubmitPayment" class="btn btn-secondary" disabled>Confirmar recebimento</button>
-                        <button type="button" id="btnGeneratePix" class="btn btn-secondary">Gerar Pix</button>
-                      </div>
+                      <button type="submit" id="btnSubmitPayment" class="btn btn-secondary billing-submit-btn hidden" disabled>Confirmar recebimento</button>
                     </div>
                   </div>
                   <div id="whatsappCheckoutBox" class="panel hidden" aria-live="polite">
