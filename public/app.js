@@ -2417,7 +2417,7 @@ window.openProfile = async (id) => {
     const request = Symbol();
     state.profileRequest = request;
     const data = await api(`/api/members/${id}/profile`);
-    if (state.profileRequest !== request || !['members', 'staff'].includes(state.activeTab)) return;
+    if (state.profileRequest !== request || !['balcao', 'members', 'staff'].includes(state.activeTab)) return;
     state.selectedProfileId = id;
     const m = data.member;
     state.selectedProfileName = m.name;
