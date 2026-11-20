@@ -847,6 +847,95 @@ document.getElementById('balcaoQuickSearchForm')?.addEventListener('submit', asy
   await renderBalcaoQuickResults(rawQuery);
 });
 
+document.getElementById('balcaoExpressDetails')?.addEventListener('toggle', (event) => {
+  if (event.currentTarget.open) {
+    document.getElementById('balcaoExpName')?.focus();
+  }
+});
+
+document.getElementById('balcaoExpName')?.addEventListener('input', () => {
+  const alertEl = document.getElementById('balcaoExpNameAlert');
+  if (alertEl) {
+    alertEl.classList.add('hidden');
+    alertEl.classList.remove('is-error');
+    alertEl.innerHTML = '';
+  }
+});
+
+document.getElementById('balcaoExpNameAlert')?.addEventListener('click', async (event) => {
+  const btn = event.target.closest('[data-balcao-exp-open]');
+  if (!btn) return;
+  const memberId = Number(btn.dataset.balcaoExpOpen);
+  if (memberId) await openMemberProfile(memberId);
+});
+
+document.getElementById('balcaoExpressForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const nameInput = document.getElementById('balcaoExpName');
+  const planSelect = document.getElementById('balcaoExpPlan');
+  const name = nameInput?.value.trim() || '';
+  if (!name) {
+    showToast('Informe o nome completo do aluno.', true);
+    nameInput?.focus();
+    return;
+  }
+  const cpfCheck = await validateCpfField('balcaoExpDoc', 'balcaoExpDocFeedback', {
+    excludeId: 0,
+    remoteCheck: true,
+    showEmptyError: true,
+  });
+  if (!cpfCheck.valid) {
+    showToast(cpfCheck.message, true);
+    document.getElementById('balcaoExpDoc')?.focus();
+    return;
+  }
+  const planId = Number(planSelect?.value) || 0;
+  if (!planId) {
+    showToast('Selecione um plano para continuar.', true);
+    planSelect?.focus();
+    return;
+  }
+  const selectedPlan = state.plans.find((p) => Number(p.id) === planId);
+  const alertEl = document.getElementById('balcaoExpNameAlert');
+  await withLoading(event.currentTarget, async () => {
+    try {
+      const check = await api(`/api/members/check-name?name=${encodeURIComponent(name)}`);
+      if (check.exactMatch && alertEl) {
+        const listItems = check.matches
+          .map(
+            (m) =>
+              `<li><strong>${escapeHtml(m.name)}</strong> (#${m.id}${m.document ? ` · CPF ${escapeHtml(m.document)}` : ''}) ` +
+              `<button type="button" class="btn btn-secondary btn-sm" data-balcao-exp-open="${m.id}">Abrir ficha</button></li>`,
+          )
+          .join('');
+        alertEl.classList.remove('hidden');
+        alertEl.classList.add('is-error');
+        alertEl.innerHTML = `<strong>Já existe um cadastro com este nome:</strong><ul>${listItems}</ul>`;
+        return;
+      }
+      const created = await api('/api/members', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          document: document.getElementById('balcaoExpDoc')?.value || '',
+          phone: document.getElementById('balcaoExpPhone')?.value || '',
+          modality_id: selectedPlan?.modality_id || null,
+          plan_id: planId,
+        }),
+      });
+      event.target.reset();
+      setCpfFieldState(document.getElementById('balcaoExpDoc'), document.getElementById('balcaoExpDocFeedback'), 'neutral', '');
+      const details = document.getElementById('balcaoExpressDetails');
+      if (details) details.open = false;
+      await Promise.all([loadMembers(), loadDashboard(), loadGymStructure()]);
+      showToast(`Aluno #${created.id} cadastrado! Avançando para o pagamento.`);
+      await jumpToPaymentForMember(created);
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
 // --- Dashboard ---
 function updateSidebarLiveOccupancy(occupancy, lastLog = null) {
   const titleEl = document.getElementById('sidebarLiveTitle');
@@ -948,6 +1037,12 @@ async function loadPlans() {
     )
     .join('');
   document.getElementById('mPlan').innerHTML = `<option value="">Sem plano</option>${options}`;
+  const balcaoExpPlanEl = document.getElementById('balcaoExpPlan');
+  if (balcaoExpPlanEl) {
+    const prevBalcaoPlan = balcaoExpPlanEl.value;
+    balcaoExpPlanEl.innerHTML = `<option value="">Selecione um plano...</option>${options}`;
+    if (prevBalcaoPlan) balcaoExpPlanEl.value = prevBalcaoPlan;
+  }
   const profPlanEl = document.getElementById('profPlan');
   if (profPlanEl) profPlanEl.innerHTML = `<option value="">Sem plano</option>${options}`;
   document.getElementById('plansList').innerHTML = state.plans.map((p) => {
@@ -4127,6 +4222,7 @@ async function loadDevices() {
 
 // --- Cadastro em etapas (Wizard) & Submits ---
 let memberWizardStep = 1;
+let maxMemberWizardStep = 1;
 
 function updateMemberWizardSummaries() {
   const name = document.getElementById('mName').value.trim();
@@ -4169,6 +4265,7 @@ function updateMemberWizardSummaries() {
 
 function setMemberWizardStep(step) {
   memberWizardStep = step;
+  if (step > maxMemberWizardStep) maxMemberWizardStep = step;
   for (let i = 1; i <= 4; i += 1) {
     document.getElementById(`memberStep${i}`)?.classList.toggle('hidden', i !== step);
   }
@@ -4176,12 +4273,23 @@ function setMemberWizardStep(step) {
     const s = Number(el.dataset.wizardStep);
     el.classList.toggle('active', s === step);
     el.classList.toggle('done', s < step);
+    el.disabled = s > maxMemberWizardStep;
+    el.setAttribute('aria-current', s === step ? 'step' : 'false');
   });
   updateMemberWizardSummaries();
   if (step === 1) document.getElementById('mName')?.focus();
   if (step === 2) document.getElementById('mDoc')?.focus();
   if (step === 4) document.getElementById('mClass')?.focus();
 }
+
+document.getElementById('memberWizardSteps')?.addEventListener('click', (event) => {
+  const stepBtn = event.target.closest('button[data-wizard-step]');
+  if (!stepBtn || stepBtn.disabled) return;
+  const targetStep = Number(stepBtn.dataset.wizardStep);
+  if (!targetStep || targetStep === memberWizardStep || targetStep > maxMemberWizardStep) return;
+  if (targetStep === 4) renderClassOptions('mModality', 'mClass');
+  setMemberWizardStep(targetStep);
+});
 
 function setMemberPartnerProvider(provider) {
   const clean = provider || '';
@@ -4209,6 +4317,7 @@ document.getElementById('memberPartnerPills')?.addEventListener('click', (e) => 
 function resetMemberWizard() {
   const form = document.getElementById('memberForm');
   form?.reset();
+  maxMemberWizardStep = 1;
   state.memberPickerModality = '';
   setMemberPartnerProvider('');
   setCpfFieldState(document.getElementById('mDoc'), document.getElementById('mDocFeedback'), 'neutral', '');
@@ -4259,9 +4368,14 @@ async function verifyAndAdvanceMemberName() {
 }
 
 document.getElementById('mName').addEventListener('input', () => {
+  maxMemberWizardStep = 1;
   const alertEl = document.getElementById('mNameCheckAlert');
   alertEl.classList.add('hidden');
   alertEl.classList.remove('is-error');
+});
+
+document.getElementById('mDoc')?.addEventListener('input', () => {
+  if (maxMemberWizardStep > 2) maxMemberWizardStep = 2;
 });
 
 document.getElementById('mName').addEventListener('keydown', (e) => {
@@ -7243,6 +7357,7 @@ document.getElementById('creditForm').addEventListener('submit', async (e) => {
 });
 
 attachCpfValidation('mDoc', 'mDocFeedback', () => 0);
+attachCpfValidation('balcaoExpDoc', 'balcaoExpDocFeedback', () => 0);
 attachCpfValidation('stDoc', 'stDocFeedback', () => 0);
 attachCpfValidation('profDoc', 'profDocFeedback', () => state.selectedProfileId || 0);
 

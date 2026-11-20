@@ -1052,13 +1052,23 @@ button.plan-card {
   gap: 6px;
 }
 .wizard-step {
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 999px;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   background: var(--bg);
   color: var(--muted);
   border: 1px solid var(--border);
+  cursor: pointer;
+  transition: filter 0.12s ease, opacity 0.12s ease;
+}
+.wizard-step:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.wizard-step.done:hover:not(:disabled) {
+  filter: brightness(0.95);
 }
 .wizard-step.active {
   background: var(--dark);
@@ -1069,6 +1079,27 @@ button.plan-card {
   background: var(--accent-soft);
   color: var(--accent-text);
   border-color: var(--primary);
+}
+.balcao-express-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.balcao-express-summary::-webkit-details-marker {
+  display: none;
+}
+.balcao-express-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.balcao-express-form {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
 .wizard-pane {
   margin-top: 8px;
