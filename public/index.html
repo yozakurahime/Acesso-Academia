@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
   <link rel="icon" href="/oxigenio.jpg" />
-  <link rel="stylesheet" href="/styles.css?v=20261120.4" />
-  <link rel="stylesheet" href="/admin.css?v=20261120.4" />
-  <link rel="stylesheet" href="/admin-operations.css?v=20261120.4" />
+  <link rel="stylesheet" href="/styles.css?v=20261120.5" />
+  <link rel="stylesheet" href="/admin.css?v=20261120.5" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261120.5" />
 </head>
 <body class="workspace-app">
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
@@ -814,11 +814,15 @@
                     <div id="billingDiffBox" class="billing-aside-extra hidden"></div>
                     <div id="billingAsideExtra" class="billing-aside-extra hidden"></div>
                     <div class="billing-aside-actions">
-                      <button type="submit" id="btnSubmitPayment" class="btn btn-primary billing-submit-btn" disabled>Confirmar recebimento</button>
+                      <button type="button" id="btnSendPointOrder" class="btn btn-primary billing-submit-btn" disabled>Enviar para a maquininha</button>
+                      <div id="pointMethodPicker" class="point-method-picker hidden" role="group" aria-label="Escolha a modalidade na maquininha">
+                        <button type="button" class="btn btn-secondary btn-sm" data-point-method="credit">💳 Crédito</button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-point-method="debit">🏧 Débito</button>
+                        <button type="button" class="btn btn-secondary btn-sm" data-point-method="pix">💠 Pix</button>
+                      </div>
                       <div class="billing-aside-secondary">
+                        <button type="submit" id="btnSubmitPayment" class="btn btn-secondary" disabled>Confirmar recebimento</button>
                         <button type="button" id="btnGeneratePix" class="btn btn-secondary">Gerar Pix</button>
-                        <button type="button" id="btnCreateWhatsAppCheckout" class="btn btn-secondary">WhatsApp</button>
-                        <button type="button" id="btnSendPointOrder" class="btn btn-secondary">Maquininha Point</button>
                       </div>
                     </div>
                   </div>
@@ -2538,7 +2542,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261120.4"></script>
-  <script src="/app.js?v=20261120.4"></script>
+  <script src="/receipt-print.js?v=20261120.5"></script>
+  <script src="/app.js?v=20261120.5"></script>
 </body>
 </html>

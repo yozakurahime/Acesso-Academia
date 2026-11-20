@@ -1937,17 +1937,27 @@ function renderBillingSummary() {
   }
 
   const submitBtn = document.querySelector('#paymentForm [type="submit"]');
+  const pointBtn = document.getElementById('btnSendPointOrder');
+  const pointPicker = document.getElementById('pointMethodPicker');
   if (typeof renderBillingPlanPicker === 'function') renderBillingPlanPicker();
   const isDisabled = !member || team || finalPaidCents <= 0 || !splitValid;
+  if (pointBtn) {
+    const pointDisabled = !member || team || finalPaidCents <= 0;
+    pointBtn.disabled = pointDisabled;
+    pointBtn.textContent = pointDisabled
+      ? 'Enviar para a maquininha'
+      : `Enviar para a maquininha · ${fmtMoney(finalPaidCents)}`;
+    if (pointDisabled && pointPicker) pointPicker.classList.add('hidden');
+  }
   if (submitBtn) {
     submitBtn.disabled = isDisabled;
     if (isDisabled) {
-      submitBtn.textContent = 'Confirmar Recebimento';
+      submitBtn.textContent = 'Confirmar recebimento';
     } else if (splitActive) {
-      submitBtn.textContent = `Confirmar Recebimento · ${fmtMoney(finalDisplayAmount)} (Dividido / Fiado)`;
+      submitBtn.textContent = `Confirmar (${fmtMoney(finalDisplayAmount)} · Fiado)`;
     } else {
       const currentMethodCode = document.getElementById('pMethod')?.value;
-      submitBtn.textContent = `Confirmar Recebimento · ${fmtMoney(finalPaidCents)} (${methodName(currentMethodCode)})`;
+      submitBtn.textContent = `Confirmar (${methodName(currentMethodCode)})`;
     }
   }
 }
@@ -5348,7 +5358,7 @@ document.getElementById('receiptsQueue')?.addEventListener('click', async (e) =>
 
 let activePixChargeId = null;
 
-document.getElementById('btnCreateWhatsAppCheckout').addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
+document.getElementById('btnCreateWhatsAppCheckout')?.addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
   const member_id = Number(document.getElementById('pMember').value);
   const box = document.getElementById('whatsappCheckoutBox');
   box.classList.add('hidden');
@@ -5752,24 +5762,49 @@ async function loadPointOrders() {
     .join('');
 }
 
-document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e) => {
+document.getElementById('btnSendPointOrder')?.addEventListener('click', () => {
   const memberId = document.getElementById('pMember').value;
   if (!memberId) {
     showToast('Selecione o aluno primeiro.', true);
-    document.getElementById('pMemberSearch').focus();
+    document.getElementById('pMemberSearch')?.focus();
     return;
   }
-  const amountCents = toCents(document.getElementById('pAmount').value);
-  const planId = document.getElementById('pPlan').value || null;
-  const paymentMethod = document.getElementById('pMethod').value || 'credit';
+  const picker = document.getElementById('pointMethodPicker');
+  if (!picker) return;
+  const willOpen = picker.classList.contains('hidden');
+  picker.classList.toggle('hidden', !willOpen);
+  if (willOpen) {
+    picker.querySelector('button[data-point-method]')?.focus();
+  }
+});
 
-  await withLoading(e.currentTarget, async () => {
+document.getElementById('pointMethodPicker')?.addEventListener('click', async (e) => {
+  const methodBtn = e.target.closest('button[data-point-method]');
+  if (!methodBtn) return;
+  const memberId = document.getElementById('pMember').value;
+  if (!memberId) {
+    showToast('Selecione o aluno primeiro.', true);
+    document.getElementById('pMemberSearch')?.focus();
+    return;
+  }
+  const asideCents = toCents(document.getElementById('billingAsideFinalAmount')?.value);
+  const amountCents = asideCents > 0 ? asideCents : toCents(document.getElementById('pAmount').value);
+  if (amountCents <= 0) {
+    showToast('Informe um valor válido para enviar à maquininha.', true);
+    return;
+  }
+  const planId = document.getElementById('pPlan').value || null;
+  const paymentMethod = methodBtn.dataset.pointMethod || 'credit';
+  const picker = document.getElementById('pointMethodPicker');
+
+  await withLoading(methodBtn, async () => {
     try {
       const order = await api('/api/gateways/mp/point-orders', {
         method: 'POST',
         body: JSON.stringify({ member_id: memberId, plan_id: planId, amount_cents: amountCents, payment_method: paymentMethod }),
       });
-      showToast('Cobrança enviada para a tela da Point Smart!');
+      picker?.classList.add('hidden');
+      showToast(`Cobrança (${methodName(paymentMethod)}) enviada para a maquininha!`);
       await loadPointOrders();
       if (order?.id) startPaymentAutoPoll({ type: 'point', id: order.id });
     } catch (err) {
