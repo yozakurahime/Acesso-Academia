@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
   <link rel="icon" href="/oxigenio.jpg" />
-  <link rel="stylesheet" href="/styles.css?v=20261120.2" />
-  <link rel="stylesheet" href="/admin.css?v=20261120.2" />
-  <link rel="stylesheet" href="/admin-operations.css?v=20261120.2" />
+  <link rel="stylesheet" href="/styles.css?v=20261120.3" />
+  <link rel="stylesheet" href="/admin.css?v=20261120.3" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261120.3" />
 </head>
 <body class="workspace-app">
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
@@ -296,29 +296,6 @@
           </form>
           <div id="balcaoQuickResults" class="balcao-quick-results hidden" aria-live="polite"></div>
         </div>
-
-        <details id="balcaoExpressDetails" class="panel balcao-express-panel">
-          <summary class="balcao-express-summary">
-            <div>
-              <strong>Cadastro expresso</strong>
-              <small class="muted">Nome + CPF + Plano em 1 tela, já indo para o pagamento</small>
-            </div>
-            <span class="badge badge-pending">Rápido</span>
-          </summary>
-          <form id="balcaoExpressForm" class="balcao-express-form">
-            <div class="form-grid">
-              <label>Nome completo * <input type="text" id="balcaoExpName" required autocomplete="off" /></label>
-              <label>CPF * <input type="text" id="balcaoExpDoc" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required /><small id="balcaoExpDocFeedback" class="cpf-feedback"></small></label>
-              <label>Telefone / WhatsApp <input type="tel" id="balcaoExpPhone" inputmode="tel" autocomplete="tel" placeholder="(00) 00000-0000" /></label>
-              <label>Plano * <select id="balcaoExpPlan" required><option value="">Selecione um plano...</option></select></label>
-            </div>
-            <div id="balcaoExpNameAlert" class="wizard-alert hidden"></div>
-            <div class="wizard-actions">
-              <button type="submit" id="btnBalcaoExpressSubmit" class="btn btn-primary">Cadastrar e ir para pagamento</button>
-              <button type="button" class="btn btn-secondary" data-go="members" data-focus="mName">Cadastro completo (4 etapas)</button>
-            </div>
-          </form>
-        </details>
 
         <div class="panel balcao-logs-panel" id="balcaoRecentLogsPanel">
           <div class="panel-header">
@@ -2551,7 +2528,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261120.2"></script>
-  <script src="/app.js?v=20261120.2"></script>
+  <script src="/receipt-print.js?v=20261120.3"></script>
+  <script src="/app.js?v=20261120.3"></script>
 </body>
 </html>

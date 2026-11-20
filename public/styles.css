@@ -1080,27 +1080,6 @@ button.plan-card {
   color: var(--accent-text);
   border-color: var(--primary);
 }
-.balcao-express-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  cursor: pointer;
-  list-style: none;
-}
-.balcao-express-summary::-webkit-details-marker {
-  display: none;
-}
-.balcao-express-summary > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.balcao-express-form {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
 .wizard-pane {
   margin-top: 8px;
 }

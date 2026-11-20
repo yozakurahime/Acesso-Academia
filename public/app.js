@@ -847,95 +847,6 @@ document.getElementById('balcaoQuickSearchForm')?.addEventListener('submit', asy
   await renderBalcaoQuickResults(rawQuery);
 });
 
-document.getElementById('balcaoExpressDetails')?.addEventListener('toggle', (event) => {
-  if (event.currentTarget.open) {
-    document.getElementById('balcaoExpName')?.focus();
-  }
-});
-
-document.getElementById('balcaoExpName')?.addEventListener('input', () => {
-  const alertEl = document.getElementById('balcaoExpNameAlert');
-  if (alertEl) {
-    alertEl.classList.add('hidden');
-    alertEl.classList.remove('is-error');
-    alertEl.innerHTML = '';
-  }
-});
-
-document.getElementById('balcaoExpNameAlert')?.addEventListener('click', async (event) => {
-  const btn = event.target.closest('[data-balcao-exp-open]');
-  if (!btn) return;
-  const memberId = Number(btn.dataset.balcaoExpOpen);
-  if (memberId) await openMemberProfile(memberId);
-});
-
-document.getElementById('balcaoExpressForm')?.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const nameInput = document.getElementById('balcaoExpName');
-  const planSelect = document.getElementById('balcaoExpPlan');
-  const name = nameInput?.value.trim() || '';
-  if (!name) {
-    showToast('Informe o nome completo do aluno.', true);
-    nameInput?.focus();
-    return;
-  }
-  const cpfCheck = await validateCpfField('balcaoExpDoc', 'balcaoExpDocFeedback', {
-    excludeId: 0,
-    remoteCheck: true,
-    showEmptyError: true,
-  });
-  if (!cpfCheck.valid) {
-    showToast(cpfCheck.message, true);
-    document.getElementById('balcaoExpDoc')?.focus();
-    return;
-  }
-  const planId = Number(planSelect?.value) || 0;
-  if (!planId) {
-    showToast('Selecione um plano para continuar.', true);
-    planSelect?.focus();
-    return;
-  }
-  const selectedPlan = state.plans.find((p) => Number(p.id) === planId);
-  const alertEl = document.getElementById('balcaoExpNameAlert');
-  await withLoading(event.currentTarget, async () => {
-    try {
-      const check = await api(`/api/members/check-name?name=${encodeURIComponent(name)}`);
-      if (check.exactMatch && alertEl) {
-        const listItems = check.matches
-          .map(
-            (m) =>
-              `<li><strong>${escapeHtml(m.name)}</strong> (#${m.id}${m.document ? ` · CPF ${escapeHtml(m.document)}` : ''}) ` +
-              `<button type="button" class="btn btn-secondary btn-sm" data-balcao-exp-open="${m.id}">Abrir ficha</button></li>`,
-          )
-          .join('');
-        alertEl.classList.remove('hidden');
-        alertEl.classList.add('is-error');
-        alertEl.innerHTML = `<strong>Já existe um cadastro com este nome:</strong><ul>${listItems}</ul>`;
-        return;
-      }
-      const created = await api('/api/members', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          document: document.getElementById('balcaoExpDoc')?.value || '',
-          phone: document.getElementById('balcaoExpPhone')?.value || '',
-          modality_id: selectedPlan?.modality_id || null,
-          plan_id: planId,
-        }),
-      });
-      event.target.reset();
-      setCpfFieldState(document.getElementById('balcaoExpDoc'), document.getElementById('balcaoExpDocFeedback'), 'neutral', '');
-      const details = document.getElementById('balcaoExpressDetails');
-      if (details) details.open = false;
-      await Promise.all([loadMembers(), loadDashboard(), loadGymStructure()]);
-      showToast(`Aluno #${created.id} cadastrado! Avançando para o pagamento.`);
-      await jumpToPaymentForMember(created);
-    } catch (err) {
-      showToast(err.message, true);
-    }
-  });
-});
-
 // --- Dashboard ---
 function updateSidebarLiveOccupancy(occupancy, lastLog = null) {
   const titleEl = document.getElementById('sidebarLiveTitle');
@@ -1037,12 +948,6 @@ async function loadPlans() {
     )
     .join('');
   document.getElementById('mPlan').innerHTML = `<option value="">Sem plano</option>${options}`;
-  const balcaoExpPlanEl = document.getElementById('balcaoExpPlan');
-  if (balcaoExpPlanEl) {
-    const prevBalcaoPlan = balcaoExpPlanEl.value;
-    balcaoExpPlanEl.innerHTML = `<option value="">Selecione um plano...</option>${options}`;
-    if (prevBalcaoPlan) balcaoExpPlanEl.value = prevBalcaoPlan;
-  }
   const profPlanEl = document.getElementById('profPlan');
   if (profPlanEl) profPlanEl.innerHTML = `<option value="">Sem plano</option>${options}`;
   document.getElementById('plansList').innerHTML = state.plans.map((p) => {
@@ -7357,7 +7262,6 @@ document.getElementById('creditForm').addEventListener('submit', async (e) => {
 });
 
 attachCpfValidation('mDoc', 'mDocFeedback', () => 0);
-attachCpfValidation('balcaoExpDoc', 'balcaoExpDocFeedback', () => 0);
 attachCpfValidation('stDoc', 'stDocFeedback', () => 0);
 attachCpfValidation('profDoc', 'profDocFeedback', () => state.selectedProfileId || 0);
 
