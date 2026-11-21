@@ -264,10 +264,11 @@ test('GymService: avaliações físicas, reservas com lista de espera e gamifica
     `INSERT INTO classes (name, schedule, capacity) VALUES ('Spinning', '19:00', 1)`,
   ).lastInsertRowid;
 
-  const b1 = gym.bookClass({ classId: clsId, memberId: m1, bookingDate: '2026-11-20' });
+  const futureBookingDate = store.get("SELECT date('now', 'localtime', '+1 day') AS d").d;
+  const b1 = gym.bookClass({ classId: clsId, memberId: m1, bookingDate: futureBookingDate });
   assert.equal(b1.status, 'confirmed');
 
-  const b2 = gym.bookClass({ classId: clsId, memberId: m2, bookingDate: '2026-11-20' });
+  const b2 = gym.bookClass({ classId: clsId, memberId: m2, bookingDate: futureBookingDate });
   assert.equal(b2.status, 'waitlist');
 
   const cancelRes = gym.cancelClassBooking(b1.id, m1);

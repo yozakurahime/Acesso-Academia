@@ -57,7 +57,7 @@ function parseCookies(cookieHeader) {
 export function hashPassword(password) {
   const raw = String(password || '');
   if (raw.length < 8 || raw.length > 128) {
-    throw new Error('A senha deve ter entre 8 e 128 caracteres.');
+    throw Object.assign(new Error('A senha deve ter entre 8 e 128 caracteres.'), { statusCode: 400 });
   }
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = crypto.scryptSync(raw, salt, 64).toString('hex');

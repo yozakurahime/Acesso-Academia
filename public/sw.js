@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 
@@ -22,7 +22,6 @@ const SHELL_ASSET_SET = new Set(SHELL_ASSETS);
 const STUDENT_READ_ENDPOINTS = new Set([
   '/api/student/me',
   '/api/student/me/fitness',
-  '/api/student/auth/status',
   '/api/student/gamification',
   '/api/student/assessments',
   '/api/student/bookings',
@@ -33,7 +32,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => Promise.allSettled(SHELL_ASSETS.map((url) => cache.add(url))))
+      .then((cache) => Promise.all(SHELL_ASSETS.map((url) => cache.add(url))))
       .then(() => self.skipWaiting())
   );
 });
@@ -72,8 +71,13 @@ self.addEventListener('fetch', (event) => {
     request.mode === 'navigate' &&
     (url.pathname === '/aluno' || url.pathname.startsWith('/aluno/'));
 
-  if (isStudentNavigate || SHELL_ASSET_SET.has(url.pathname)) {
-    event.respondWith(cacheFirstShell(request, url));
+  if (isStudentNavigate) {
+    event.respondWith(networkFirstNavigate(request, url));
+    return;
+  }
+
+  if (SHELL_ASSET_SET.has(url.pathname)) {
+    event.respondWith(staleWhileRevalidateShell(event, request, url));
   }
 });
 
@@ -108,27 +112,44 @@ async function matchShellCache(cache, cacheKey, isNavigate) {
   return null;
 }
 
-async function cacheFirstShell(request, url) {
+async function networkFirstNavigate(request, url) {
   const cache = await caches.open(SHELL_CACHE);
-  const isShellAsset = SHELL_ASSET_SET.has(url.pathname);
-  const cacheKey = isShellAsset ? url.pathname : request;
-  const isNavigate = request.mode === 'navigate';
+  const cacheKey = SHELL_ASSET_SET.has(url.pathname) ? url.pathname : request;
 
   try {
     const response = await fetch(request);
-    if (response && response.ok && isShellAsset) {
+    if (response && response.ok && SHELL_ASSET_SET.has(url.pathname)) {
       await cache.put(url.pathname, response.clone());
     }
     if (response && response.status >= 500) {
-      const fallback = await matchShellCache(cache, cacheKey, isNavigate);
+      const fallback = await matchShellCache(cache, cacheKey, true);
       if (fallback) return fallback;
     }
     return response;
   } catch (err) {
-    const fallback = await matchShellCache(cache, cacheKey, isNavigate);
+    const fallback = await matchShellCache(cache, cacheKey, true);
     if (fallback) return fallback;
     throw err;
   }
+}
+
+async function staleWhileRevalidateShell(event, request, url) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(url.pathname, { ignoreSearch: true });
+
+  const fetchAndUpdate = fetch(request).then(async (response) => {
+    if (response && response.ok) {
+      await cache.put(url.pathname, response.clone());
+    }
+    return response;
+  });
+
+  if (cached) {
+    event.waitUntil(fetchAndUpdate.catch(() => {}));
+    return cached;
+  }
+
+  return fetchAndUpdate;
 }
 
 self.addEventListener('message', (event) => {

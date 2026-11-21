@@ -289,6 +289,12 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     message: 'Muitas solicitações em sequência. Aguarde alguns minutos.',
     keyFn: (req) => (req.studentMemberId ? `st:${req.studentMemberId}` : clientIpKey(req)),
   });
+  const limitPixCheck = createRateLimiter({
+    max: 60,
+    windowMs: 10 * 60 * 1000,
+    message: 'Muitas consultas de pagamento em sequência. Aguarde alguns instantes.',
+    keyFn: (req) => (req.studentMemberId ? `st-pix:${req.studentMemberId}` : clientIpKey(req)),
+  });
   router.get('/public/plans', (_req, res) => {
     const plans = store.all(
       'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
@@ -1826,7 +1832,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.get('/whatsapp/logs', (req, res) => {
     if (!whatsappService) return res.json([]);
-    res.json(whatsappService.listLogs(req.query.limit || 40));
+    res.json(whatsappService.listLogs(req.query.limit || 40, req.query.status || ''));
   });
 
   router.get('/whatsapp/chats', requireReception, (_req, res) => {
@@ -2275,7 +2281,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       return res.json({ authenticated: false, gymName: store.getSettings().gym_name || 'Academia Oxigênio' });
     }
     try {
-      const profile = portalService.getStudentProfile(session.m);
+      const profile = portalService.getStudentProfile(session.m, { includePhoto: false });
       return res.json({ authenticated: true, ...profile });
     } catch {
       authService.clearStudentSessionCookie(res);
@@ -2311,8 +2317,8 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       res.json(portalService.getStudentProfile(req.studentMemberId));
     }),
   );
-  router.put('/members/:id/fitness-goal', handle(async (req, res) => {
-    if (req.body?.goal === undefined) throw new Error('Informe a meta semanal.');
+  router.put('/members/:id/fitness-goal', requireReception, handle(async (req, res) => {
+    if (req.body?.goal === undefined) throw Object.assign(new Error('Informe a meta semanal.'), { statusCode: 400 });
     const id = Number(req.params.id);
     saveFitnessPreferences(store, id, { goal: req.body.goal });
     res.json({ goal: weeklyGoal(store, id) });
@@ -2356,7 +2362,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     limitExpensive,
     handle(async (req, res) => {
       const { current_password, new_password } = req.body || {};
-      res.json(portalService.updatePortalPassword(req.studentMemberId, { current_password, new_password }));
+      const result = portalService.updatePortalPassword(req.studentMemberId, { current_password, new_password });
+      if (authService) {
+        authService.setStudentSessionCookie(req, res, req.studentMemberId);
+      }
+      res.json(result);
     }),
   );
 
@@ -2381,7 +2391,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.post(
     '/student/me/pix/:chargeId/check',
     requireStudentAuth,
-    limitExpensive,
+    limitPixCheck,
     handle(async (req, res) => {
       if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
       const charge = store.get('SELECT id, member_id FROM gateway_charges WHERE id = ?', [Number(req.params.chargeId)]);

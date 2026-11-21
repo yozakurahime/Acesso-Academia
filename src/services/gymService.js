@@ -963,20 +963,30 @@ export class GymService {
     const cid = Number(classId);
     const mid = Number(memberId);
     const date = String(bookingDate || '').trim();
-    if (!date) throw new Error('Data da reserva e obrigatoria.');
+    if (!date) throw Object.assign(new Error('Data da reserva e obrigatoria.'), { statusCode: 400 });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw Object.assign(new Error('Informe a data da reserva no formato YYYY-MM-DD.'), { statusCode: 400 });
+    }
+    const today = this.store.get("SELECT date('now', 'localtime') AS d")?.d;
+    if (today && date < today) {
+      throw Object.assign(new Error('Nao e possivel reservar turma em data passada.'), { statusCode: 400 });
+    }
 
     const cls = this.store.get('SELECT * FROM classes WHERE id = ?', [cid]);
-    if (!cls) throw new Error('Turma nao encontrada.');
+    if (!cls) throw Object.assign(new Error('Turma nao encontrada.'), { statusCode: 404 });
+    if (cls.allow_new_enrollments === 0) {
+      throw Object.assign(new Error('Esta turma nao esta aceitando novas reservas no momento.'), { statusCode: 409 });
+    }
 
     const member = this.store.get('SELECT id FROM members WHERE id = ?', [mid]);
-    if (!member) throw new Error('Aluno nao encontrado.');
+    if (!member) throw Object.assign(new Error('Aluno nao encontrado.'), { statusCode: 404 });
 
     const duplicate = this.store.get(
       `SELECT id FROM class_bookings
        WHERE class_id = ? AND member_id = ? AND booking_date = ? AND status IN ('confirmed', 'waitlist')`,
       [cid, mid, date],
     );
-    if (duplicate) throw new Error('Aluno ja possui reserva para esta turma nesta data.');
+    if (duplicate) throw Object.assign(new Error('Aluno ja possui reserva para esta turma nesta data.'), { statusCode: 409 });
 
     return this.store.transaction(() => {
       const { cnt } = this.store.get(
@@ -998,9 +1008,9 @@ export class GymService {
     const id = Number(bookingId);
     return this.store.transaction(() => {
       const booking = this.store.get('SELECT * FROM class_bookings WHERE id = ?', [id]);
-      if (!booking) throw new Error('Reserva nao encontrada.');
+      if (!booking) throw Object.assign(new Error('Reserva nao encontrada.'), { statusCode: 404 });
       if (memberId !== undefined && memberId !== null && Number(booking.member_id) !== Number(memberId)) {
-        throw new Error('Reserva nao pertence a este aluno.');
+        throw Object.assign(new Error('Reserva nao pertence a este aluno.'), { statusCode: 403 });
       }
       if (booking.status === 'canceled') {
         return { canceled: true, id, promoted: null };

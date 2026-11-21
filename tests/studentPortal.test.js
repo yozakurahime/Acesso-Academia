@@ -23,12 +23,14 @@ test('StudentPortalService autentica no 1o acesso, troca senha e atualiza foto d
   const { code } = portal.issueInvite(memberId);
   assert.throws(() => portal.authenticateStudent('11988881234', '1234'), /credencial inválidos/);
   const logged = portal.authenticateStudent('11988881234', code);
-  assert.throws(() => portal.authenticateStudent('11988881234', code), /credencial inválidos/);
+  const relogged = portal.authenticateStudent('11988881234', code);
+  assert.equal(relogged.id, memberId);
   assert.equal(logged.id, memberId);
   assert.equal(logged.has_portal_password, false);
 
-  // Definir senha própria
+  // Definir senha própria (convite antigo deixa de valer)
   portal.updatePortalPassword(memberId, { new_password: 'minha-senha' });
+  assert.throws(() => portal.authenticateStudent('11988881234', code), /Senha incorreta/);
   assert.throws(() => portal.authenticateStudent('12345678900', '1234'), /Senha incorreta/);
   const loggedWithPass = portal.authenticateStudent('12345678900', 'minha-senha');
   assert.equal(loggedWithPass.has_portal_password, true);

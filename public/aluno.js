@@ -62,6 +62,7 @@ function formatTimerMmSs(totalSec) {
 function syncFloatingRestBar() {
   const bar = document.getElementById('stFloatingRestBar');
   const timeEl = document.getElementById('stFloatingRestTime');
+  const labelEl = document.getElementById('stFloatingRestLabel');
   const portal = document.getElementById('studentPortalView');
   if (!bar || !timeEl) return;
   const entries = Object.entries(studentState.restTimers);
@@ -75,8 +76,22 @@ function syncFloatingRestBar() {
   studentState.activeRestExerciseId = Number(exId);
   const rem = remainingRestSeconds(timer);
   timeEl.textContent = formatTimerMmSs(rem);
+  if (labelEl) {
+    labelEl.textContent = timer.exerciseName ? `Descanso · ${timer.exerciseName}` : 'Descanso em andamento';
+  }
   bar.classList.remove('hidden');
   portal?.classList.add('has-floating-rest');
+}
+
+function switchProgressSubtab(subtab) {
+  document.querySelectorAll('[data-progress-subtab]').forEach((b) => {
+    const active = b.dataset.progressSubtab === subtab;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('[data-progress-panel]').forEach((p) => {
+    p.classList.toggle('hidden', p.dataset.progressPanel !== subtab);
+  });
 }
 
 function switchStudentTab(tab) {
@@ -111,6 +126,7 @@ function resetStudentUi() {
   document.getElementById('stSubBox').classList.add('hidden');
   document.getElementById('stSubLink').href = '#';
   document.getElementById('stFitnessAlias').value = '';
+  switchProgressSubtab('summary');
   switchStudentTab('workouts');
 }
 
@@ -153,10 +169,18 @@ function showToast(msg, isError = false) {
 }
 
 async function api(url, opts = {}) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    ...opts,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+      ...opts,
+    });
+  } catch (networkErr) {
+    const err = new Error('Sem conexão com a internet. Verifique sua rede.');
+    err.isNetworkError = true;
+    err.cause = networkErr;
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.includes('/auth/login') && !url.includes('/auth/status')) {
     await clearStudentOfflineCache();
@@ -164,7 +188,12 @@ async function api(url, opts = {}) {
     document.getElementById('studentLoginView').classList.remove('hidden');
     document.getElementById('studentPortalView').classList.add('hidden');
   }
-  if (!res.ok) throw new Error(data.error || `Erro HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Erro HTTP ${res.status}`);
+    err.status = res.status;
+    err.isNetworkError = res.status === 503;
+    throw err;
+  }
   return data;
 }
 
@@ -200,10 +229,12 @@ function updateWorkoutChecklistUi(exercises, map = getTodayDoneMap()) {
   const fill = document.getElementById('stWorkoutProgressFill');
   const resetBtn = document.getElementById('btnResetWorkoutCheck');
   const nextBtn = document.getElementById('btnNextPendingExercise');
+  const completeBtn = document.getElementById('stCompleteWorkout');
 
   if (!exercises?.length) {
     if (checklist) checklist.textContent = '';
     wrap?.classList.add('hidden');
+    completeBtn?.classList.remove('is-ready');
     return;
   }
 
@@ -216,6 +247,13 @@ function updateWorkoutChecklistUi(exercises, map = getTodayDoneMap()) {
   if (fill) fill.style.width = `${pct}%`;
   resetBtn?.classList.toggle('hidden', checked === 0);
   nextBtn?.classList.toggle('hidden', checked === exercises.length);
+  if (completeBtn && !completeBtn.disabled) {
+    const allDone = checked === exercises.length;
+    completeBtn.classList.toggle('is-ready', allDone);
+    if (!completeBtn.dataset.confirmEmpty) {
+      completeBtn.textContent = allDone ? '100% marcado — Concluir treino de hoje ✓' : 'Concluir treino de hoje';
+    }
+  }
 }
 
 function toggleExerciseDone(exId) {
@@ -563,8 +601,13 @@ function renderFitness() {
     const refDate = String(fitness.date || new Date().toISOString().slice(0, 10));
     const [yr, mo] = refDate.split('-').map(Number);
     const daysInMonth = new Date(yr, mo, 0).getDate();
+    const firstWeekday = new Date(yr, mo - 1, 1).getDay();
     const visitSet = new Set(mVisits);
-    let cells = '';
+    const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    let cells = weekdays.map((w) => `<div class="calendar-weekday" aria-hidden="true">${w}</div>`).join('');
+    for (let i = 0; i < firstWeekday; i += 1) {
+      cells += '<div class="calendar-day is-empty" aria-hidden="true"></div>';
+    }
     for (let d = 1; d <= daysInMonth; d += 1) {
       const iso = `${yr}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const hit = visitSet.has(iso);
@@ -660,6 +703,7 @@ function renderWorkouts() {
         <div><dt>Repetições</dt><dd>${esc(ex.reps)}</dd></div>
         <div><dt>Carga</dt><dd><button type="button" class="exercise-load-btn" data-edit-load-ex="${ex.id}" title="Toque para anotar ou atualizar sua carga">${esc(ex.load_kg || '+ Anotar')} ✎</button></dd></div>
       </dl>
+      <div class="exercise-load-editor hidden" data-load-editor-ex="${ex.id}"></div>
       ${ex.notes ? `<p class="muted" style="margin:0;font-size:13px;">${esc(ex.notes)}</p>` : ''}
       <div class="student-action-grid">
         <button type="button" class="btn btn-secondary btn-sm" data-rest-ex="${ex.id}" data-rest-sec="${restSec}" aria-pressed="${Boolean(activeTimer)}">${restLabel}</button>
@@ -711,7 +755,15 @@ function startRestTimer(exId, seconds) {
     stop();
     return;
   }
-  const timerState = { endsAt: Date.now() + seconds * 1000, interval: null, defaultSec: seconds };
+  let exerciseName = '';
+  for (const w of studentState.data?.workouts || []) {
+    const match = (w.exercises || []).find((item) => Number(item.id) === Number(exId));
+    if (match) {
+      exerciseName = match.exercise_name || '';
+      break;
+    }
+  }
+  const timerState = { endsAt: Date.now() + seconds * 1000, interval: null, defaultSec: seconds, exerciseName };
   timerState.interval = setInterval(() => {
     const remaining = remainingRestSeconds(timerState);
     if (!remaining) {
@@ -831,7 +883,13 @@ async function loadStudentPortal() {
     renderPortal();
     await loadStudentExtras();
   } catch (err) {
-    if (!studentState.data?.member) {
+    if (err.isNetworkError || err.status === 503 || !navigator.onLine) {
+      document.getElementById('stOfflineBanner')?.classList.remove('hidden');
+      if (!studentState.data?.member) {
+        document.getElementById('studentLoginView')?.classList.remove('hidden');
+        document.getElementById('studentPortalView')?.classList.add('hidden');
+      }
+    } else if (!studentState.data?.member) {
       document.getElementById('studentLoginView')?.classList.remove('hidden');
       document.getElementById('studentPortalView')?.classList.add('hidden');
     }
@@ -927,8 +985,9 @@ function renderBookings(bookingsData, classesData) {
   const dateInput = document.getElementById('stBookingDate');
   const listEl = document.getElementById('stBookingsList');
 
-  if (dateInput && !dateInput.value) {
-    dateInput.value = localIsoDate();
+  if (dateInput) {
+    dateInput.min = localIsoDate();
+    if (!dateInput.value) dateInput.value = localIsoDate();
   }
 
   const classes = Array.isArray(classesData)
@@ -1063,11 +1122,33 @@ document.querySelector('.student-tabs').addEventListener('keydown', (event) => {
   tabs[nextIndex].click();
 });
 
+document.querySelector('.progress-subtabs')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-progress-subtab]');
+  if (!btn) return;
+  switchProgressSubtab(btn.dataset.progressSubtab);
+});
+
 document.getElementById('stCompleteWorkout').addEventListener('click', async (event) => {
   const button = event.currentTarget;
   const workoutId = Number(studentState.selectedWorkoutId);
   const memberId = studentState.data?.member?.id;
   if (!memberId || !workoutId || studentState.completingWorkout) return;
+  const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === workoutId);
+  const exercises = current?.exercises || [];
+  const doneMap = getTodayDoneMap();
+  const checked = exercises.filter((ex) => doneMap[ex.id]).length;
+  if (exercises.length > 0 && checked === 0 && button.dataset.confirmEmpty !== '1') {
+    button.dataset.confirmEmpty = '1';
+    button.textContent = 'Nenhum marcado — tocar de novo para concluir';
+    clearTimeout(button._confirmTimer);
+    button._confirmTimer = setTimeout(() => {
+      delete button.dataset.confirmEmpty;
+      button.textContent = 'Concluir treino de hoje';
+    }, 4000);
+    return;
+  }
+  clearTimeout(button._confirmTimer);
+  delete button.dataset.confirmEmpty;
   studentState.completingWorkout = true;
   button.disabled = true;
   try {
@@ -1119,13 +1200,11 @@ document.getElementById('stWorkoutPills').addEventListener('click', (e) => {
 document.getElementById('stExercisesGrid').addEventListener('click', async (e) => {
   const cancelLoadBtn = e.target.closest('[data-cancel-load-ex]');
   if (cancelLoadBtn) {
-    const form = cancelLoadBtn.closest('.exercise-load-inline');
-    const dd = form?.parentElement;
-    if (dd) {
-      const exerciseId = Number(cancelLoadBtn.dataset.cancelLoadEx);
-      const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === Number(studentState.selectedWorkoutId));
-      const ex = (current?.exercises || []).find((item) => Number(item.id) === exerciseId);
-      dd.innerHTML = `<button type="button" class="exercise-load-btn" data-edit-load-ex="${exerciseId}" title="Toque para anotar ou atualizar sua carga">${esc(ex?.load_kg || '+ Anotar')} ✎</button>`;
+    const exerciseId = Number(cancelLoadBtn.dataset.cancelLoadEx);
+    const editor = document.querySelector(`[data-load-editor-ex="${exerciseId}"]`);
+    if (editor) {
+      editor.classList.add('hidden');
+      editor.innerHTML = '';
     }
     return;
   }
@@ -1134,14 +1213,15 @@ document.getElementById('stExercisesGrid').addEventListener('click', async (e) =
     const exerciseId = Number(loadBtn.dataset.editLoadEx);
     const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === Number(studentState.selectedWorkoutId));
     const ex = (current?.exercises || []).find((item) => Number(item.id) === exerciseId);
-    const dd = loadBtn.parentElement;
-    if (!ex || !dd) return;
-    dd.innerHTML = `<form class="exercise-load-inline" data-save-load-ex="${exerciseId}">
-      <input type="text" inputmode="decimal" maxlength="24" placeholder="Ex: 20kg" value="${esc(ex.load_kg || '')}" aria-label="Carga em ${esc(ex.exercise_name)}" />
-      <button type="submit" class="btn btn-primary btn-sm" aria-label="Salvar carga">✓</button>
-      <button type="button" class="btn btn-secondary btn-sm" data-cancel-load-ex="${exerciseId}" aria-label="Cancelar edição">×</button>
+    const editor = document.querySelector(`[data-load-editor-ex="${exerciseId}"]`);
+    if (!ex || !editor) return;
+    editor.innerHTML = `<form class="exercise-load-inline" data-save-load-ex="${exerciseId}">
+      <input type="text" inputmode="decimal" maxlength="24" placeholder="Carga (ex: 20kg)" value="${esc(ex.load_kg || '')}" aria-label="Carga em ${esc(ex.exercise_name)}" />
+      <button type="submit" class="btn btn-primary btn-sm" aria-label="Salvar carga">Salvar</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-cancel-load-ex="${exerciseId}" aria-label="Cancelar edição">Cancelar</button>
     </form>`;
-    const input = dd.querySelector('input');
+    editor.classList.remove('hidden');
+    const input = editor.querySelector('input');
     input?.focus();
     input?.select();
     return;
@@ -1173,8 +1253,9 @@ document.getElementById('stExercisesGrid').addEventListener('submit', async (e) 
   const saveBtn = form.querySelector('button[type="submit"]');
   const current = (studentState.data?.workouts || []).find((w) => Number(w.id) === Number(studentState.selectedWorkoutId));
   const ex = (current?.exercises || []).find((item) => Number(item.id) === exerciseId);
-  const dd = form.parentElement;
-  if (!ex || !dd) return;
+  const editor = form.closest('.exercise-load-editor');
+  const loadBtn = document.querySelector(`[data-edit-load-ex="${exerciseId}"]`);
+  if (!ex || !editor) return;
   const nextLoad = (input?.value || '').trim();
   await withBusyButton(saveBtn, async () => {
     try {
@@ -1183,7 +1264,9 @@ document.getElementById('stExercisesGrid').addEventListener('submit', async (e) 
         body: JSON.stringify({ load_kg: nextLoad }),
       });
       ex.load_kg = updated.load_kg;
-      dd.innerHTML = `<button type="button" class="exercise-load-btn" data-edit-load-ex="${exerciseId}" title="Toque para anotar ou atualizar sua carga">${esc(updated.load_kg || '+ Anotar')} ✎</button>`;
+      if (loadBtn) loadBtn.textContent = `${updated.load_kg || '+ Anotar'} ✎`;
+      editor.classList.add('hidden');
+      editor.innerHTML = '';
       showToast('Carga anotada no treino!');
     } catch (err) {
       showToast(err.message, true);
@@ -1228,6 +1311,7 @@ document.getElementById('btnRestSkip')?.addEventListener('click', () => {
   const exId = studentState.activeRestExerciseId;
   if (exId && studentState.restTimers[exId]) {
     startRestTimer(exId, studentState.restTimers[exId].defaultSec || 60);
+    showToast('Descanso pulado.');
   }
 });
 
@@ -1452,6 +1536,7 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
         qrImg.classList.add('hidden');
       }
       if (charge.id) startPortalPixPolling(charge.id);
+      document.getElementById('stPixBox')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       showToast('Pix gerado! Assim que você pagar, confirmaremos automaticamente.');
     } catch (err) {
       showToast(err.message, true);
@@ -1572,6 +1657,19 @@ document.getElementById('stBookingForm')?.addEventListener('submit', async (e) =
 document.getElementById('stBookingsList')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-cancel-booking]');
   if (!btn) return;
+  if (btn.dataset.confirm !== '1') {
+    btn.dataset.confirm = '1';
+    btn.textContent = 'Confirmar?';
+    clearTimeout(btn._confirmTimer);
+    btn._confirmTimer = setTimeout(() => {
+      delete btn.dataset.confirm;
+      btn.textContent = 'Cancelar';
+    }, 4000);
+    return;
+  }
+  clearTimeout(btn._confirmTimer);
+  delete btn.dataset.confirm;
+  btn.textContent = 'Cancelar';
   const id = Number(btn.dataset.cancelBooking);
   await withBusyButton(btn, async () => {
     try {
@@ -1603,25 +1701,52 @@ document.getElementById('stContractForm')?.addEventListener('submit', async (e) 
 });
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  let hadController = Boolean(navigator.serviceWorker.controller);
+  const showUpdateBanner = () => {
+    document.getElementById('stSwUpdateBanner')?.classList.remove('hidden');
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) showUpdateBanner();
+    hadController = true;
+  });
+  navigator.serviceWorker.register('/sw.js').then((reg) => {
+    reg.addEventListener('updatefound', () => {
+      const installing = reg.installing;
+      installing?.addEventListener('statechange', () => {
+        if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner();
+        }
+      });
+    });
+  }).catch(() => {});
+  document.getElementById('btnReloadSwUpdate')?.addEventListener('click', () => {
+    window.location.reload();
+  });
 }
 
-// Tutorial de primeiro acesso
+// Estado offline/online reativo
+(() => {
+  const banner = document.getElementById('stOfflineBanner');
+  const syncNetwork = () => {
+    if (!banner) return;
+    banner.classList.toggle('hidden', navigator.onLine);
+  };
+  window.addEventListener('online', () => {
+    syncNetwork();
+    loadStudentPortal().catch(() => {});
+  });
+  window.addEventListener('offline', syncNetwork);
+  document.getElementById('btnRetryOffline')?.addEventListener('click', () => {
+    loadStudentPortal().catch((err) => showToast(err.message, true));
+  });
+  syncNetwork();
+})();
+
+// Tutorial de primeiro acesso (recolhido por padrão para compactar o login mobile)
 (() => {
   const guide = document.getElementById('stFirstAccessGuide');
   if (guide) {
-    try {
-      if (!localStorage.getItem('oxigenio_student_seen_tutorial')) {
-        guide.open = true;
-      }
-      guide.addEventListener('toggle', () => {
-        if (!guide.open) {
-          try { localStorage.setItem('oxigenio_student_seen_tutorial', '1'); } catch {}
-        }
-      });
-    } catch {
-      guide.open = true;
-    }
+    guide.open = false;
   }
 
   document.getElementById('btnGoToPassword')?.addEventListener('click', () => {

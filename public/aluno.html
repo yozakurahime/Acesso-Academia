@@ -22,7 +22,7 @@
     })();
   </script>
   <link rel="stylesheet" href="/styles.css?v=20261115.14" />
-  <link rel="stylesheet" href="/aluno.css?v=20261120.1" />
+  <link rel="stylesheet" href="/aluno.css?v=20261121.3" />
 </head>
 <body class="student-page">
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
@@ -58,7 +58,7 @@
       </div>
       <form id="studentLoginForm" class="form-stack">
         <label>CPF ou WhatsApp cadastrado
-          <input type="text" id="stLoginIdentifier" autocomplete="username" enterkeyhint="next" required />
+          <input type="text" id="stLoginIdentifier" inputmode="tel" autocomplete="username" enterkeyhint="next" required />
         </label>
         <div class="password-field">
           <label for="stLoginSecret">Senha ou código de convite</label>
@@ -71,7 +71,7 @@
       </form>
 
       <details id="stFirstAccessGuide" class="first-access-guide">
-        <summary>Primeiro acesso? Veja como entrar</summary>
+        <summary>1º acesso com código de 4 dígitos? Veja como entrar</summary>
         <ol class="first-access-steps">
           <li><strong>Identificação:</strong> informe seu <strong>CPF</strong> ou <strong>WhatsApp</strong> cadastrado na academia.</li>
           <li><strong>Senha inicial:</strong> no primeiro acesso, digite o <strong>código de convite</strong> entregue pela recepção.</li>
@@ -177,6 +177,16 @@
       <button type="button" id="btnDismissCelebration" class="celebration-close" aria-label="Fechar homenagem">&times;</button>
     </section>
 
+    <div id="stOfflineBanner" class="offline-banner hidden" role="status" aria-live="polite">
+      <span>Sem conexão com a internet. Algumas ações podem ficar indisponíveis.</span>
+      <button type="button" id="btnRetryOffline" class="btn btn-secondary btn-sm">Tentar</button>
+    </div>
+
+    <div id="stSwUpdateBanner" class="sw-update-banner hidden" role="status" aria-live="polite">
+      <span>Nova versão do Portal disponível.</span>
+      <button type="button" id="btnReloadSwUpdate" class="btn btn-primary btn-sm">Atualizar</button>
+    </div>
+
     <main>
     <section id="stTabWorkouts" class="panel" role="tabpanel" aria-labelledby="stNavWorkouts">
       <div class="panel-header">
@@ -203,7 +213,7 @@
 
     <div id="stFloatingRestBar" class="floating-rest-bar hidden" role="region" aria-label="Cronômetro de descanso ativo">
       <div class="floating-rest-info">
-        <span class="floating-rest-label">Descanso em andamento</span>
+        <span id="stFloatingRestLabel" class="floating-rest-label">Descanso em andamento</span>
         <strong id="stFloatingRestTime">00:00</strong>
       </div>
       <div class="inline-actions">
@@ -218,96 +228,112 @@
         <h2>Meu Progresso</h2>
         <span id="stFitnessPeriod" class="muted"></span>
       </div>
-      <div class="fitness-grid">
-        <section>
-          <div class="inline-actions" style="justify-content:space-between;align-items:center;">
-            <h3 style="margin:0;">Meta semanal</h3>
-            <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin:0;">
-              Meta:
-              <select id="stGoalSelect" style="width:auto;min-height:34px;padding:4px 8px;font-size:13px;">
-                <option value="1">1x/sem</option>
-                <option value="2">2x/sem</option>
-                <option value="3">3x/sem</option>
-                <option value="4">4x/sem</option>
-                <option value="5">5x/sem</option>
-                <option value="6">6x/sem</option>
-                <option value="7">7x/sem</option>
-              </select>
-            </label>
-          </div>
-          <p id="stFitnessVisits"></p>
-          <progress id="stFitnessGoal" aria-label="Progresso da meta semanal"></progress>
-          <p id="stFitnessDays" class="muted"></p>
-          <p id="stFitnessWorkouts"></p>
-        </section>
-        <section>
-          <h3>Frequência do mês</h3>
-          <p id="stMonthlySummary" class="muted"></p>
-          <div id="stMonthlyCalendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px;"></div>
-        </section>
-        <section>
-          <h3>Conquistas</h3>
-          <ul id="stFitnessAchievements" class="simple-list"></ul>
-        </section>
-        <section>
-          <h3>Ranking da semana</h3>
-          <ol id="stFitnessRanking" class="fitness-ranking-list"></ol>
-          <p id="stFitnessRankingEmpty" class="muted">Ainda não há visitas no ranking desta semana.</p>
-          <form id="stFitnessAliasForm" class="form-stack">
-            <label>Seu apelido no ranking <input id="stFitnessAlias" maxlength="24" autocomplete="off" /></label>
-            <p class="muted">O Top 3 aparece na tela da catraca. Deixe em branco para sair do ranking.</p>
-            <button type="submit" class="btn btn-secondary btn-sm">Salvar participação</button>
-          </form>
-        </section>
-        <section>
-          <h3>Desafio mensal da academia</h3>
-          <p id="stFitnessChallengeLabel"></p>
-          <progress id="stFitnessChallenge" aria-label="Progresso do desafio mensal"></progress>
-          <p class="muted">Cada aluno contribui com até um treino concluído por dia.</p>
-        </section>
-        <section id="stGamificationCard">
-          <h3>Gamificação &amp; Medalhas</h3>
-          <p id="stGamificationStats" class="muted">Carregando...</p>
-          <ul id="stGamificationBadges" class="simple-list"></ul>
+      <div class="progress-subtabs" role="tablist" aria-label="Seções de progresso">
+        <button type="button" class="progress-subtab-btn active" role="tab" data-progress-subtab="summary" aria-selected="true">Resumo</button>
+        <button type="button" class="progress-subtab-btn" role="tab" data-progress-subtab="evolution" aria-selected="false">Evolução</button>
+        <button type="button" class="progress-subtab-btn" role="tab" data-progress-subtab="bookings" aria-selected="false">Agenda &amp; Turmas</button>
+        <button type="button" class="progress-subtab-btn" role="tab" data-progress-subtab="badges" aria-selected="false">Medalhas</button>
+      </div>
+
+      <div data-progress-panel="summary">
+        <div class="fitness-grid">
+          <section>
+            <div class="inline-actions" style="justify-content:space-between;align-items:center;">
+              <h3 style="margin:0;">Meta semanal</h3>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin:0;">
+                Meta:
+                <select id="stGoalSelect" style="width:auto;min-height:34px;padding:4px 8px;font-size:13px;">
+                  <option value="1">1x/sem</option>
+                  <option value="2">2x/sem</option>
+                  <option value="3">3x/sem</option>
+                  <option value="4">4x/sem</option>
+                  <option value="5">5x/sem</option>
+                  <option value="6">6x/sem</option>
+                  <option value="7">7x/sem</option>
+                </select>
+              </label>
+            </div>
+            <p id="stFitnessVisits"></p>
+            <progress id="stFitnessGoal" aria-label="Progresso da meta semanal"></progress>
+            <p id="stFitnessDays" class="muted"></p>
+            <p id="stFitnessWorkouts"></p>
+          </section>
+          <section>
+            <h3>Frequência do mês</h3>
+            <p id="stMonthlySummary" class="muted"></p>
+            <div id="stMonthlyCalendar" class="monthly-calendar"></div>
+          </section>
+          <section>
+            <h3>Desafio mensal da academia</h3>
+            <p id="stFitnessChallengeLabel"></p>
+            <progress id="stFitnessChallenge" aria-label="Progresso do desafio mensal"></progress>
+            <p class="muted">Cada aluno contribui com até um treino concluído por dia.</p>
+          </section>
+        </div>
+
+        <section style="margin-top:20px;">
+          <h3>Últimos Acessos na Catraca</h3>
+          <ul id="stRecentCheckinsList" class="simple-list">
+            <li class="muted">Nenhum acesso registrado recentemente.</li>
+          </ul>
         </section>
       </div>
 
-      <section style="margin-top:20px;">
-        <h3>Avaliação Física &amp; Evolução</h3>
-        <div id="stAssessmentComparison" class="assessment-comparison-grid hidden"></div>
-        <ul id="stAssessmentsList" class="simple-list">
-          <li class="muted">Carregando avaliações...</li>
-        </ul>
-      </section>
+      <div data-progress-panel="evolution" class="hidden">
+        <section style="margin-top:12px;">
+          <h3>Avaliação Física &amp; Evolução</h3>
+          <div id="stAssessmentComparison" class="assessment-comparison-grid hidden"></div>
+          <ul id="stAssessmentsList" class="simple-list">
+            <li class="muted">Carregando avaliações...</li>
+          </ul>
+        </section>
+      </div>
 
-      <section style="margin-top:20px;">
-        <h3>Agenda de Turmas</h3>
-        <form id="stBookingForm" class="form-grid" style="margin-bottom:12px;align-items:end;">
-          <label>Turma
-            <select id="stBookingClass" required></select>
-          </label>
-          <label>Data
-            <input type="date" id="stBookingDate" required />
-          </label>
-          <label>Repetição
-            <select id="stBookingWeeks">
-              <option value="1">Apenas nesta data</option>
-              <option value="4">Próximas 4 semanas</option>
-            </select>
-          </label>
-          <button type="submit" class="btn btn-primary btn-sm">Reservar vaga</button>
-        </form>
-        <ul id="stBookingsList" class="simple-list">
-          <li class="muted">Nenhuma reserva registrada.</li>
-        </ul>
-      </section>
+      <div data-progress-panel="bookings" class="hidden">
+        <section style="margin-top:12px;">
+          <h3>Agenda de Turmas</h3>
+          <form id="stBookingForm" class="form-grid" style="margin-bottom:12px;align-items:end;">
+            <label>Turma
+              <select id="stBookingClass" required></select>
+            </label>
+            <label>Data
+              <input type="date" id="stBookingDate" required />
+            </label>
+            <label>Repetição
+              <select id="stBookingWeeks">
+                <option value="1">Apenas nesta data</option>
+                <option value="4">Próximas 4 semanas</option>
+              </select>
+            </label>
+            <button type="submit" class="btn btn-primary btn-sm">Reservar vaga</button>
+          </form>
+          <ul id="stBookingsList" class="simple-list">
+            <li class="muted">Nenhuma reserva registrada.</li>
+          </ul>
+        </section>
+      </div>
 
-      <section style="margin-top:20px;">
-        <h3>Últimos Acessos na Catraca</h3>
-        <ul id="stRecentCheckinsList" class="simple-list">
-          <li class="muted">Nenhum acesso registrado recentemente.</li>
-        </ul>
-      </section>
+      <div data-progress-panel="badges" class="hidden">
+        <div class="fitness-grid">
+          <section id="stGamificationCard">
+            <h3>Conquistas &amp; Medalhas</h3>
+            <p id="stGamificationStats" class="muted">Carregando...</p>
+            <ul id="stGamificationBadges" class="simple-list"></ul>
+            <h4 class="progress-subhead">Conquistas da semana</h4>
+            <ul id="stFitnessAchievements" class="simple-list"></ul>
+          </section>
+          <section>
+            <h3>Ranking da semana</h3>
+            <ol id="stFitnessRanking" class="fitness-ranking-list"></ol>
+            <p id="stFitnessRankingEmpty" class="muted">Ainda não há visitas no ranking desta semana.</p>
+            <form id="stFitnessAliasForm" class="form-stack">
+              <label>Seu apelido no ranking <input id="stFitnessAlias" maxlength="24" autocomplete="off" /></label>
+              <p class="muted">O Top 3 aparece na tela da catraca. Deixe em branco para sair do ranking.</p>
+              <button type="submit" class="btn btn-secondary btn-sm">Salvar participação</button>
+            </form>
+          </section>
+        </div>
+      </div>
     </section>
 
     <!-- ABA PAGAMENTOS -->
@@ -315,15 +341,6 @@
       <h2>Pagamentos e Renovação</h2>
       <p id="stPayStatusLine" class="muted" style="margin-bottom:12px;"></p>
       <div id="stFinancialCards" class="student-financial-grid"></div>
-      <div id="stStaticPixBox" class="pix-box hidden" style="margin-bottom:14px;">
-        <div class="inline-actions" style="justify-content:space-between;align-items:center;">
-          <div>
-            <strong id="stStaticPixTitle">Chave Pix da Academia</strong>
-            <p id="stStaticPixKeyText" class="muted" style="margin:2px 0 0;font-size:13px;"></p>
-          </div>
-          <button type="button" id="btnStCopyStaticPix" class="btn btn-secondary btn-sm">Copiar chave Pix</button>
-        </div>
-      </div>
       <div class="form-grid">
         <label>Escolha o plano para renovar
           <select id="stPayPlan"></select>
@@ -349,20 +366,34 @@
       <div id="stPixBox" class="pix-box hidden">
         <h3 style="margin-top:0;">Pix gerado</h3>
         <p id="stPixInfo" class="muted"></p>
-        <img id="stPixQr" class="pix-qr hidden" alt="QR Code Pix" />
         <label>Pix Copia e Cola
           <input type="text" id="stPixCode" readonly />
         </label>
         <div class="student-action-grid">
-          <button type="button" id="btnStCopyPix" class="btn btn-secondary btn-sm">Copiar código Pix</button>
-          <button type="button" id="btnStCheckPix" class="btn btn-primary btn-sm">Já paguei (Verificar)</button>
+          <button type="button" id="btnStCopyPix" class="btn btn-primary">Copiar código Pix</button>
+          <button type="button" id="btnStCheckPix" class="btn btn-secondary">Já paguei (Verificar)</button>
         </div>
+        <details class="pix-qr-details">
+          <summary>Mostrar QR Code (para pagar com outro aparelho)</summary>
+          <img id="stPixQr" class="pix-qr hidden" alt="QR Code Pix" />
+        </details>
       </div>
 
       <div id="stSubBox" class="pix-box hidden">
         <h3 style="margin-top:0;">Assinatura Recorrente</h3>
         <p id="stSubInfo" class="muted"></p>
         <a id="stSubLink" href="#" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Abrir checkout Mercado Pago</a>
+      </div>
+
+      <div id="stStaticPixBox" class="pix-box pix-box-secondary hidden" style="margin-top:14px;">
+        <div class="inline-actions" style="justify-content:space-between;align-items:center;">
+          <div>
+            <strong id="stStaticPixTitle">Chave Pix da Academia</strong>
+            <p id="stStaticPixKeyText" class="muted" style="margin:2px 0 0;font-size:13px;"></p>
+            <small class="muted">Alternativa manual — apresente o comprovante na recepção.</small>
+          </div>
+          <button type="button" id="btnStCopyStaticPix" class="btn btn-secondary btn-sm">Copiar chave Pix</button>
+        </div>
       </div>
 
       <h3 style="margin-top:20px;">Histórico de Pagamentos</h3>
@@ -492,6 +523,6 @@
   </dialog>
 
   <script src="/exercises.js?v=20261115.1" defer></script>
-  <script src="/aluno.js?v=20261120.1" defer></script>
+  <script src="/aluno.js?v=20261121.3" defer></script>
 </body>
 </html>

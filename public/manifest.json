@@ -1,7 +1,7 @@
 {
   "id": "/aluno",
   "name": "Academia Oxigênio — Portal do Aluno",
-  "short_name": "Oxigênio",
+  "short_name": "Portal Oxigênio",
   "description": "Portal do Aluno da Academia Oxigênio para acompanhar treinos, progresso e pagamentos.",
   "start_url": "/aluno",
   "scope": "/",
@@ -9,8 +9,8 @@
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "lang": "pt-BR",
-  "theme_color": "#07080b",
-  "background_color": "#07080b",
+  "theme_color": "#f5f5f7",
+  "background_color": "#f5f5f7",
   "icons": [
     {
       "src": "/icons/icon-192.png",

@@ -14,6 +14,10 @@ function onlyDigits(value) {
   return String(value || '').replace(/\D+/g, '');
 }
 
+function httpError(message, statusCode = 400) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
 const MAX_PHOTO_DATA_URL_LEN = 2 * 1024 * 1024; // ~1.5MB em base64
 
 export class StudentPortalService {
@@ -22,7 +26,7 @@ export class StudentPortalService {
     this.gymService = gymService;
   }
 
-  _sanitizeMember(row) {
+  _sanitizeMember(row, { includePhoto = true } = {}) {
     if (!row) return null;
     const {
       portal_password_hash,
@@ -36,7 +40,7 @@ export class StudentPortalService {
       ...safe
     } = row;
     let profilePhoto = safe.profile_photo || null;
-    if (!profilePhoto && safe.id && this.store?.filePath) {
+    if (includePhoto && !profilePhoto && safe.id && this.store?.filePath) {
       try {
         const facePhotoPath = path.join(path.dirname(this.store.filePath), 'photos', `member_${Number(safe.id)}.jpg`);
         if (fs.existsSync(facePhotoPath)) {
@@ -100,36 +104,40 @@ export class StudentPortalService {
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
     const result = this.store.run("UPDATE members SET portal_invite_hash = ?, portal_invite_expires_at = ? WHERE id = ? AND access_role = 'student' AND portal_password_hash IS NULL",
       [hashInviteCode(code), expiresAt, Number(memberId)]);
-    if (!result.changes) throw new Error('Aluno não encontrado ou já possui senha.');
+    if (!result.changes) throw httpError('Aluno não encontrado ou já possui senha.', 409);
     return { code, expiresAt };
   }
 
   authenticateStudent(identifier, secret) {
     const member = this.findStudentByIdentifier(identifier);
     if (!member) {
-      throw new Error('Identificador ou credencial inválidos.');
+      throw httpError('Identificador ou credencial inválidos.', 401);
     }
 
     const provided = String(secret || '').trim();
     if (!provided) {
-      throw new Error('Informe a senha ou o código de convite.');
+      throw httpError('Informe a senha ou o código de convite.', 400);
     }
 
     if (member.portal_password_hash) {
       if (!verifyPassword(provided, member.portal_password_hash)) {
-        throw new Error('Senha incorreta.');
+        throw httpError('Senha incorreta.', 401);
       }
       return this._sanitizeMember(member);
     }
 
-    if (member.portal_invite_expires_at <= Date.now() || !verifyPassword(provided.toUpperCase(), member.portal_invite_hash)) {
-      throw new Error('Identificador ou credencial inválidos. Solicite um convite à recepção.');
+    if (
+      !member.portal_invite_hash ||
+      !member.portal_invite_expires_at ||
+      member.portal_invite_expires_at <= Date.now() ||
+      !verifyPassword(provided.toUpperCase(), member.portal_invite_hash)
+    ) {
+      throw httpError('Identificador ou credencial inválidos. Solicite um convite à recepção.', 401);
     }
-    this.store.run('UPDATE members SET portal_invite_hash = NULL, portal_invite_expires_at = NULL WHERE id = ?', [member.id]);
     return this._sanitizeMember(member);
   }
 
-  getStudentProfile(memberId) {
+  getStudentProfile(memberId, { includePhoto = true } = {}) {
     const row = this.store.get(
       `SELECT m.*,
               p.name AS plan_name,
@@ -142,7 +150,7 @@ export class StudentPortalService {
        WHERE m.id = ? AND m.access_role = 'student'`,
       [Number(memberId)],
     );
-    if (!row) throw new Error('Aluno não encontrado.');
+    if (!row) throw httpError('Aluno não encontrado.', 404);
 
     const plans = this.store.all('SELECT * FROM plans WHERE active = 1 ORDER BY duration_days ASC, name ASC');
     const payments = this.store.all(
@@ -206,7 +214,7 @@ export class StudentPortalService {
       pixRecipientKey: settings.pix_recipient_key || '',
       pixRecipientName: settings.pix_recipient_name || '',
       member: {
-        ...this._sanitizeMember(row),
+        ...this._sanitizeMember(row, { includePhoto }),
         valid_until: planEnrollment?.ends_on || row.valid_until || null,
         plan_starts_on: planEnrollment?.starts_on || null,
         open_debt_cents: openDebtsCents,
@@ -230,7 +238,7 @@ export class StudentPortalService {
        WHERE e.id = ? AND w.member_id = ? AND w.active = 1`,
       [Number(exerciseId), Number(memberId)],
     );
-    if (!ex) throw new Error('Exercício não encontrado no seu treino.');
+    if (!ex) throw httpError('Exercício não encontrado no seu treino.', 404);
     const cleaned = loadKg == null ? null : String(loadKg).trim().slice(0, 32) || null;
     this.store.run('UPDATE workout_exercises SET load_kg = ? WHERE id = ?', [cleaned, ex.id]);
     return { id: ex.id, workout_id: ex.workout_id, load_kg: cleaned };
@@ -238,7 +246,7 @@ export class StudentPortalService {
 
   updateContactInfo(memberId, { phone, email, emergency_contact } = {}) {
     const member = this.store.get("SELECT * FROM members WHERE id = ? AND access_role = 'student'", [Number(memberId)]);
-    if (!member) throw new Error('Aluno não encontrado.');
+    if (!member) throw httpError('Aluno não encontrado.', 404);
     const nextPhone = phone !== undefined ? (String(phone || '').trim().slice(0, 30) || null) : member.phone;
     const nextEmail = email !== undefined ? (String(email || '').trim().slice(0, 120) || null) : member.email;
     const nextEmergency = emergency_contact !== undefined ? (String(emergency_contact || '').trim().slice(0, 120) || null) : member.emergency_contact;
@@ -255,7 +263,7 @@ export class StudentPortalService {
    */
   updateProfilePhoto(memberId, profilePhotoDataUrl) {
     const member = this.store.get("SELECT id FROM members WHERE id = ? AND access_role = 'student'", [Number(memberId)]);
-    if (!member) throw new Error('Aluno não encontrado.');
+    if (!member) throw httpError('Aluno não encontrado.', 404);
 
     if (!profilePhotoDataUrl) {
       this.store.run(
@@ -267,10 +275,10 @@ export class StudentPortalService {
 
     const dataUrl = String(profilePhotoDataUrl).trim();
     if (!/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(dataUrl)) {
-      throw new Error('Formato de imagem inválido. Use JPG, PNG ou WebP.');
+      throw httpError('Formato de imagem inválido. Use JPG, PNG ou WebP.', 400);
     }
     if (dataUrl.length > MAX_PHOTO_DATA_URL_LEN) {
-      throw new Error('A imagem é muito grande. Reduza ou escolha uma foto menor (máx. 1,5 MB).');
+      throw httpError('A imagem é muito grande. Reduza ou escolha uma foto menor (máx. 1,5 MB).', 413);
     }
 
     this.store.run(
@@ -282,10 +290,10 @@ export class StudentPortalService {
 
   updatePortalPassword(memberId, { current_password = '', new_password, force = false } = {}) {
     const member = this.store.get("SELECT id, portal_password_hash FROM members WHERE id = ? AND access_role = 'student'", [Number(memberId)]);
-    if (!member) throw new Error('Aluno não encontrado.');
+    if (!member) throw httpError('Aluno não encontrado.', 404);
 
     if (!force && member.portal_password_hash && !verifyPassword(current_password, member.portal_password_hash)) {
-      throw new Error('A senha atual está incorreta.');
+      throw httpError('A senha atual está incorreta.', 401);
     }
 
     const hash = hashPassword(new_password);

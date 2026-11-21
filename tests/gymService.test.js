@@ -332,12 +332,13 @@ test('Gestão de turmas: reserva recorrente, lista de espera e chamada (presente
   const m1 = await accessService.createMember({ name: 'Aluno 1', document: nextCpf() });
   const m2 = await accessService.createMember({ name: 'Aluno 2', document: nextCpf() });
 
-  const rec = gymService.bookClassRecurring({ classId: cls.id, memberId: m1.id, startDate: '2026-11-16', weeks: 3 });
+  const startDate = new Date().toISOString().slice(0, 10);
+  const rec = gymService.bookClassRecurring({ classId: cls.id, memberId: m1.id, startDate, weeks: 3 });
   assert.equal(rec.created.length, 3);
   assert.equal(rec.skipped.length, 0);
 
   // Segundo aluno entra na fila de espera na primeira data
-  const wait = gymService.bookClass({ classId: cls.id, memberId: m2.id, bookingDate: '2026-11-16' });
+  const wait = gymService.bookClass({ classId: cls.id, memberId: m2.id, bookingDate: startDate });
   assert.equal(wait.status, 'waitlist');
 
   // Cancelar o primeiro promove o segundo

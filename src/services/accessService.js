@@ -2553,9 +2553,12 @@ export class AccessService {
 
   signMemberContract(memberId, { signature } = {}) {
     const member = this.getMember(memberId);
-    if (!member) throw new Error('Aluno não encontrado.');
+    if (!member) throw Object.assign(new Error('Aluno não encontrado.'), { statusCode: 404 });
     const cleanSig = String(signature || '').trim();
-    if (!cleanSig) throw new Error('Assinatura é obrigatória.');
+    if (!cleanSig) throw Object.assign(new Error('Assinatura é obrigatória.'), { statusCode: 400 });
+    if (cleanSig.length > 100000) {
+      throw Object.assign(new Error('Assinatura excede o tamanho máximo permitido.'), { statusCode: 400 });
+    }
 
     this.store.run(
       `UPDATE members
