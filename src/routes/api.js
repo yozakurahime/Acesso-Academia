@@ -297,7 +297,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   });
   router.get('/public/plans', (_req, res) => {
     const plans = store.all(
-      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
+      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 AND COALESCE(online_available, 1) = 1 ORDER BY duration_days ASC, price_cents ASC, name ASC',
     );
     res.set('Cache-Control', 'no-cache').json({ plans });
   });
@@ -342,7 +342,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.get('/public/enrollment-options', (_req, res) => {
     const plans = store.all(
-      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 ORDER BY duration_days ASC, price_cents ASC, name ASC',
+      'SELECT id, name, duration_days, price_cents FROM plans WHERE active = 1 AND price_cents > 0 AND COALESCE(online_available, 1) = 1 ORDER BY duration_days ASC, price_cents ASC, name ASC',
     );
     const modalities = store.all('SELECT id, name, description FROM modalities WHERE active = 1 ORDER BY name ASC');
     const classes = store.all(
@@ -444,7 +444,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (!planId) {
       return res.status(400).json({ error: 'Selecione um plano para concluir a matricula.' });
     }
-    const plan = store.get('SELECT * FROM plans WHERE id = ? AND active = 1', [planId]);
+    const plan = store.get('SELECT * FROM plans WHERE id = ? AND active = 1 AND price_cents > 0 AND COALESCE(online_available, 1) = 1', [planId]);
     if (!plan) {
       return res.status(400).json({ error: 'Plano selecionado nao encontrado.' });
     }
@@ -2376,15 +2376,37 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     limitExpensive,
     handle(async (req, res) => {
       if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
-      const planId = req.body?.plan_id || null;
+      const planId = assertStudentPlanAllowed(req.studentMemberId, req.body?.plan_id);
       const charge = await gatewayService.createPixCharge({ member_id: req.studentMemberId, plan_id: planId });
       res.status(201).json(charge);
     }),
   );
 
+  function assertStudentPlanAllowed(memberId, rawPlanId) {
+    if (rawPlanId == null || rawPlanId === '') return null;
+    const planId = Number(rawPlanId);
+    const member = store.get('SELECT plan_id FROM members WHERE id = ?', [Number(memberId)]);
+    const plan = store.get(
+      'SELECT id, active, price_cents, COALESCE(online_available, 1) AS online_available FROM plans WHERE id = ?',
+      [planId],
+    );
+    if (!plan || Number(plan.active) !== 1 || Number(plan.price_cents) <= 0) {
+      const err = new Error('Plano indisponível para pagamento online.');
+      err.status = 400;
+      throw err;
+    }
+    if (Number(plan.online_available) !== 1 && Number(plan.id) !== Number(member?.plan_id || 0)) {
+      const err = new Error('Este plano está disponível apenas na recepção.');
+      err.status = 400;
+      throw err;
+    }
+    return planId;
+  }
+
   router.post('/student/me/checkout', requireStudentAuth, limitExpensive, handle(async (req, res) => {
     if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
-    const charge = await gatewayService.createCheckoutCharge({ member_id: req.studentMemberId, plan_id: req.body?.plan_id });
+    const planId = assertStudentPlanAllowed(req.studentMemberId, req.body?.plan_id);
+    const charge = await gatewayService.createCheckoutCharge({ member_id: req.studentMemberId, plan_id: planId });
     res.set('Cache-Control', 'no-store').status(201).json({ id: charge.id, amount_cents: charge.amount_cents, payment_url: charge.payment_url });
   }));
 
@@ -2409,7 +2431,8 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     limitExpensive,
     handle(async (req, res) => {
       if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
-      const { plan_id = null, payer_email = null } = req.body || {};
+      const { plan_id: rawPlanId = null, payer_email = null } = req.body || {};
+      const plan_id = assertStudentPlanAllowed(req.studentMemberId, rawPlanId);
       const sub = await gatewayService.createMpSubscription({
         member_id: req.studentMemberId,
         plan_id,

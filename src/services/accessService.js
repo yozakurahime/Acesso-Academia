@@ -478,7 +478,7 @@ export class AccessService {
     return this.store.all('SELECT * FROM plans ORDER BY duration_days ASC');
   }
 
-  _normalizePlanRules({ allowed_start_time, allowed_end_time, weekly_limit } = {}) {
+  _normalizePlanRules({ allowed_start_time, allowed_end_time, weekly_limit, online_available } = {}) {
     const timeOrNull = (val) => {
       if (val == null || String(val).trim() === '') return null;
       const clean = String(val).trim();
@@ -497,22 +497,38 @@ export class AccessService {
       }
       limit = parsed;
     }
-    return { allowed_start_time: startTime, allowed_end_time: endTime, weekly_limit: limit };
+    const onlineAvailable = online_available === undefined || online_available === null
+      ? 1
+      : (Number(online_available) ? 1 : 0);
+    return {
+      allowed_start_time: startTime,
+      allowed_end_time: endTime,
+      weekly_limit: limit,
+      online_available: onlineAvailable,
+    };
   }
 
-  createPlan({ name, duration_days, price_cents, allowed_start_time = null, allowed_end_time = null, weekly_limit = null }) {
+  createPlan({
+    name,
+    duration_days,
+    price_cents,
+    allowed_start_time = null,
+    allowed_end_time = null,
+    weekly_limit = null,
+    online_available = 1,
+  }) {
     if (!name || !duration_days || price_cents === undefined) {
       throw new Error('Nome, duracao e valor do plano sao obrigatorios.');
     }
-    const rules = this._normalizePlanRules({ allowed_start_time, allowed_end_time, weekly_limit });
+    const rules = this._normalizePlanRules({ allowed_start_time, allowed_end_time, weekly_limit, online_available });
     const res = this.store.run(
-      'INSERT INTO plans (name, duration_days, price_cents, allowed_start_time, allowed_end_time, weekly_limit) VALUES (?, ?, ?, ?, ?, ?)',
-      [name.trim(), Number(duration_days), Number(price_cents), rules.allowed_start_time, rules.allowed_end_time, rules.weekly_limit],
+      'INSERT INTO plans (name, duration_days, price_cents, allowed_start_time, allowed_end_time, weekly_limit, online_available) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name.trim(), Number(duration_days), Number(price_cents), rules.allowed_start_time, rules.allowed_end_time, rules.weekly_limit, rules.online_available],
     );
     return this.store.get('SELECT * FROM plans WHERE id = ?', [res.lastInsertRowid]);
   }
 
-  updatePlan(id, { name, duration_days, price_cents, allowed_start_time, allowed_end_time, weekly_limit }) {
+  updatePlan(id, { name, duration_days, price_cents, allowed_start_time, allowed_end_time, weekly_limit, online_available }) {
     const existing = this.store.get('SELECT * FROM plans WHERE id = ?', [Number(id)]);
     if (!existing) throw new Error('Plano nao encontrado.');
     const trimmedName = String(name || '').trim();
@@ -525,10 +541,11 @@ export class AccessService {
       allowed_start_time: allowed_start_time !== undefined ? allowed_start_time : existing.allowed_start_time,
       allowed_end_time: allowed_end_time !== undefined ? allowed_end_time : existing.allowed_end_time,
       weekly_limit: weekly_limit !== undefined ? weekly_limit : existing.weekly_limit,
+      online_available: online_available !== undefined ? online_available : existing.online_available,
     });
     this.store.run(
-      'UPDATE plans SET name = ?, duration_days = ?, price_cents = ?, allowed_start_time = ?, allowed_end_time = ?, weekly_limit = ? WHERE id = ?',
-      [trimmedName, days, cents, rules.allowed_start_time, rules.allowed_end_time, rules.weekly_limit, Number(id)],
+      'UPDATE plans SET name = ?, duration_days = ?, price_cents = ?, allowed_start_time = ?, allowed_end_time = ?, weekly_limit = ?, online_available = ? WHERE id = ?',
+      [trimmedName, days, cents, rules.allowed_start_time, rules.allowed_end_time, rules.weekly_limit, rules.online_available, Number(id)],
     );
     return this.store.get('SELECT * FROM plans WHERE id = ?', [Number(id)]);
   }

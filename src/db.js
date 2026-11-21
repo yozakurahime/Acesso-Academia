@@ -199,6 +199,7 @@ export class DatabaseStore {
         allowed_start_time TEXT,
         allowed_end_time TEXT,
         weekly_limit INTEGER,
+        online_available INTEGER NOT NULL DEFAULT 1,
         active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
       );
@@ -809,6 +810,7 @@ export class DatabaseStore {
       allowed_start_time: 'TEXT',
       allowed_end_time: 'TEXT',
       weekly_limit: 'INTEGER',
+      online_available: 'INTEGER NOT NULL DEFAULT 1',
     });
     this.ensureColumns('app_users', {
       token_version: 'INTEGER NOT NULL DEFAULT 1',

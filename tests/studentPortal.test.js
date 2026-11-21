@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { DatabaseStore } from '../src/db.js';
 import { GymService } from '../src/services/gymService.js';
+import { AccessService } from '../src/services/accessService.js';
 import { AuthService } from '../src/services/authService.js';
 import { StudentPortalService } from '../src/services/studentPortalService.js';
 import { createApiRouter } from '../src/routes/api.js';
@@ -219,6 +220,100 @@ test('Rotas /api/student funcionam com sessao propria mesmo com login admin ativ
     assert.equal(pwdRes.status, 200);
     const staleRes = await fetch(`${baseUrl}/api/student/me`, { headers: { cookie } });
     assert.equal(staleRes.status, 401);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('online_available filtra planos em /public/plans, /public/enrollment-options, /public/enroll e /api/student/me', async () => {
+  const store = await DatabaseStore.create(null);
+  const accessService = new AccessService(store);
+  const gymService = new GymService(store);
+  const authService = new AuthService(store);
+  const studentPortalService = new StudentPortalService(store, gymService);
+
+  const planPublic = accessService.createPlan({
+    name: 'Musculação Mensal',
+    duration_days: 30,
+    price_cents: 12000,
+    online_available: 1,
+  });
+  const planReceptionOnly = accessService.createPlan({
+    name: 'Natação Infantil',
+    duration_days: 30,
+    price_cents: 18000,
+    online_available: 0,
+  });
+  const planFree = accessService.createPlan({
+    name: 'Cortesia',
+    duration_days: 30,
+    price_cents: 0,
+    online_available: 1,
+  });
+
+  const modMusc = store.get("SELECT id FROM modalities WHERE active = 1 ORDER BY id ASC LIMIT 1");
+  const mRegular = store.run(
+    "INSERT INTO members (name, phone, access_role, plan_id) VALUES ('Aluno Musc', '11911110001', 'student', ?)",
+    [planPublic.id],
+  ).lastInsertRowid;
+  const mKids = store.run(
+    "INSERT INTO members (name, phone, access_role, plan_id) VALUES ('Aluno Kids', '11911110002', 'student', ?)",
+    [planReceptionOnly.id],
+  ).lastInsertRowid;
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api', createApiRouter({ store, accessService, gymService, authService, studentPortalService }));
+  const server = app.listen(0);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    const pubPlansRes = await fetch(`${baseUrl}/api/public/plans`);
+    assert.equal(pubPlansRes.status, 200);
+    const pubPlans = (await pubPlansRes.json()).plans;
+    const pubIds = pubPlans.map((p) => p.id);
+    assert.equal(pubIds.includes(planPublic.id), true);
+    assert.equal(pubIds.includes(planReceptionOnly.id), false);
+    assert.equal(pubIds.includes(planFree.id), false);
+
+    const enrollOptsRes = await fetch(`${baseUrl}/api/public/enrollment-options`);
+    assert.equal(enrollOptsRes.status, 200);
+    const enrollOpts = await enrollOptsRes.json();
+    const enrollIds = enrollOpts.plans.map((p) => p.id);
+    assert.equal(enrollIds.includes(planPublic.id), true);
+    assert.equal(enrollIds.includes(planReceptionOnly.id), false);
+    assert.equal(enrollIds.includes(planFree.id), false);
+
+    const blockedEnrollRes = await fetch(`${baseUrl}/api/public/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Teste Bloqueado',
+        phone: '11922223333',
+        modality_id: modMusc.id,
+        plan_id: planReceptionOnly.id,
+      }),
+    });
+    assert.equal(blockedEnrollRes.status, 400);
+
+    const regularProfileIds = studentPortalService.getStudentProfile(mRegular).plans.map((p) => p.id);
+    assert.equal(regularProfileIds.includes(planPublic.id), true);
+    assert.equal(regularProfileIds.includes(planReceptionOnly.id), false);
+    assert.equal(regularProfileIds.includes(planFree.id), false);
+
+    const kidsProfileIds = studentPortalService.getStudentProfile(mKids).plans.map((p) => p.id);
+    assert.equal(kidsProfileIds.includes(planPublic.id), true);
+    assert.equal(kidsProfileIds.includes(planReceptionOnly.id), true);
+    assert.equal(kidsProfileIds.includes(planFree.id), false);
+
+    accessService.updatePlan(planReceptionOnly.id, {
+      name: planReceptionOnly.name,
+      duration_days: planReceptionOnly.duration_days,
+      price_cents: planReceptionOnly.price_cents,
+      online_available: 1,
+    });
+    const updatedPubPlans = (await (await fetch(`${baseUrl}/api/public/plans`)).json()).plans;
+    assert.equal(updatedPubPlans.some((p) => p.id === planReceptionOnly.id), true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

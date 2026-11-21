@@ -1068,6 +1068,7 @@ async function loadPlans() {
     const extras = [
       p.allowed_start_time && p.allowed_end_time ? `${p.allowed_start_time}–${p.allowed_end_time}` : '',
       p.weekly_limit ? `${p.weekly_limit}x/sem` : '',
+      Number(p.online_available ?? 1) === 0 ? 'Somente recepção' : '',
     ].filter(Boolean).join(' · ');
     return `<li style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
       <span>${escapeHtml(p.name)} · ${p.duration_days} dias · ${fmtMoney(p.price_cents)}${extras ? ` <span class="muted">(${escapeHtml(extras)})</span>` : ''}</span>
@@ -5096,6 +5097,7 @@ function resetPlanForm() {
   const form = document.getElementById('planForm');
   form.reset();
   document.getElementById('plEditId').value = '';
+  if (document.getElementById('plOnlineAvailable')) document.getElementById('plOnlineAvailable').checked = true;
   document.getElementById('btnSavePlan').textContent = 'Criar plano';
   document.getElementById('btnCancelPlanEdit').classList.add('hidden');
 }
@@ -5114,6 +5116,7 @@ document.getElementById('plansList').addEventListener('click', async (e) => {
     if (document.getElementById('plStartTime')) document.getElementById('plStartTime').value = plan.allowed_start_time || '';
     if (document.getElementById('plEndTime')) document.getElementById('plEndTime').value = plan.allowed_end_time || '';
     if (document.getElementById('plWeeklyLimit')) document.getElementById('plWeeklyLimit').value = plan.weekly_limit || '';
+    if (document.getElementById('plOnlineAvailable')) document.getElementById('plOnlineAvailable').checked = Number(plan.online_available ?? 1) === 1;
     const periodSel = document.getElementById('plPeriod');
     const matchedOpt = [...periodSel.options].find((o) => Number(o.value) === Number(plan.duration_days));
     periodSel.value = matchedOpt ? matchedOpt.value : '';
@@ -5151,6 +5154,7 @@ document.getElementById('planForm').addEventListener('submit', async (e) => {
         allowed_start_time: document.getElementById('plStartTime')?.value || null,
         allowed_end_time: document.getElementById('plEndTime')?.value || null,
         weekly_limit: document.getElementById('plWeeklyLimit')?.value ? Number(document.getElementById('plWeeklyLimit').value) : null,
+        online_available: document.getElementById('plOnlineAvailable')?.checked ? 1 : 0,
       };
       if (editId) {
         await api(`/api/plans/${editId}`, {

@@ -152,7 +152,15 @@ export class StudentPortalService {
     );
     if (!row) throw httpError('Aluno não encontrado.', 404);
 
-    const plans = this.store.all('SELECT * FROM plans WHERE active = 1 ORDER BY duration_days ASC, name ASC');
+    const plans = this.store.all(
+      `SELECT *
+       FROM plans
+       WHERE active = 1
+         AND price_cents > 0
+         AND (COALESCE(online_available, 1) = 1 OR id = ?)
+       ORDER BY duration_days ASC, price_cents ASC, name ASC`,
+      [Number(row.plan_id || 0)],
+    );
     const payments = this.store.all(
       `SELECT pay.*, pl.name AS plan_name
        FROM payments pay
