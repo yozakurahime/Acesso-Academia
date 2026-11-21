@@ -142,7 +142,9 @@ export class WhatsappService {
     const token = String(settings?.whatsapp_meta_access_token || '').trim();
     const version = String(settings?.whatsapp_meta_api_version || 'v21.0').trim() || 'v21.0';
     if (!phoneNumberId || !token) {
-      throw new Error('Configure o Phone Number ID e o Access Token da Meta Cloud API em Configurações.');
+      const error = new Error('Configure o Phone Number ID e o Access Token da Meta Cloud API em Configurações.');
+      error.statusCode = 400;
+      throw error;
     }
     const url = `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`;
     const res = await this.fetchFn(url, {
@@ -161,8 +163,11 @@ export class WhatsappService {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const msg = data?.error?.message || `Erro HTTP ${res.status} na Meta Cloud API`;
-      throw new Error(msg);
+      const message = String(data?.error?.message || `Erro HTTP ${res.status} na Meta Cloud API`).split(token).join('[token oculto]');
+      const code = Number.isInteger(data?.error?.code) ? ` (${data.error.code})` : '';
+      const error = new Error(`WhatsApp Meta${code}: ${message}`);
+      error.statusCode = 422;
+      throw error;
     }
     return data;
   }
