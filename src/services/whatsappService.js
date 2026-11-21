@@ -878,7 +878,7 @@ export class WhatsappService {
       kind: 'welcome',
       refKey: `welcome:${member.id}`,
       message,
-      templateName: 'boas_vindas_portal',
+      templateName: 'confirmacao_matricula_portal',
       templateParams: [firstName, portalUrl],
     });
     if (row && this.isReadyToSend()) {
@@ -955,7 +955,7 @@ export class WhatsappService {
         kind: 'due_reminder',
         refKey: `due:${member.valid_until}`,
         message,
-        templateName: 'lembrete_vencimento',
+        templateName: 'aviso_vencimento',
         templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
       });
       if (inserted) queued += 1;
