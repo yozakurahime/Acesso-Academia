@@ -638,6 +638,14 @@
     padding: 5px max(5px, env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
     border-top: 1px solid var(--border);
     background: var(--surface);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .student-page input,
+  .student-page select,
+  .student-page textarea {
+    font-size: 16px;
   }
   .student-tab-btn {
     min-height: 54px;
@@ -667,30 +675,43 @@
   .student-login-feature-copy { display: none; }
   .student-page .login-card { padding: 24px 18px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 19px 19px; }
   .student-login-brand { margin-bottom: 21px; }
+  .student-rail {
+    padding: max(8px, env(safe-area-inset-top)) var(--portal-gutter) 8px;
+  }
+  .student-content { padding-top: 10px; }
   .student-header {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    padding: 12px 13px;
+    gap: 10px;
+    padding: 12px 14px;
     margin-bottom: 10px;
     border-radius: 14px;
   }
   .student-header::after { bottom: -95%; }
-  .student-user { gap: 10px; flex: 1 1 auto; }
+  .student-user { gap: 10px; flex: 1 1 200px; min-width: 0; }
   .student-avatar { width: 42px; border-radius: 12px; font-size: 15px; }
-  .student-name-row h1 { font-size: 19px; }
+  .student-name-row h1 { font-size: 19px; overflow-wrap: anywhere; }
   #stPlanSummary { margin-top: 3px; font-size: 12px; }
-  .student-header-actions { width: auto; flex: none; gap: 6px; }
-  .student-header-actions .btn-sm { min-height: 36px; padding: 6px 9px; font-size: 12px; }
+  .student-header-actions { width: 100%; justify-content: flex-end; gap: 6px; }
+  .student-header-actions .btn-sm { min-height: 36px; padding: 6px 10px; font-size: 12px; }
   #btnStThemeToggle { width: 36px; padding: 5px; }
   .student-quick-summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
     margin-bottom: 12px;
   }
+  .student-quick-summary #stSummaryValidityCard {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .student-quick-summary #stSummaryValidityCard .student-stat-label { margin-right: auto; }
   .student-quick-summary .student-stat-card {
     grid-template-columns: minmax(0, 1fr);
-    padding: 9px 10px;
+    padding: 10px 11px;
     gap: 2px;
     border-radius: 11px;
   }
@@ -698,8 +719,14 @@
   .student-quick-summary .student-stat-label { font-size: 11px; }
   .student-quick-summary .student-stat-card small { font-size: 11px; line-height: 1.25; }
   .student-quick-summary .student-stat-card strong,
-  .student-quick-summary #stSummaryValidityCard strong { font-size: 13px; letter-spacing: -.02em; }
-  .student-quick-summary #stSummaryValidityCard small { font-size: 11px; font-weight: 600; }
+  .student-quick-summary #stSummaryValidityCard strong { font-size: 14px; letter-spacing: -.02em; }
+  .student-quick-summary #stSummaryValidityCard small { font-size: 12px; font-weight: 650; }
+  .student-page dialog {
+    width: calc(100% - 16px);
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    border-radius: 14px;
+  }
   .student-page .panel-header { align-items: flex-start; }
   .student-page .fitness-complete { width: 100%; }
   .student-page .form-grid, #stTabProfile .grid-2 { grid-template-columns: minmax(0, 1fr); }
