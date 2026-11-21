@@ -955,7 +955,7 @@ export class WhatsappService {
         kind: 'due_reminder',
         refKey: `due:${member.valid_until}`,
         message,
-        templateName: 'aviso_vencimento',
+        templateName: 'academia_lembrete_vencimento',
         templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
       });
       if (inserted) queued += 1;
