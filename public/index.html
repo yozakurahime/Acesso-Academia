@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
   <link rel="icon" href="/oxigenio.jpg" />
-  <link rel="stylesheet" href="/styles.css?v=20261121.1" />
-  <link rel="stylesheet" href="/admin.css?v=20261121.1" />
-  <link rel="stylesheet" href="/admin-operations.css?v=20261121.1" />
+  <link rel="stylesheet" href="/styles.css?v=20261121.2" />
+  <link rel="stylesheet" href="/admin.css?v=20261121.2" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261121.2" />
 </head>
 <body class="workspace-app">
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
@@ -440,10 +440,20 @@
           </div>
         </div>
 
-        <div class="panel" id="cashPanel">
+        <div id="cashSubNav" class="settings-subnav" role="tablist" aria-label="Seções do Caixa">
+          <button type="button" class="settings-subnav-btn active" role="tab" aria-selected="true" data-cash-subtab="current">Turno Atual</button>
+          <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="online">Caixa Online (MP)</button>
+          <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="history">Turnos Encerrados</button>
+          <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="charges">Acompanhar Cobranças</button>
+        </div>
+
+        <div class="panel" id="cashPanel" data-cash-subpanel="current">
           <div class="panel-header">
             <h2>Turno atual</h2>
-            <span id="cashBadge" class="badge badge-pending">Fechado</span>
+            <div class="inline-actions">
+              <button type="button" id="btnPrintCurrentCash" class="btn btn-secondary btn-sm hidden">Imprimir parcial</button>
+              <span id="cashBadge" class="badge badge-pending">Fechado</span>
+            </div>
           </div>
           <div id="cashClosedView">
             <div id="cashOpeningNotice" class="alert-banner hidden" role="status">Caixa fechado. Informe o operador e o saldo inicial para continuar o recebimento.</div>
@@ -476,6 +486,13 @@
                   <option value="out">Sangria (Retirada)</option>
                 </select>
                 <input type="number" step="0.01" id="movAmount" aria-label="Valor da movimentação (R$)" placeholder="Valor (R$)" required />
+                <div id="cashMovQuickReasons" class="inline-actions" style="flex-wrap:wrap;gap:6px;">
+                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="in" data-mov-desc="Troco inicial">+ Troco</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Água / Café">Água/Café</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Material de limpeza">Limpeza</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Vale funcionário">Vale</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Sangria p/ banco">Sangria banco</button>
+                </div>
                 <input type="text" id="movDesc" aria-label="Descrição da movimentação" placeholder="Descrição" required />
                 <button type="submit" class="btn btn-primary">Registrar movimentação</button>
               </form>
@@ -516,7 +533,7 @@
           </div>
         </div>
 
-        <div class="panel" id="onlineCashPanel">
+        <div class="panel hidden" id="onlineCashPanel" data-cash-subpanel="online">
           <div class="panel-header">
             <h2>Caixa Online (Mercado Pago)</h2>
             <span class="badge badge-active">Separado do caixa da recepção</span>
@@ -535,7 +552,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        <div class="panel hidden" id="cashHistoryPanel" data-cash-subpanel="history">
           <div class="panel-header">
             <div>
               <h2>Turnos encerrados</h2>
@@ -555,6 +572,7 @@
                 <small id="cashDetailMeta" class="muted"></small>
               </div>
               <div class="inline-actions">
+                <button type="button" id="btnPrintCashDetail" class="btn btn-secondary btn-sm">Imprimir resumo</button>
                 <button type="button" id="btnExportCashDetailCsv" class="btn btn-secondary btn-sm">Exportar CSV</button>
                 <button type="button" id="btnCloseCashDetail" class="btn btn-secondary btn-sm">Fechar</button>
               </div>
@@ -575,7 +593,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        <div class="panel hidden" id="cashChargesPanel" data-cash-subpanel="charges">
           <div class="panel-header">
             <h2>Acompanhar cobranças</h2>
             <div class="inline-actions">
@@ -2599,7 +2617,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261121.1"></script>
-  <script src="/app.js?v=20261121.1"></script>
+  <script src="/receipt-print.js?v=20261121.2"></script>
+  <script src="/app.js?v=20261121.2"></script>
 </body>
 </html>

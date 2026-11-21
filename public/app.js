@@ -3848,6 +3848,81 @@ async function loadOnlineCash() {
     : '<tr><td colspan="4" class="muted">Nenhum pagamento online confirmado ainda.</td></tr>';
 }
 
+
+function activateCashSubtab(sub = 'current') {
+  document.querySelectorAll('#cashSubNav [data-cash-subtab]').forEach((btn) => {
+    const active = btn.dataset.cashSubtab === sub;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('#tab-cash [data-cash-subpanel]').forEach((panel) => {
+    panel.classList.toggle('hidden', panel.dataset.cashSubpanel !== sub);
+  });
+}
+
+document.getElementById('cashSubNav')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-cash-subtab]');
+  if (!btn) return;
+  activateCashSubtab(btn.dataset.cashSubtab || 'current');
+});
+
+document.getElementById('cashMovQuickReasons')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-mov-desc]');
+  if (!btn) return;
+  const typeEl = document.getElementById('movType');
+  const descEl = document.getElementById('movDesc');
+  const amtEl = document.getElementById('movAmount');
+  if (typeEl && btn.dataset.movType) typeEl.value = btn.dataset.movType;
+  if (descEl) descEl.value = btn.dataset.movDesc || '';
+  amtEl?.focus();
+});
+
+function printCashSessionSummary(session) {
+  if (!session) {
+    showToast('Nenhum turno de caixa para imprimir.', true);
+    return;
+  }
+  const methodsHtml = (session.totals_by_method || [])
+    .map((m) => `<tr><td>${escapeHtml(methodName(m.method))}</td><td style="text-align:right;">${escapeHtml(fmtMoney(m.amount_cents))}</td></tr>`)
+    .join('') || '<tr><td colspan="2">Sem entradas por forma</td></tr>';
+  const diffCents = session.closing_cents != null ? (session.closing_cents - session.expected_cents) : null;
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Resumo Caixa #${session.id}</title>
+    <style>body{font-family:Arial,sans-serif;max-width:340px;margin:16px auto;font-size:12px;color:#111}h2{margin:0 0 4px;font-size:15px}table{width:100%;border-collapse:collapse;margin:8px 0}td,th{padding:4px 0;border-bottom:1px dashed #ccc}hr{border:0;border-top:1px dashed #999;margin:10px 0}</style>
+    </head><body>
+      <h2>Fechamento de Caixa — Turno #${session.id}</h2>
+      <div>Operador: <strong>${escapeHtml(session.staff_name || 'Operador')}</strong></div>
+      <div>Abertura: ${escapeHtml(fmtDateTime(session.opened_at))}</div>
+      ${session.closed_at ? `<div>Fechamento: ${escapeHtml(fmtDateTime(session.closed_at))}</div>` : '<div>Status: Em aberto (parcial)</div>'}
+      <hr>
+      <table>
+        <tr><td>Abertura</td><td style="text-align:right;">${escapeHtml(fmtMoney(session.opening_cents))}</td></tr>
+        <tr><td>Entradas totais</td><td style="text-align:right;">${escapeHtml(fmtMoney(session.total_in_cents))}</td></tr>
+        <tr><td>Saídas / Sangrias</td><td style="text-align:right;">${escapeHtml(fmtMoney(session.total_out_cents))}</td></tr>
+        <tr><td><strong>Esperado na gaveta</strong></td><td style="text-align:right;"><strong>${escapeHtml(fmtMoney(session.expected_cents))}</strong></td></tr>
+        ${session.closing_cents != null ? `<tr><td>Conferido</td><td style="text-align:right;">${escapeHtml(fmtMoney(session.closing_cents))}</td></tr>` : ''}
+        ${diffCents != null ? `<tr><td>Diferença</td><td style="text-align:right;">${escapeHtml(fmtMoney(diffCents))}</td></tr>` : ''}
+      </table>
+      <strong>Por forma de pagamento</strong>
+      <table>${methodsHtml}</table>
+      <script>window.onload=()=>{window.print();}</script>
+    </body></html>`;
+  const w = window.open('', '_blank', 'width=420,height=640');
+  if (!w) {
+    showToast('Permita pop-ups para imprimir o resumo do caixa.', true);
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+document.getElementById('btnPrintCurrentCash')?.addEventListener('click', () => {
+  printCashSessionSummary(state.cashSession);
+});
+document.getElementById('btnPrintCashDetail')?.addEventListener('click', () => {
+  printCashSessionSummary(selectedClosedCashSession);
+});
+
 async function loadCash() {
   await Promise.all([loadCurrentCash(), loadOnlineCash(), loadCashHistory()]);
 }
