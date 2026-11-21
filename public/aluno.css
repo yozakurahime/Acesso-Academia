@@ -623,6 +623,9 @@
     position: static;
     min-height: 0;
     padding: max(11px, env(safe-area-inset-top)) var(--portal-gutter) 11px;
+    background: #07080b;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
   .student-rail .student-brand { margin: 0; }
   .student-rail .student-brand img { width: 36px; height: 36px; border-radius: 9px; }

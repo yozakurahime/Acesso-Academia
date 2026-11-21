@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 
@@ -72,6 +72,19 @@ self.addEventListener('fetch', (event) => {
     (url.pathname === '/aluno' || url.pathname.startsWith('/aluno/'));
 
   if (isStudentNavigate) {
+    event.respondWith(networkFirstNavigate(request, url));
+    return;
+  }
+
+const NETWORK_FIRST_SHELL_ASSETS = new Set([
+  '/aluno.css',
+  '/styles.css',
+  '/aluno.js',
+  '/exercise-catalog.js',
+  '/exercises.js',
+]);
+
+  if (NETWORK_FIRST_SHELL_ASSETS.has(url.pathname)) {
     event.respondWith(networkFirstNavigate(request, url));
     return;
   }
