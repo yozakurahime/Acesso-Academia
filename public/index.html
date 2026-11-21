@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
   <link rel="icon" href="/oxigenio.jpg" />
-  <link rel="stylesheet" href="/styles.css?v=20261120.12" />
-  <link rel="stylesheet" href="/admin.css?v=20261120.12" />
-  <link rel="stylesheet" href="/admin-operations.css?v=20261120.12" />
+  <link rel="stylesheet" href="/styles.css?v=20261121.1" />
+  <link rel="stylesheet" href="/admin.css?v=20261121.1" />
+  <link rel="stylesheet" href="/admin-operations.css?v=20261121.1" />
 </head>
 <body class="workspace-app">
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
@@ -392,15 +392,20 @@
         </div>
 
         <div class="panel" id="membersListPanel">
-          <div class="panel-header">
+          <div class="panel-header" style="flex-wrap:wrap;gap:12px;">
             <h2>Lista de Alunos</h2>
-            <input type="search" id="memberSearch" class="search-input" aria-label="Buscar por nome, CPF ou telefone" placeholder="Buscar por nome, CPF ou telefone" />
+            <div class="quick-search-field" style="flex:1;min-width:260px;max-width:460px;">
+              <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+              <input type="search" id="memberSearch" aria-label="Buscar por nome, #ID, CPF, telefone, plano ou convênio" placeholder="Buscar por nome, #ID, CPF, telefone, plano..." autocomplete="off" />
+            </div>
           </div>
           <div id="memberFilterChips" class="filter-chips">
             <button type="button" class="chip active" data-filter="all">Todos</button>
             <button type="button" class="chip" data-filter="active">Ativos</button>
             <button type="button" class="chip" data-filter="blocked">Bloqueados</button>
             <button type="button" class="chip" data-filter="pending">Pendentes</button>
+            <button type="button" class="chip" data-filter="expired">Vencidos</button>
+            <button type="button" class="chip" data-filter="partner">Convênios</button>
             <button type="button" class="chip" data-filter="noface">Sem FaceID</button>
           </div>
           <div class="table-wrap">
@@ -1675,6 +1680,7 @@
                   Hoje: <strong id="waDailyCounter">0 / 40</strong> · Na fila: <strong id="waQueueCounter">0</strong>
                 </div>
               </div>
+              <p id="waQueuePausedReason" class="muted hidden"></p>
 
               <div class="inline-actions" style="margin: 12px 0;">
                 <button id="btnWaConnect" type="button" class="btn btn-primary">Conectar / Gerar QR Code</button>
@@ -1792,7 +1798,16 @@
                 <button id="btnWaTest" type="button" class="btn btn-secondary">Enviar mensagem de teste</button>
               </div>
 
-              <h4 class="settings-section-title">Últimos registros do WhatsApp</h4>
+              <div class="inline-actions">
+                <h4 class="settings-section-title">Registros do WhatsApp</h4>
+                <select id="waLogStatus" aria-label="Filtrar registros do WhatsApp">
+                  <option value="">Últimos registros</option>
+                  <option value="queued">Na fila</option>
+                  <option value="failed">Erros</option>
+                  <option value="sent">Enviados</option>
+                  <option value="skipped">Ignorados</option>
+                </select>
+              </div>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>Data/Hora</th><th>Aluno / Número</th><th>Tipo</th><th>Status</th></tr></thead>
@@ -2584,7 +2599,7 @@
   </dialog>
   <script src="/exercises.js?v=20261114.2"></script>
   <script src="/exercise-catalog.js?v=20261114.5"></script>
-  <script src="/receipt-print.js?v=20261120.12"></script>
-  <script src="/app.js?v=20261120.12"></script>
+  <script src="/receipt-print.js?v=20261121.1"></script>
+  <script src="/app.js?v=20261121.1"></script>
 </body>
 </html>

@@ -1683,8 +1683,16 @@ function numericSearch(value) {
 }
 
 function matchMemberSearch(entry, query, digits) {
-  return entry.name.includes(query) || entry.document.includes(query) || entry.phone.includes(query) ||
-    Boolean(digits && (entry.documentDigits.includes(digits) || entry.phoneDigits.includes(digits)));
+  if (!query) return true;
+  const cleanQuery = query.startsWith('#') ? query.slice(1).trim() : query;
+  if (!cleanQuery) return true;
+  if (entry.idText === cleanQuery) return true;
+  if (digits && (entry.documentDigits.includes(digits) || entry.phoneDigits.includes(digits) || entry.idText === digits)) {
+    return true;
+  }
+  const tokens = cleanQuery.split(/\s+/).filter(Boolean);
+  const blob = entry.searchBlob || `${entry.name} ${entry.document} ${entry.phone}`;
+  return tokens.every((tok) => blob.includes(tok) || (digits && tok === digits && (entry.documentDigits.includes(tok) || entry.phoneDigits.includes(tok))));
 }
 
 function populateMemberDatalist(text) {
@@ -2166,17 +2174,35 @@ function updateMemberFilterChips() {
 }
 
 function renderMembersTable() {
-  const q = normalizeSearch(document.getElementById('memberSearch').value);
-  const digits = numericSearch(q);
+  const rawVal = document.getElementById('memberSearch').value;
+  const q = normalizeSearch(rawVal);
+  const digits = numericSearch(q.startsWith('#') ? q.slice(1) : q);
   const todayIso = billingDateFormat.format(new Date());
 
-  state.filteredMembers = state.memberSearchIndex.filter((entry) => {
+  const matchedEntries = state.memberSearchIndex.filter((entry) => {
     const m = entry.member;
     const status = m.access_status || m.status;
     if (['active', 'blocked', 'pending'].includes(state.memberFilter) && status !== state.memberFilter) return false;
     if (state.memberFilter === 'noface' && m.face_registered) return false;
+    if (state.memberFilter === 'partner' && !m.partner_provider) return false;
+    if (state.memberFilter === 'expired' && (m.partner_provider || !m.valid_until || m.valid_until >= todayIso)) return false;
     return !q || matchMemberSearch(entry, q, digits);
-  }).map((entry) => entry.member);
+  });
+
+  if (q) {
+    const cleanQ = q.startsWith('#') ? q.slice(1).trim() : q;
+    matchedEntries.sort((a, b) => {
+      const score = (e) => {
+        if (e.idText === cleanQ) return 0;
+        if (e.name.startsWith(cleanQ)) return 1;
+        if (digits && e.documentDigits.startsWith(digits)) return 2;
+        return 3;
+      };
+      return score(a) - score(b);
+    });
+  }
+
+  state.filteredMembers = matchedEntries.map((entry) => entry.member);
 
   const visible = state.filteredMembers.slice(0, state.memberLimit);
   const statusLabels = {
@@ -2219,8 +2245,18 @@ function renderMembersTable() {
         .join('')
     : `<tr><td colspan="6" class="empty-cell">
         <div>Nenhum aluno encontrado para este filtro.</div>
-        ${q ? `<div style="margin-top:8px;"><button type="button" id="btnCreateFromEmptySearch" class="btn btn-primary btn-sm">+ Cadastrar "${escapeHtml(document.getElementById('memberSearch').value.trim())}"</button></div>` : ''}
+        ${q || state.memberFilter !== 'all' ? `<div class="inline-actions" style="justify-content:center;margin-top:8px;">
+          ${state.memberFilter !== 'all' ? '<button type="button" id="btnResetMemberFilterSearch" class="btn btn-secondary btn-sm">Buscar em Todos</button>' : ''}
+          ${q ? `<button type="button" id="btnCreateFromEmptySearch" class="btn btn-primary btn-sm">+ Cadastrar "${escapeHtml(document.getElementById('memberSearch').value.trim())}"</button>` : ''}
+        </div>` : ''}
       </td></tr>`;
+
+  document.getElementById('btnResetMemberFilterSearch')?.addEventListener('click', () => {
+    state.memberFilter = 'all';
+    state.memberLimit = 50;
+    updateMemberFilterChips();
+    renderMembersTable();
+  });
 
   document.getElementById('btnCreateFromEmptySearch')?.addEventListener('click', () => {
     openNewMemberWithQuery(document.getElementById('memberSearch').value.trim());
@@ -2233,14 +2269,24 @@ function renderMembersTable() {
 }
 
 function rebuildMemberSearchIndex() {
-  memberCounts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, noface: 0 };
+  const todayIso = billingDateFormat.format(new Date());
+  memberCounts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, noface: 0 };
   state.memberSearchIndex = state.allMembers.map((member) => {
     const status = member.access_status || member.status;
     if (['active', 'blocked', 'pending'].includes(status)) memberCounts[status]++;
     if (!member.face_registered) memberCounts.noface++;
+    if (member.partner_provider) memberCounts.partner++;
+    if (!member.partner_provider && member.valid_until && member.valid_until < todayIso) memberCounts.expired++;
+    const name = normalizeSearch(member.name);
     const document = normalizeSearch(member.document);
     const phone = normalizeSearch(member.phone);
-    return { member, name: normalizeSearch(member.name), document, phone, documentDigits: numericSearch(document), phoneDigits: numericSearch(phone) };
+    const idText = String(member.id || '');
+    const wellhubId = normalizeSearch(member.wellhub_id);
+    const partner = normalizeSearch(member.partner_provider);
+    const plan = normalizeSearch(member.plan_name);
+    const modality = normalizeSearch(member.modality_name);
+    const searchBlob = `${name} ${document} ${phone} #${idText} ${idText} ${wellhubId} ${partner} ${plan} ${modality}`.trim();
+    return { member, name, document, phone, idText, searchBlob, documentDigits: numericSearch(document), phoneDigits: numericSearch(phone) };
   });
 }
 
@@ -5323,6 +5369,9 @@ function renderWhatsappStatus(st) {
   phoneInfo.textContent = st.phone ? `(${isMeta ? `ID ${st.phone}` : st.phone})` : st.lastError ? `— ${st.lastError}` : '';
   document.getElementById('waDailyCounter').textContent = `${st.sentToday} / ${st.dailyLimit}`;
   document.getElementById('waQueueCounter').textContent = String(st.queueLength);
+  const pausedReason = document.getElementById('waQueuePausedReason');
+  pausedReason.textContent = st.queuePausedReason || '';
+  pausedReason.classList.toggle('hidden', !st.queuePausedReason);
 
   if (!isMeta && st.status === 'qr' && st.qrDataUrl) {
     qrImg.src = st.qrDataUrl;
@@ -5356,7 +5405,9 @@ function renderWhatsappStatus(st) {
 }
 
 async function loadWhatsappStatus() {
-  const [st, logs] = await Promise.all([api('/api/whatsapp/status'), api('/api/whatsapp/logs?limit=25')]);
+  const selectedStatus = document.getElementById('waLogStatus')?.value || '';
+  const logQuery = selectedStatus ? `?status=${encodeURIComponent(selectedStatus)}&limit=200` : '?limit=25';
+  const [st, logs] = await Promise.all([api('/api/whatsapp/status'), api(`/api/whatsapp/logs${logQuery}`)]);
   renderWhatsappStatus(st);
   const kindLabels = {
     payment: 'Pagamento',
@@ -5390,6 +5441,10 @@ async function loadWhatsappStatus() {
         .join('')
     : '<tr><td colspan="4" class="empty-cell">Nenhum envio registrado.</td></tr>';
 }
+
+document.getElementById('waLogStatus')?.addEventListener('change', () => {
+  loadWhatsappStatus().catch((error) => showToast(error.message, true));
+});
 
 document.getElementById('btnWaConnect').addEventListener('click', async (e) => {
   await withLoading(e.currentTarget, async () => {
