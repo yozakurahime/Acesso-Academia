@@ -327,6 +327,8 @@ export class DatabaseStore {
         kind TEXT NOT NULL,
         ref_key TEXT,
         message TEXT NOT NULL,
+        template_name TEXT,
+        template_params TEXT,
         status TEXT NOT NULL DEFAULT 'queued',
         error TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -841,6 +843,10 @@ export class DatabaseStore {
     this.ensureColumns('payments', {
       staff_id: 'INTEGER',
       enrollment_ends_on: 'TEXT',
+    });
+    this.ensureColumns('whatsapp_logs', {
+      template_name: 'TEXT',
+      template_params: 'TEXT',
     });
     this.ensureColumns('gateway_charges', {
       membership_charge_id: 'INTEGER REFERENCES membership_charges(id)',

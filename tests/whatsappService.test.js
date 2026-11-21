@@ -298,3 +298,48 @@ test('WhatsappService opera no modo API Oficial Meta (Cloud API) para envio e we
   assert.equal(sentCalls.length, 2);
   assert.equal(sentCalls[1].body.text.body, 'Oi! Aqui é a Hime pela API oficial.');
 });
+
+test('fila pausada não dispara mensagens e modo Meta envia apenas com modelo aprovado', async () => {
+  const store = await DatabaseStore.create(null);
+  const sends = [];
+  const whatsappService = new WhatsappService(store, {
+    sleepFn: async () => {},
+    fetchFn: async (_url, init) => {
+      sends.push(JSON.parse(init.body));
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.tpl.1' }] }) };
+    },
+  });
+  whatsappService.status = 'connected';
+  whatsappService.sock = { sendMessage: async () => sends.push('baileys') };
+  store.run("INSERT INTO whatsapp_logs (phone, kind, message, status) VALUES ('556284211039', 'due_reminder', 'Vencimento', 'queued')");
+
+  await whatsappService.processQueue();
+  assert.deepEqual(sends, []);
+  assert.equal(whatsappService.countQueued(), 1);
+  assert.equal(whatsappService.getStatus().queuePausedReason, 'Envios automáticos desativados.');
+
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_notify_payment: '1',
+    whatsapp_provider: 'meta_cloud',
+    whatsapp_meta_phone_number_id: '123456789',
+    whatsapp_meta_access_token: 'token-teste',
+  });
+  assert.equal(whatsappService.enqueueMessage({ phone: '62984211039', kind: 'due_reminder', message: 'Sem template' }), null);
+
+  const memberId = store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until) VALUES ('Maria Meta', '52998224725', '62984211039', 'active', '2026-12-20')",
+  ).lastInsertRowid;
+  const member = store.get('SELECT * FROM members WHERE id = ?', [memberId]);
+  await whatsappService.enqueuePaymentReceipt({
+    member,
+    payment: { id: 99, amount_cents: 10000 },
+    plan: { name: 'Musculação Mensal' },
+  });
+  await new Promise((r) => setTimeout(r, 40));
+  await whatsappService.processQueue();
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0].type, 'template');
+  assert.equal(sends[0].template.name, 'confirmacao_pagamento');
+  assert.equal(sends[0].template.components[0].parameters.length, 4);
+});

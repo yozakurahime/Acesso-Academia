@@ -172,6 +172,42 @@ export class WhatsappService {
     return data;
   }
 
+  async sendMetaTemplate(phone, templateName, params = [], language = 'pt_BR', settings = this.store.getSettings()) {
+    const normalized = normalizeBrPhone(phone);
+    if (!normalized) throw new Error('Número de WhatsApp inválido.');
+    const phoneNumberId = String(settings?.whatsapp_meta_phone_number_id || '').trim();
+    const token = String(settings?.whatsapp_meta_access_token || '').trim();
+    const version = String(settings?.whatsapp_meta_api_version || 'v21.0').trim() || 'v21.0';
+    if (!phoneNumberId || !token) {
+      throw new Error('Configure o Phone Number ID e o Access Token da Meta Cloud API em Configurações.');
+    }
+    const cleanParams = Array.isArray(params) ? params : [];
+    const components = cleanParams.length
+      ? [{ type: 'body', parameters: cleanParams.map((val) => ({ type: 'text', text: String(val ?? '').trim() || '-' })) }]
+      : [];
+    const url = `https://graph.facebook.com/${encodeURIComponent(version)}/${encodeURIComponent(phoneNumberId)}/messages`;
+    const res = await this.fetchFn(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: normalized,
+        type: 'template',
+        template: { name: String(templateName || '').trim(), language: { code: language }, ...(components.length ? { components } : {}) },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = String(data?.error?.message || `Erro HTTP ${res.status} na Meta Cloud API`).split(token).join('[token oculto]');
+      const code = Number.isInteger(data?.error?.code) ? ` (${data.error.code})` : '';
+      const error = new Error(`WhatsApp Meta${code}: ${message}`);
+      error.statusCode = 422;
+      throw error;
+    }
+    return data;
+  }
+
   async _downloadMetaMedia(mediaId, settings = this.store.getSettings()) {
     const token = String(settings?.whatsapp_meta_access_token || '').trim();
     const version = String(settings?.whatsapp_meta_api_version || 'v21.0').trim() || 'v21.0';
@@ -366,6 +402,7 @@ export class WhatsappService {
       phone: metaMode ? (settings.whatsapp_meta_phone_number_id || null) : this.connectedPhone,
       qrDataUrl: metaMode ? null : this.qrDataUrl,
       queueLength: this.countQueued(),
+      queuePausedReason: settings.whatsapp_enabled !== '1' ? 'Envios automáticos desativados.' : null,
       sentToday: this.countSentToday(),
       dailyLimit: Math.max(1, Number(settings.whatsapp_daily_limit || 40)),
       lastError: this.lastError,
@@ -373,14 +410,17 @@ export class WhatsappService {
     };
   }
 
-  listLogs(limit = 40) {
+  listLogs(limit = 40, status = '') {
+    const safeLimit = Math.max(1, Math.min(200, Number(limit) || 40));
+    const selectedStatus = ['queued', 'sent', 'failed', 'skipped'].includes(status) ? status : '';
     return this.store.all(
       `SELECT wl.*, m.name AS member_name
        FROM whatsapp_logs wl
        LEFT JOIN members m ON m.id = wl.member_id
+       ${selectedStatus ? 'WHERE wl.status = ?' : ''}
        ORDER BY wl.id DESC
        LIMIT ?`,
-      [Number(limit)],
+      selectedStatus ? [selectedStatus, safeLimit] : [safeLimit],
     );
   }
 
@@ -711,7 +751,8 @@ export class WhatsappService {
     return false;
   }
 
-  enqueueMessage({ memberId = null, phone, kind, refKey = null, message }) {
+  enqueueMessage({ memberId = null, phone, kind, refKey = null, message, templateName = null, templateParams = null }) {
+    if (this.isMetaCloudMode() && !templateName) return null;
     const normalizedPhone = normalizeBrPhone(phone);
     if (!normalizedPhone) return null;
     if (!message?.trim()) return null;
@@ -748,9 +789,9 @@ export class WhatsappService {
     }
 
     const res = this.store.run(
-      `INSERT INTO whatsapp_logs (member_id, phone, kind, ref_key, message, status)
-       VALUES (?, ?, ?, ?, ?, 'queued')`,
-      [memberId, normalizedPhone, kind, refKey, message.trim()],
+      `INSERT INTO whatsapp_logs (member_id, phone, kind, ref_key, message, template_name, template_params, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')`,
+      [memberId, normalizedPhone, kind, refKey, message.trim(), templateName || null, Array.isArray(templateParams) ? JSON.stringify(templateParams) : null],
     );
     return this.store.get('SELECT * FROM whatsapp_logs WHERE id = ?', [res.lastInsertRowid]);
   }
@@ -778,6 +819,8 @@ export class WhatsappService {
       kind: 'payment',
       refKey: payment?.id ? `pay:${payment.id}` : null,
       message,
+      templateName: 'confirmacao_pagamento',
+      templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], formatMoneyBr(payment?.amount_cents || 0), plan?.name || 'Mensalidade', formatDateBr(member.valid_until) || '-'],
     });
     if (row && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
@@ -835,6 +878,8 @@ export class WhatsappService {
       kind: 'welcome',
       refKey: `welcome:${member.id}`,
       message,
+      templateName: 'boas_vindas_portal',
+      templateParams: [firstName, portalUrl],
     });
     if (row && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
@@ -910,6 +955,8 @@ export class WhatsappService {
         kind: 'due_reminder',
         refKey: `due:${member.valid_until}`,
         message,
+        templateName: 'lembrete_vencimento',
+        templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
       });
       if (inserted) queued += 1;
     }
@@ -955,6 +1002,8 @@ export class WhatsappService {
         kind: 'overdue_reminder',
         refKey: `overdue:${member.valid_until}`,
         message,
+        templateName: 'cobranca_vencida',
+        templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
       });
       if (inserted) queued += 1;
     }
@@ -1249,6 +1298,8 @@ export class WhatsappService {
         kind: 'winback',
         refKey: `winback:${member.valid_until}`,
         message,
+        templateName: 'reativacao_aluno',
+        templateParams: [firstName, String(member.valid_until ? Math.max(1, Math.round((now.getTime() - new Date(`${member.valid_until}T12:00:00`).getTime()) / 86400000)) : 30)],
       });
       if (inserted) queued += 1;
     }
@@ -1290,6 +1341,8 @@ export class WhatsappService {
         kind: 'class_reminder',
         refKey: `class_reminder:${b.id}`,
         message,
+        templateName: 'lembrete_aula',
+        templateParams: [firstName, b.class_name || 'Aula', b.schedule || 'hoje'],
       });
       if (inserted) queued += 1;
     }
@@ -1298,17 +1351,7 @@ export class WhatsappService {
 
   async runScheduledCampaigns({ ignoreWindow = false, now = new Date() } = {}) {
     const settings = this.store.getSettings();
-    if (settings.whatsapp_enabled !== '1') {
-      return {
-        dueQueued: 0,
-        inactiveQueued: 0,
-        birthdayQueued: 0,
-        workoutReviewQueued: 0,
-        winBackQueued: 0,
-        classReminderQueued: 0,
-        skippedReason: 'disabled',
-      };
-    }
+    if (settings.whatsapp_enabled !== '1') { return { dueQueued: 0, inactiveQueued: 0, birthdayQueued: 0, workoutReviewQueued: 0, winBackQueued: 0, classReminderQueued: 0, skippedReason: 'disabled' }; }
     if (!ignoreWindow && !this.isWithinAllowedWindow(settings, now)) {
       return {
         dueQueued: 0,
@@ -1385,6 +1428,7 @@ export class WhatsappService {
   async processQueue() {
     if (this.queueRunning) return;
     const initSettings = this.store.getSettings();
+    if (initSettings.whatsapp_enabled !== '1') return;
     const metaModeInit = this.isMetaCloudMode(initSettings);
     if (!metaModeInit && (this.status !== 'connected' || !this.sock)) return;
     if (metaModeInit && !this.isReadyToSend(initSettings)) return;
@@ -1414,7 +1458,7 @@ export class WhatsappService {
     try {
       const automatedPlaceholders = AUTOMATED_CAMPAIGN_KINDS.map(() => '?').join(', ');
       let sentInBatch = 0;
-      while (!this.manualDisconnect && this.isReadyToSend(this.store.getSettings())) {
+      while (!this.manualDisconnect && this.isReadyToSend(this.store.getSettings()) && this.store.getSettings().whatsapp_enabled === '1') {
         const settings = this.store.getSettings();
         const metaMode = this.isMetaCloudMode(settings);
         const dailyLimit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
@@ -1429,7 +1473,7 @@ export class WhatsappService {
 
         try {
           if (metaMode) {
-            await withTimeout(this.sendViaMetaCloud(next.phone, next.message, settings), 15000, 'sendViaMetaCloud');
+            if (next.template_name) { let tplParams = []; if (next.template_params) { try { tplParams = JSON.parse(next.template_params); } catch {} } await withTimeout(this.sendMetaTemplate(next.phone, next.template_name, tplParams, 'pt_BR', settings), 15000, 'sendMetaTemplate'); } else { this.store.run("UPDATE whatsapp_logs SET status = 'skipped', error = 'Mensagem sem modelo aprovado para API Meta' WHERE id = ?", [next.id]); continue; }
           } else {
             let cached = this.verifiedJids.get(next.phone);
             if (!cached || Date.now() - cached.checkedAt > 86400000) {
