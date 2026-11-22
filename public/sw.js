@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 
@@ -148,11 +148,12 @@ async function networkFirstNavigate(request, url) {
 
 async function staleWhileRevalidateShell(event, request, url) {
   const cache = await caches.open(SHELL_CACHE);
-  const cached = await cache.match(url.pathname, { ignoreSearch: true });
+  const cacheKey = url.search ? request : url.pathname;
+  const cached = await cache.match(cacheKey, { ignoreSearch: !url.search });
 
   const fetchAndUpdate = fetch(request).then(async (response) => {
     if (response && response.ok) {
-      await cache.put(url.pathname, response.clone());
+      await cache.put(cacheKey, response.clone());
     }
     return response;
   });
