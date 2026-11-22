@@ -23,7 +23,7 @@
   </script>
   <link rel="stylesheet" href="/styles.css?v=20261115.14" />
   <link rel="stylesheet" href="/aluno.css?v=20261122.1" />
-  <link rel="stylesheet" href="/professor.css?v=20261122.2" />
+  <link rel="stylesheet" href="/professor.css?v=20261122.3" />
 </head>
 <body class="student-page">
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
@@ -86,7 +86,7 @@
         <img src="/oxigenio.jpg" alt="" width="48" height="48" />
         <span><strong>Oxigênio</strong><small>Portal do Professor</small></span>
       </div>
-      <nav class="student-tabs" role="tablist" aria-label="Navegação do Portal do Professor">
+      <nav class="student-tabs prof-tabs" role="tablist" aria-label="Navegação do Portal do Professor">
         <button type="button" class="student-tab-btn active" role="tab" data-prof-tab="students" aria-selected="true">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg>Treinos
         </button>
@@ -128,6 +128,7 @@
 
       <section id="profStatsRow" class="student-quick-summary" aria-label="Resumo do professor"></section>
 
+      <main>
       <!-- ABA ALUNOS & TREINOS -->
       <section id="profTabStudents" class="panel">
         <div class="panel-header">
@@ -329,6 +330,7 @@
           <button type="submit" class="btn btn-primary">Salvar nova senha</button>
         </form>
       </section>
+      </main>
     </div>
   </div>
 

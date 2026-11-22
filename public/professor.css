@@ -102,3 +102,9 @@
   background: #000;
   margin-bottom: 10px;
 }
+
+@media (max-width: 900px) {
+  .prof-tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
