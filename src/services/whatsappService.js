@@ -1462,7 +1462,9 @@ export class WhatsappService {
         const settings = this.store.getSettings();
         const metaMode = this.isMetaCloudMode(settings);
         const dailyLimit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
-        const allowAutomated = this.countSentToday() < dailyLimit && this.isWithinAllowedWindow(settings);
+        const allowAutomated = metaMode
+          ? this.isWithinAllowedWindow(settings)
+          : (this.countSentToday() < dailyLimit && this.isWithinAllowedWindow(settings));
         const next = allowAutomated
           ? this.store.get(`SELECT * FROM whatsapp_logs WHERE status = 'queued' ORDER BY id ASC LIMIT 1`)
           : this.store.get(
@@ -1509,7 +1511,9 @@ export class WhatsappService {
           );
 
           sentInBatch += 1;
-          if (sentInBatch % 8 === 0) {
+          if (metaMode) {
+            await sleepCancelable(250);
+          } else if (sentInBatch % 8 === 0) {
             const batchPauseMs = 180000 + Math.floor(Math.random() * 90000);
             await sleepCancelable(batchPauseMs);
           } else {
