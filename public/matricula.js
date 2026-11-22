@@ -155,6 +155,55 @@
     formError.textContent = '';
   }
 
+  function extractPlanPeriodLabel(plan) {
+    const name = String(plan?.name || '');
+    const m = name.match(/\b(di[aá]ria|semanal|quinzenal|mensal|bimestral|trimestral|quadrimestral|semestral|anual)\b/i);
+    if (m) return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+    const d = Number(plan?.duration_days || 0);
+    if (d <= 1) return 'Diária';
+    if (d === 7) return 'Semanal';
+    if (d === 15) return 'Quinzenal';
+    if (d >= 28 && d <= 31) return 'Mensal';
+    if (d >= 58 && d <= 62) return 'Bimestral';
+    if (d >= 88 && d <= 93) return 'Trimestral';
+    if (d >= 175 && d <= 186) return 'Semestral';
+    if (d >= 360 && d <= 366) return 'Anual';
+    return `${d} dias`;
+  }
+
+  function populatePlansForModality(preferredPlanId = null) {
+    const allPlans = optionsData.plans || [];
+    const modId = Number(modalitySelect.value || 0);
+    const mod = optionsData.modalities.find((m) => Number(m.id) === modId);
+    const modNorm = normalizeText(mod?.name || '');
+    const modKeywords = modNorm
+      .split(/[\s+/,-]+/)
+      .filter((w) => w.length >= 4 && !['para', 'adulto', 'infantil', 'geral', 'livre'].includes(w));
+
+    const prevSelected = preferredPlanId || planSelect.value;
+    let matching = allPlans;
+    if (modNorm) {
+      const direct = allPlans.filter((p) => {
+        const pn = normalizeText(p.name);
+        if (pn.includes(modNorm)) return true;
+        return modKeywords.some((kw) => pn.includes(kw));
+      });
+      if (direct.length > 0) matching = direct;
+    }
+
+    planSelect.innerHTML = '';
+    for (const p of matching) {
+      const opt = document.createElement('option');
+      opt.value = String(p.id);
+      const period = extractPlanPeriodLabel(p);
+      opt.textContent = `${period} — ${formatMoney(p.price_cents)} (${p.name})`;
+      planSelect.appendChild(opt);
+    }
+    if (prevSelected && matching.some((p) => String(p.id) === String(prevSelected))) {
+      planSelect.value = String(prevSelected);
+    }
+  }
+
   function populateClassesForModality() {
     const modId = Number(modalitySelect.value || 0);
     const mod = optionsData.modalities.find((m) => Number(m.id) === modId);
@@ -286,6 +335,7 @@
       planSelect.disabled = false;
       syncModalityFromPlan();
       populateClassesForModality();
+      populatePlansForModality(requestedPlan);
       updateModeUI();
     } catch {
       modalitySelect.innerHTML = '<option value="">Erro ao carregar</option>';
@@ -297,6 +347,7 @@
 
   modalitySelect.addEventListener('change', () => {
     populateClassesForModality();
+    populatePlansForModality();
     updateModeUI();
   });
   classSelect.addEventListener('change', updateModeUI);

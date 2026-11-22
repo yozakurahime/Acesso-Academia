@@ -347,7 +347,13 @@
       <p id="stPayStatusLine" class="muted" style="margin-bottom:12px;"></p>
       <div id="stFinancialCards" class="student-financial-grid"></div>
       <div class="form-grid">
-        <label>Escolha o plano para renovar
+        <label>1. Modalidade / Plano
+          <select id="stPayCategory"></select>
+        </label>
+        <label id="stPayClassWrap" class="hidden">2. Turma / Horário
+          <select id="stPayClass"></select>
+        </label>
+        <label>Periodicidade (Mensal, Bimestral, etc.)
           <select id="stPayPlan"></select>
         </label>
         <label>E-mail (para assinatura no cartão)
@@ -528,6 +534,6 @@
   </dialog>
 
   <script src="/exercises.js?v=20261115.1" defer></script>
-  <script src="/aluno.js?v=20261121.5" defer></script>
+  <script src="/aluno.js?v=20261122.1" defer></script>
 </body>
 </html>

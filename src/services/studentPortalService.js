@@ -188,6 +188,16 @@ export class StudentPortalService {
        ORDER BY c.name ASC`,
       [Number(memberId)],
     );
+    const classes = this.store.all(
+      `SELECT c.id, c.name, c.modality_id, mod.name AS modality_name, c.schedule, c.capacity,
+              COALESCE(c.allow_new_enrollments, 1) AS allow_new_enrollments,
+              COALESCE(c.online_enrollment_mode, 'auto') AS online_enrollment_mode,
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
+       FROM classes c
+       LEFT JOIN modalities mod ON mod.id = c.modality_id
+       WHERE c.active = 1
+       ORDER BY c.name ASC`,
+    );
     const workouts = this.gymService.listWorkoutsByMember(memberId, { activeOnly: true });
     const settings = this.store.getSettings();
     const gymName = settings.gym_name || 'Academia Oxigênio';
@@ -232,6 +242,7 @@ export class StudentPortalService {
       payments,
       modalities,
       enrollments,
+      classes,
       workouts,
       recentCheckins,
       fitness: studentFitnessProgress(this.store, Number(memberId)),

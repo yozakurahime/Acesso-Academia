@@ -543,11 +543,8 @@ function renderPortal() {
     if (!contractSigInput.value) contractSigInput.value = m.name || '';
   }
 
-  // Planos para pagamento
-  const planSel = document.getElementById('stPayPlan');
-  planSel.innerHTML = (d.plans || []).map((p) =>
-    `<option value="${p.id}" ${Number(p.id) === Number(m.plan_id) ? 'selected' : ''}>${esc(p.name)} — ${fmtMoney(p.price_cents)} (${p.duration_days}d)</option>`
-  ).join('');
+  // Planos para pagamento (em cascata: Modalidade/Plano -> Turma se necessário -> Periodicidade)
+  renderStudentPaymentSelectors(d);
   if (m.email && !document.getElementById('stPayEmail').value) {
     document.getElementById('stPayEmail').value = m.email;
   }
@@ -571,6 +568,127 @@ function renderPortal() {
   renderWorkouts();
   renderFitness();
 }
+
+function normalizePlanText(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function extractPlanCategory(planName) {
+  let base = String(planName || '')
+    .replace(/\(\s*(di[aá]ria|semanal|quinzenal|mensal|bimestral|trimestral|quadrimestral|semestral|anual|\d+\s*dias?)\s*\)/gi, '')
+    .replace(/\b(di[aá]ria|semanal|quinzenal|mensal|bimestral|trimestral|quadrimestral|semestral|anual)\b/gi, '')
+    .replace(/[-–/|]+$/g, '')
+    .replace(/^[-–/|]+/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return base || String(planName || 'Plano');
+}
+
+function extractPlanPeriodLabel(plan) {
+  const name = String(plan?.name || '');
+  const m = name.match(/\b(di[aá]ria|semanal|quinzenal|mensal|bimestral|trimestral|quadrimestral|semestral|anual)\b/i);
+  if (m) return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+  const d = Number(plan?.duration_days || 0);
+  if (d <= 1) return 'Diária';
+  if (d === 7) return 'Semanal';
+  if (d === 15) return 'Quinzenal';
+  if (d >= 28 && d <= 31) return 'Mensal';
+  if (d >= 58 && d <= 62) return 'Bimestral';
+  if (d >= 88 && d <= 93) return 'Trimestral';
+  if (d >= 175 && d <= 186) return 'Semestral';
+  if (d >= 360 && d <= 366) return 'Anual';
+  return `${d} dias`;
+}
+
+function categoryRequiresClass(category) {
+  const s = normalizePlanText(category);
+  return s.includes('nata') || s.includes('hidro') || s.includes('pilates');
+}
+
+function updateStudentPaymentCategory() {
+  const d = studentState.data;
+  const catSel = document.getElementById('stPayCategory');
+  const classWrap = document.getElementById('stPayClassWrap');
+  const classSel = document.getElementById('stPayClass');
+  const planSel = document.getElementById('stPayPlan');
+  if (!d || !catSel || !planSel) return;
+
+  const selectedCat = catSel.value;
+  const plans = d.plans || [];
+  const matchingPlans = plans.filter((p) => extractPlanCategory(p.name) === selectedCat);
+  const currentPlanId = Number(d.member?.plan_id || 0);
+
+  planSel.innerHTML = matchingPlans.map((p) => {
+    const period = extractPlanPeriodLabel(p);
+    return `<option value="${p.id}" ${Number(p.id) === currentPlanId ? 'selected' : ''}>${esc(period)} — ${fmtMoney(p.price_cents)} (${p.duration_days}d)</option>`;
+  }).join('');
+
+  if (classWrap && classSel) {
+    const needsClass = categoryRequiresClass(selectedCat);
+    const catNorm = normalizePlanText(selectedCat);
+    const allClasses = d.classes || [];
+    const matchingClasses = needsClass
+      ? allClasses.filter((c) => {
+          const text = normalizePlanText(`${c.modality_name || ''} ${c.name || ''}`);
+          if (catNorm.includes('hidro')) return text.includes('hidro');
+          if (catNorm.includes('pilates')) return text.includes('pilates');
+          if (catNorm.includes('nata')) return text.includes('nata');
+          return false;
+        })
+      : [];
+
+    if (needsClass && matchingClasses.length > 0) {
+      const enrolledIds = new Set((d.enrollments || []).map((e) => Number(e.class_id)));
+      classSel.innerHTML = `<option value="">Selecione uma turma / horário...</option>${matchingClasses.map((c) => {
+        const closed = Number(c.allow_new_enrollments ?? 1) === 0 && !enrolledIds.has(Number(c.id));
+        const full = Number(c.capacity || 0) > 0 && Number(c.enrolled_count || 0) >= Number(c.capacity) && !enrolledIds.has(Number(c.id));
+        const disabled = closed || full ? 'disabled' : '';
+        const suffix = enrolledIds.has(Number(c.id))
+          ? ' (sua turma atual)'
+          : closed
+            ? ' — Fechada'
+            : full
+              ? ' — Lotada'
+              : ` — ${Math.max(0, Number(c.capacity) - Number(c.enrolled_count || 0))} vaga(s)`;
+        return `<option value="${c.id}" ${enrolledIds.has(Number(c.id)) ? 'selected' : ''} ${disabled}>${esc(c.name)} (${esc(c.schedule)})${esc(suffix)}</option>`;
+      }).join('')}`;
+      classWrap.classList.remove('hidden');
+    } else {
+      classSel.innerHTML = '';
+      classWrap.classList.add('hidden');
+    }
+  }
+}
+
+function renderStudentPaymentSelectors(d) {
+  const catSel = document.getElementById('stPayCategory');
+  if (!catSel) return;
+  const plans = d.plans || [];
+  const categories = [...new Set(plans.map((p) => extractPlanCategory(p.name)))];
+  const currentPlan = plans.find((p) => Number(p.id) === Number(d.member?.plan_id || 0));
+  const preferredCat = currentPlan ? extractPlanCategory(currentPlan.name) : categories[0];
+
+  catSel.innerHTML = categories.map((cat) =>
+    `<option value="${esc(cat)}" ${cat === preferredCat ? 'selected' : ''}>${esc(cat)}</option>`
+  ).join('');
+  updateStudentPaymentCategory();
+}
+
+function validateStudentPaymentSelection() {
+  const classWrap = document.getElementById('stPayClassWrap');
+  const classSel = document.getElementById('stPayClass');
+  if (classWrap && !classWrap.classList.contains('hidden') && classSel && classSel.options.length > 1 && !classSel.value) {
+    showToast('Selecione uma turma / horário para continuar.', true);
+    classSel.focus();
+    return false;
+  }
+  return true;
+}
+
+document.getElementById('stPayCategory')?.addEventListener('change', updateStudentPaymentCategory);
 
 function renderFitness() {
   const fitness = studentState.data?.fitness;
@@ -1479,6 +1597,7 @@ function startPortalPixPolling(chargeId) {
 window.addEventListener('pagehide', stopPortalPixPolling);
 
 document.getElementById('btnStCheckout').addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
+  if (!validateStudentPaymentSelection()) return;
   try {
     const memberId = studentState.data?.member?.id;
     const plan_id = Number(document.getElementById('stPayPlan').value) || null;
@@ -1515,6 +1634,7 @@ document.getElementById('btnStCheckCheckout').addEventListener('click', (event) 
 }, 'Verificando...'));
 
 document.getElementById('btnStGeneratePix').addEventListener('click', async (e) => {
+  if (!validateStudentPaymentSelection()) return;
   await withBusyButton(e.currentTarget, async () => {
     try {
       const planId = Number(document.getElementById('stPayPlan').value) || null;
@@ -1577,6 +1697,7 @@ document.getElementById('btnStCheckPix').addEventListener('click', async (e) => 
 });
 
 document.getElementById('btnStSubscribeCard').addEventListener('click', async (e) => {
+  if (!validateStudentPaymentSelection()) return;
   await withBusyButton(e.currentTarget, async () => {
     try {
       const planId = Number(document.getElementById('stPayPlan').value) || null;
