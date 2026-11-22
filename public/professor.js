@@ -51,13 +51,16 @@
   }
 
   function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('oxigenio_prof_theme', theme);
+    const t = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('oxigenio_prof_theme', t);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', t === 'dark' ? '#07080b' : '#f5f5f7');
   }
-  const savedTheme = localStorage.getItem('oxigenio_prof_theme') || localStorage.getItem('oxigenio_theme');
-  if (savedTheme) applyTheme(savedTheme);
+  const savedTheme = localStorage.getItem('oxigenio_prof_theme') || localStorage.getItem('oxigenio_student_theme') || 'light';
+  applyTheme(savedTheme);
   document.getElementById('btnProfTheme')?.addEventListener('click', () => {
-    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     applyTheme(next);
   });
 
@@ -90,7 +93,9 @@
       document.getElementById('profStudentDetail')?.classList.remove('hidden');
     }
     document.querySelectorAll('[data-prof-tab]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.profTab === tab);
+      const isCurrent = btn.dataset.profTab === tab;
+      btn.classList.toggle('active', isCurrent);
+      btn.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
     });
   }
 
@@ -111,10 +116,21 @@
   function renderStats() {
     const st = state.data?.stats || {};
     document.getElementById('profStatsRow').innerHTML = `
-      <div class="prof-stat-card"><span>Alunos ativos</span><strong>${Number(st.activeStudents || 0)}</strong><span class="muted">de ${Number(st.totalStudents || 0)}</span></div>
-      <div class="prof-stat-card"><span>Modelos de treino</span><strong>${Number(st.templatesCount || 0)}</strong></div>
-      <div class="prof-stat-card"><span>Exercícios no catálogo</span><strong>${Number(st.catalogCount || 0)}</strong></div>
-      <div class="prof-stat-card"><span>Vídeos gravados</span><strong>${Number(st.videosCount || 0)}</strong></div>
+      <div class="student-stat-card">
+        <span class="student-stat-label">Alunos Ativos</span>
+        <strong>${Number(st.activeStudents || 0)}</strong>
+        <small class="muted">de ${Number(st.totalStudents || 0)} alunos</small>
+      </div>
+      <div class="student-stat-card">
+        <span class="student-stat-label">Modelos de Treino</span>
+        <strong>${Number(st.templatesCount || 0)}</strong>
+        <small class="muted">Prontos para aplicar</small>
+      </div>
+      <div class="student-stat-card">
+        <span class="student-stat-label">Exercícios</span>
+        <strong>${Number(st.catalogCount || 0)}</strong>
+        <small class="muted">${Number(st.videosCount || 0)} com vídeo</small>
+      </div>
     `;
   }
 
@@ -351,7 +367,12 @@
     state.data = data;
     document.getElementById('profLoginView').classList.add('hidden');
     document.getElementById('profPortalView').classList.remove('hidden');
-    document.getElementById('profHeaderName').textContent = data.professor?.name || 'Professor';
+    const profName = data.professor?.name || 'Professor';
+    document.getElementById('profHeaderName').textContent = profName;
+    const initialsEl = document.getElementById('profHeaderInitials');
+    if (initialsEl) {
+      initialsEl.textContent = profName.trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || 'P';
+    }
     document.getElementById('profGymHeader').textContent = data.gymName || 'Academia Oxigênio';
     document.getElementById('profProfileMeta').textContent = `${data.professor?.name || ''} · ${data.professor?.phone || data.professor?.email || ''}`;
     document.getElementById('profCurrentPassWrap').classList.toggle('hidden', !data.professor?.has_portal_password);

@@ -1,17 +1,31 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+<!doctype html>
+<html lang="pt-BR" class="student-root" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#ff6b2b" />
+  <meta name="theme-color" content="#07080b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Portal Professor" />
   <title>Portal do Professor — Academia Oxigênio</title>
-  <link rel="icon" href="/oxigenio.jpg" type="image/jpeg" />
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('oxigenio_prof_theme') || localStorage.getItem('oxigenio_student_theme') || 'light';
+        t = t === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', t === 'dark' ? '#07080b' : '#f5f5f7');
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="/styles.css?v=20261115.14" />
   <link rel="stylesheet" href="/aluno.css?v=20261122.1" />
-  <link rel="stylesheet" href="/professor.css?v=20261122.1" />
+  <link rel="stylesheet" href="/professor.css?v=20261122.2" />
 </head>
-<body class="student-body">
+<body class="student-page">
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
   <!-- LOGIN DO PROFESSOR -->
@@ -65,24 +79,54 @@
     </section>
   </main>
 
-  <!-- PORTAL AUTENTICADO DO PROFESSOR -->
+  <!-- PORTAL AUTENTICADO DO PROFESSOR (MESMA ESTRUTURA DO /ALUNO) -->
   <div id="profPortalView" class="student-shell hidden">
-    <header class="student-topbar">
+    <aside class="student-rail">
       <div class="student-brand">
-        <img src="/oxigenio.jpg" alt="Academia Oxigênio" width="38" height="38" />
-        <span>
-          <strong id="profHeaderName">Professor</strong>
-          <small id="profGymHeader">Academia Oxigênio</small>
-        </span>
+        <img src="/oxigenio.jpg" alt="" width="48" height="48" />
+        <span><strong>Oxigênio</strong><small>Portal do Professor</small></span>
       </div>
-      <div class="student-topbar-actions">
-        <button type="button" id="btnProfTheme" class="btn btn-secondary btn-sm" aria-label="Alternar tema">Tema</button>
-        <button type="button" id="btnProfLogout" class="btn btn-secondary btn-sm">Sair</button>
-      </div>
-    </header>
+      <nav class="student-tabs" role="tablist" aria-label="Navegação do Portal do Professor">
+        <button type="button" class="student-tab-btn active" role="tab" data-prof-tab="students" aria-selected="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg>Treinos
+        </button>
+        <button type="button" class="student-tab-btn" role="tab" data-prof-tab="templates" aria-selected="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Modelos
+        </button>
+        <button type="button" class="student-tab-btn" role="tab" data-prof-tab="exercises" aria-selected="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14M4 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/></svg>Vídeos
+        </button>
+        <button type="button" class="student-tab-btn" role="tab" data-prof-tab="classes" aria-selected="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>Turmas
+        </button>
+        <button type="button" class="student-tab-btn" role="tab" data-prof-tab="profile" aria-selected="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a7 7 0 0 1 14 0v1"/></svg>Perfil
+        </button>
+      </nav>
+    </aside>
 
-    <main class="student-main">
-      <section class="prof-stats-row" id="profStatsRow"></section>
+    <div class="student-content">
+      <header class="student-header">
+        <div class="student-user">
+          <div id="profHeaderInitials" class="student-avatar">P</div>
+          <div class="student-identity">
+            <div class="inline-actions student-name-row">
+              <h1 id="profHeaderName">Professor</h1>
+              <span class="badge badge-active">Professor</span>
+            </div>
+            <p id="profGymHeader" class="muted">Academia Oxigênio</p>
+          </div>
+        </div>
+        <div class="inline-actions student-header-actions">
+          <button type="button" id="btnProfTheme" class="btn btn-secondary btn-sm" aria-label="Alternar tema" title="Alternar tema">
+            <svg class="theme-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.3A8.8 8.8 0 0 1 9.7 3.5a9 9 0 1 0 10.8 10.8Z"/></svg>
+            <svg class="theme-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
+          </button>
+          <button type="button" id="btnProfLogout" class="btn btn-secondary btn-sm">Sair</button>
+        </div>
+      </header>
+
+      <section id="profStatsRow" class="student-quick-summary" aria-label="Resumo do professor"></section>
 
       <!-- ABA ALUNOS & TREINOS -->
       <section id="profTabStudents" class="panel">
@@ -285,32 +329,9 @@
           <button type="submit" class="btn btn-primary">Salvar nova senha</button>
         </form>
       </section>
-    </main>
-
-    <nav class="student-nav" aria-label="Navegação do Portal do Professor">
-      <button type="button" class="active" data-prof-tab="students">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg>
-        <span>Treinos</span>
-      </button>
-      <button type="button" data-prof-tab="templates">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-        <span>Modelos</span>
-      </button>
-      <button type="button" data-prof-tab="exercises">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14M4 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/></svg>
-        <span>Vídeos</span>
-      </button>
-      <button type="button" data-prof-tab="classes">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
-        <span>Turmas</span>
-      </button>
-      <button type="button" data-prof-tab="profile">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
-        <span>Perfil</span>
-      </button>
-    </nav>
+    </div>
   </div>
 
-  <script src="/professor.js?v=20261122.1" defer></script>
+  <script src="/professor.js?v=20261122.2" defer></script>
 </body>
 </html>
