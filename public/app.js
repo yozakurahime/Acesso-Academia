@@ -5729,6 +5729,19 @@ document.getElementById('waLogStatus')?.addEventListener('change', () => {
   loadWhatsappStatus().catch((error) => showToast(error.message, true));
 });
 
+document.getElementById('btnWaClearQueue')?.addEventListener('click', async (e) => {
+  if (!window.confirm('Descartar todas as mensagens pendentes na fila do WhatsApp? Elas não serão enviadas.')) return;
+  await withLoading(e.currentTarget, async () => {
+    try {
+      const res = await api('/api/whatsapp/queue', { method: 'DELETE' });
+      showToast(`${Number(res.cleared || 0)} mensagem(ns) removida(s) da fila.`);
+      await loadWhatsappStatus();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
 document.getElementById('btnWaConnect').addEventListener('click', async (e) => {
   await withLoading(e.currentTarget, async () => {
     try {

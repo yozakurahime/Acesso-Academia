@@ -1863,6 +1863,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(whatsappService.listLogs(req.query.limit || 40, req.query.status || ''));
   });
 
+  router.delete('/whatsapp/queue', requireAdmin, (_req, res) => {
+    const result = store.run(
+      "UPDATE whatsapp_logs SET status = 'skipped', error = 'Fila limpa manualmente pelo administrador' WHERE status = 'queued'",
+    );
+    res.json({ ok: true, cleared: Number(result.changes || 0) });
+  });
+
   router.get('/whatsapp/chats', requireReception, (_req, res) => {
     if (!whatsappBotService) return res.json({ items: [], needsHumanCount: 0, unreadTotal: 0 });
     res.json(whatsappBotService.listChats());
