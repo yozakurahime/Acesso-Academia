@@ -1598,19 +1598,12 @@ window.addEventListener('pagehide', stopPortalPixPolling);
 
 document.getElementById('btnStCheckout').addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
   if (!validateStudentPaymentSelection()) return;
-  const popup = window.open('', '_blank');
-  if (popup) {
-    try { popup.opener = null; } catch {}
-  }
   try {
     const memberId = studentState.data?.member?.id;
     const plan_id = Number(document.getElementById('stPayPlan').value) || null;
     const class_id = Number(document.getElementById('stPayClass')?.value) || null;
     const charge = await api('/api/student/me/checkout', { method: 'POST', body: JSON.stringify({ plan_id, class_id }) });
-    if (!memberId || studentState.data?.member?.id !== memberId) {
-      if (popup && !popup.closed) try { popup.close(); } catch {}
-      return;
-    }
+    if (!memberId || studentState.data?.member?.id !== memberId) return;
     const url = sanitizeHttpUrl(charge.payment_url);
     if (!url) throw new Error('Link de pagamento inválido.');
     document.getElementById('stPixBox')?.classList.add('hidden');
@@ -1620,16 +1613,8 @@ document.getElementById('btnStCheckout').addEventListener('click', (event) => wi
     document.getElementById('stCheckoutAmount').textContent = `Valor a pagar ${fmtMoney(charge.amount_cents)}`;
     document.getElementById('stCheckoutLink').href = url;
     box.classList.remove('hidden');
-    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    if (popup && !popup.closed) {
-      popup.location.href = url;
-    } else {
-      window.location.assign(url);
-    }
+    window.location.assign(url);
   } catch (err) {
-    if (popup && !popup.closed) {
-      try { popup.close(); } catch {}
-    }
     showToast(err.message, true);
   }
 }, 'Abrindo...'));
