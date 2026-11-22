@@ -1847,7 +1847,7 @@ if ('serviceWorker' in navigator) {
     if (hadController) showUpdateBanner();
     hadController = true;
   });
-  navigator.serviceWorker.register('/sw.js').then((reg) => {
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then((reg) => {
     reg.addEventListener('updatefound', () => {
       const installing = reg.installing;
       installing?.addEventListener('statechange', () => {

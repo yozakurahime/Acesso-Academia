@@ -287,7 +287,9 @@ export class GatewayService {
     if (!response.ok || !data?.id || !data?.init_point) {
       throw new Error(data?.message || 'Não foi possível gerar o link de pagamento.');
     }
-    const url = new URL(data.init_point);
+    const isTestToken = String(settings.mp_access_token || '').trim().startsWith('TEST-');
+    const rawInitPoint = isTestToken && data.sandbox_init_point ? data.sandbox_init_point : data.init_point;
+    const url = new URL(rawInitPoint);
     if (url.protocol !== 'https:' || !/(^|\.)mercadopago\.com(?:\.br)?$/i.test(url.hostname)) {
       throw new Error('O Mercado Pago retornou um endereço de checkout inválido.');
     }
@@ -352,7 +354,9 @@ export class GatewayService {
       if (!response.ok || !data?.id || !data?.init_point) {
         throw new Error(data?.message || 'Não foi possível gerar o link de pagamento.');
       }
-      const url = new URL(data.init_point);
+      const isTestToken = String(settings.mp_access_token || '').trim().startsWith('TEST-');
+    const rawInitPoint = isTestToken && data.sandbox_init_point ? data.sandbox_init_point : data.init_point;
+    const url = new URL(rawInitPoint);
       if (url.protocol !== 'https:' || !/(^|\.)mercadopago\.com(?:\.br)?$/i.test(url.hostname)) {
         throw new Error('O Mercado Pago retornou um endereço de checkout inválido.');
       }
