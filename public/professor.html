@@ -23,7 +23,7 @@
   </script>
   <link rel="stylesheet" href="/styles.css?v=20261115.14" />
   <link rel="stylesheet" href="/aluno.css?v=20261122.1" />
-  <link rel="stylesheet" href="/professor.css?v=20261122.3" />
+  <link rel="stylesheet" href="/professor.css?v=20261122.4" />
 </head>
 <body class="student-page">
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
@@ -57,7 +57,7 @@
           <label for="profLoginSecret">Senha ou código de convite</label>
           <div class="password-input-wrap">
             <input type="password" id="profLoginSecret" autocomplete="current-password" enterkeyhint="go" required />
-            <button type="button" class="btn btn-secondary btn-sm password-toggle-btn" data-toggle-password="profLoginSecret">Mostrar</button>
+            <button type="button" class="btn btn-secondary btn-sm password-toggle-btn" data-toggle-password="profLoginSecret" aria-label="Mostrar ou ocultar senha">Mostrar</button>
           </div>
         </div>
         <button type="submit" class="btn btn-primary">Entrar como Professor</button>
@@ -325,7 +325,10 @@
             <input type="password" id="profCurrentPass" autocomplete="current-password" />
           </label>
           <label>Nova senha (mínimo 6 caracteres)
-            <input type="password" id="profNewPass" minlength="6" autocomplete="new-password" required />
+            <div class="password-input-wrap">
+              <input type="password" id="profNewPass" minlength="6" autocomplete="new-password" required />
+              <button type="button" class="btn btn-secondary btn-sm password-toggle-btn" data-toggle-password="profNewPass" aria-label="Mostrar ou ocultar nova senha">Mostrar</button>
+            </div>
           </label>
           <button type="submit" class="btn btn-primary">Salvar nova senha</button>
         </form>
@@ -334,6 +337,6 @@
     </div>
   </div>
 
-  <script src="/professor.js?v=20261122.2" defer></script>
+  <script src="/professor.js?v=20261122.3" defer></script>
 </body>
 </html>

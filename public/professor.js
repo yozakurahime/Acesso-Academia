@@ -20,8 +20,7 @@
     const el = document.getElementById('toast');
     if (!el) return;
     el.textContent = msg;
-    el.classList.remove('hidden', 'toast-error');
-    if (isError) el.classList.add('toast-error');
+    el.className = `toast ${isError ? 'err' : 'ok'}`;
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => el.classList.add('hidden'), 3600);
   }
@@ -117,16 +116,19 @@
     const st = state.data?.stats || {};
     document.getElementById('profStatsRow').innerHTML = `
       <div class="student-stat-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a7 7 0 0 1 14 0v1"/></svg>
         <span class="student-stat-label">Alunos Ativos</span>
         <strong>${Number(st.activeStudents || 0)}</strong>
         <small class="muted">de ${Number(st.totalStudents || 0)} alunos</small>
       </div>
       <div class="student-stat-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
         <span class="student-stat-label">Modelos de Treino</span>
         <strong>${Number(st.templatesCount || 0)}</strong>
         <small class="muted">Prontos para aplicar</small>
       </div>
       <div class="student-stat-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg>
         <span class="student-stat-label">Exercícios</span>
         <strong>${Number(st.catalogCount || 0)}</strong>
         <small class="muted">${Number(st.videosCount || 0)} com vídeo</small>
@@ -148,7 +150,7 @@
           <div class="prof-card">
             <div class="prof-card-head">
               <strong>${esc(s.name)}</strong>
-              <span class="badge ${s.status === 'active' ? 'badge-ok' : 'badge-warn'}">${esc(statusLabel(s.status))}</span>
+              <span class="badge ${s.status === 'active' ? 'badge-active' : s.status === 'pending' ? 'badge-pending' : 'badge-blocked'}">${esc(statusLabel(s.status))}</span>
             </div>
             <div class="prof-card-meta">${esc(s.plan_name || 'Sem plano')} · ${Number(s.active_workouts_count || 0)} ficha(s) ativa(s)</div>
             <button type="button" class="btn btn-primary btn-sm" data-open-student="${s.id}">Gerenciar treinos e avaliação</button>
@@ -307,7 +309,7 @@
                 <strong>${esc(ex.name)}</strong>
                 <div class="prof-card-meta">${esc(ex.muscle_group || 'Geral')}</div>
               </div>
-              <span class="badge ${ex.has_video ? 'badge-ok' : 'badge-warn'}">${ex.has_video ? 'Com vídeo' : 'Sem vídeo'}</span>
+              <span class="badge ${ex.has_video ? 'badge-active' : 'badge-pending'}">${ex.has_video ? 'Com vídeo' : 'Sem vídeo'}</span>
             </div>
             <div class="inline-actions">
               <button type="button" class="btn btn-primary btn-sm" data-ex-video="${esc(ex.key)}">${ex.has_video ? 'Ver / Regravar vídeo' : 'Gravar vídeo'}</button>
