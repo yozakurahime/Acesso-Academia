@@ -84,6 +84,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'whatsapp_meta_app_secret',
   'whatsapp_meta_api_version',
   'mp_access_token',
+  'mp_public_key',
   'mp_point_access_token',
   'mp_webhook_secret',
   'mp_point_webhook_secret',
@@ -2458,6 +2459,40 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }
     return classId;
   }
+
+  router.post(
+    '/student/me/card-payment',
+    requireStudentAuth,
+    limitExpensive,
+    handle(async (req, res) => {
+      if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
+      const {
+        plan_id = null,
+        class_id = null,
+        token = null,
+        payment_method_id = null,
+        issuer_id = null,
+        payer_email = null,
+        identification_type = null,
+        identification_number = null,
+        device_id = null,
+      } = req.body || {};
+      const planId = assertStudentPlanAllowed(req.studentMemberId, plan_id);
+      assertStudentClassAllowed(req.studentMemberId, class_id);
+      const result = await gatewayService.createCardPayment({
+        member_id: req.studentMemberId,
+        plan_id: planId,
+        token,
+        payment_method_id,
+        issuer_id,
+        payer_email,
+        identification_type,
+        identification_number,
+        device_id,
+      });
+      res.status(201).json(result);
+    }),
+  );
 
   router.post('/student/me/checkout', requireStudentAuth, limitExpensive, handle(async (req, res) => {
     if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');

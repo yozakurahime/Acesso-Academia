@@ -288,3 +288,49 @@ test('Mercado Pago Point Smart: lista terminais, envia cobrança, dá baixa via 
   assert.equal(secondCheck.paid, true);
   assert.equal(secondCheck.alreadyPaid, true);
 });
+
+test('GatewayService.createCardPayment processa cartao transparente em 1x com valor do servidor e libera acesso', async () => {
+  const store = await DatabaseStore.create(null);
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  store.updateSettings({ mp_access_token: 'APP_USR_TEST', mp_public_key: 'APP_USR_PUB_TEST' });
+
+  const plan = access.listPlans().find((p) => p.name === 'Mensal');
+  const member = await access.createMember({
+    name: 'Maria Cartao',
+    document: '52998224725',
+    phone: '62999993333',
+    plan_id: plan.id,
+  });
+
+  let capturedPayment = null;
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, options) => {
+      assert.equal(url, 'https://api.mercadopago.com/v1/payments');
+      capturedPayment = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          id: 987654321,
+          status: 'approved',
+          status_detail: 'accredited',
+          transaction_amount: capturedPayment.transaction_amount,
+        }),
+      };
+    },
+  });
+
+  const res = await gw.createCardPayment({
+    member_id: member.id,
+    plan_id: plan.id,
+    token: 'tok_test_123456',
+    payment_method_id: 'visa',
+    payer_email: 'maria@exemplo.com',
+  });
+
+  assert.equal(res.approved, true);
+  assert.equal(res.external_id, '987654321');
+  assert.equal(capturedPayment.installments, 1);
+  assert.equal(capturedPayment.transaction_amount, Number((plan.price_cents / 100).toFixed(2)));
+  assert.equal(capturedPayment.token, 'tok_test_123456');
+  assert.equal(store.get('SELECT status FROM members WHERE id = ?', [member.id]).status, 'active');
+});

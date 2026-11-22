@@ -583,6 +583,51 @@
 .install-app-login { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .install-app-login .install-app-btn { width: 100%; }
 
+.card-trust-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.card-trust-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  color: var(--accent-text);
+  margin-top: 2px;
+}
+.card-trust-banner strong { display: block; font-size: 14px; }
+.card-trust-banner p { margin: 3px 0 6px; font-size: 12.5px; line-height: 1.4; }
+.card-trust-badges { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.card-trust-badges span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.card-plan-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.card-result-box {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+}
+
 .first-access-banner, .celebration-banner {
   display: flex;
   align-items: center;

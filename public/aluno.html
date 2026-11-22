@@ -22,7 +22,7 @@
     })();
   </script>
   <link rel="stylesheet" href="/styles.css?v=20261115.14" />
-  <link rel="stylesheet" href="/aluno.css?v=20261121.5" />
+  <link rel="stylesheet" href="/aluno.css?v=20261122.1" />
 </head>
 <body class="student-page">
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
@@ -362,16 +362,24 @@
       </div>
       <div class="student-action-grid">
         <button type="button" id="btnStGeneratePix" class="btn btn-primary">Pagar com Pix</button>
-        <button type="button" id="btnStCheckout" class="btn btn-secondary" data-mp-checkout-cta="checkout-pro">Pagar online com Mercado Pago</button>
+        <button type="button" id="btnStCardBrick" class="btn btn-secondary">Pagar no cartão</button>
         <button type="button" id="btnStSubscribeCard" class="btn btn-secondary">Assinar no cartão</button>
       </div>
 
-      <div id="stCheckoutBox" class="pix-box hidden" aria-live="polite">
-        <p id="stCheckoutAmount"></p>
-        <div class="student-action-grid">
-          <a id="stCheckoutLink" class="btn btn-primary">Abrir pagamento</a>
-          <button type="button" id="btnStCheckCheckout" class="btn btn-secondary">Verificar pagamento</button>
+      <div id="stCardBox" class="pix-box hidden" aria-live="polite">
+        <div class="card-trust-banner">
+          <svg class="card-trust-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm3 8H9V7a3 3 0 1 1 6 0v3Z"/></svg>
+          <div>
+            <strong>Pagamento 100% seguro · Processado pelo Mercado Pago</strong>
+            <p class="muted">Seus dados são criptografados (SSL/PCI-DSS) e enviados diretamente ao Mercado Pago. A academia não armazena o número do seu cartão.</p>
+            <div class="card-trust-badges">
+              <span>Visa</span><span>Mastercard</span><span>Elo</span><span>Amex</span><span>1x à vista</span>
+            </div>
+          </div>
         </div>
+        <div id="stCardSummary" class="card-plan-summary"></div>
+        <div id="stCardBrickContainer"></div>
+        <div id="stCardResult" class="card-result-box hidden"></div>
       </div>
 
       <div id="stPixBox" class="pix-box hidden">
@@ -534,6 +542,6 @@
   </dialog>
 
   <script src="/exercises.js?v=20261115.1" defer></script>
-  <script src="/aluno.js?v=20261122.4" defer></script>
+  <script src="/aluno.js?v=20261122.5" defer></script>
 </body>
 </html>

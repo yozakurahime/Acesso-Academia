@@ -1596,46 +1596,157 @@ function startPortalPixPolling(chargeId) {
 
 window.addEventListener('pagehide', stopPortalPixPolling);
 
-document.getElementById('btnStCheckout').addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
-  if (!validateStudentPaymentSelection()) return;
-  try {
-    const memberId = studentState.data?.member?.id;
-    const plan_id = Number(document.getElementById('stPayPlan').value) || null;
-    const class_id = Number(document.getElementById('stPayClass')?.value) || null;
-    const charge = await api('/api/student/me/checkout', { method: 'POST', body: JSON.stringify({ plan_id, class_id }) });
-    if (!memberId || studentState.data?.member?.id !== memberId) return;
-    const url = sanitizeHttpUrl(charge.payment_url);
-    if (!url) throw new Error('Link de pagamento inválido.');
-    document.getElementById('stPixBox')?.classList.add('hidden');
-    document.getElementById('stSubBox')?.classList.add('hidden');
-    const box = document.getElementById('stCheckoutBox');
-    box.dataset.chargeId = charge.id;
-    document.getElementById('stCheckoutAmount').textContent = `Valor a pagar ${fmtMoney(charge.amount_cents)}`;
-    document.getElementById('stCheckoutLink').href = url;
-    box.classList.remove('hidden');
-    window.location.assign(url);
-  } catch (err) {
-    showToast(err.message, true);
-  }
-}, 'Abrindo...'));
+let mpSdkLoadPromise = null;
+let activeCardBrickController = null;
 
-document.getElementById('btnStCheckCheckout').addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
-  const box = document.getElementById('stCheckoutBox');
-  if (!box.dataset.chargeId) return;
+function loadMercadoPagoSdk() {
+  if (window.MercadoPago) return Promise.resolve(window.MercadoPago);
+  if (mpSdkLoadPromise) return mpSdkLoadPromise;
+  mpSdkLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://sdk.mercadopago.com/js/v2';
+    script.async = true;
+    script.onload = () => (window.MercadoPago ? resolve(window.MercadoPago) : reject(new Error('SDK Mercado Pago indisponível.')));
+    script.onerror = () => {
+      mpSdkLoadPromise = null;
+      reject(new Error('Não foi possível carregar o formulário seguro do Mercado Pago.'));
+    };
+    document.head.appendChild(script);
+  });
+  return mpSdkLoadPromise;
+}
+
+function translateMpCardDetail(detail) {
+  const map = {
+    cc_rejected_insufficient_amount: 'Saldo ou limite insuficiente no cartão.',
+    cc_rejected_bad_filled_card_number: 'Número do cartão inválido.',
+    cc_rejected_bad_filled_date: 'Data de validade incorreta.',
+    cc_rejected_bad_filled_security_code: 'Código de segurança (CVV) inválido.',
+    cc_rejected_bad_filled_other: 'Verifique os dados do cartão e tente novamente.',
+    cc_rejected_call_for_authorize: 'Autorize a compra junto ao banco emissor do cartão.',
+    cc_rejected_card_disabled: 'Cartão desabilitado. Entre em contato com o banco.',
+    cc_rejected_high_risk: 'Pagamento recusado pela análise antifraude.',
+  };
+  return map[detail] || 'Pagamento não aprovado pelo emissor. Tente outro cartão ou pague com Pix.';
+}
+
+async function unmountCardBrick() {
+  if (activeCardBrickController && typeof activeCardBrickController.unmount === 'function') {
+    try { await activeCardBrickController.unmount(); } catch {}
+  }
+  activeCardBrickController = null;
+}
+
+document.getElementById('btnStCardBrick')?.addEventListener('click', (event) => withBusyButton(event.currentTarget, async () => {
+  if (!validateStudentPaymentSelection()) return;
+  const d = studentState.data;
+  const publicKey = String(d?.mpPublicKey || '').trim();
+  if (!publicKey) {
+    showToast('Pagamento no cartão ainda não configurado pela academia (Public Key ausente). Use o Pix.', true);
+    return;
+  }
+
+  const planId = Number(document.getElementById('stPayPlan').value) || null;
+  const classId = Number(document.getElementById('stPayClass')?.value) || null;
+  const plan = (d?.plans || []).find((p) => Number(p.id) === Number(planId));
+  if (!plan) {
+    showToast('Selecione um plano para pagar no cartão.', true);
+    return;
+  }
+
+  document.getElementById('stPixBox')?.classList.add('hidden');
+  document.getElementById('stSubBox')?.classList.add('hidden');
+  const box = document.getElementById('stCardBox');
+  const container = document.getElementById('stCardBrickContainer');
+  const resultBox = document.getElementById('stCardResult');
+  const summaryEl = document.getElementById('stCardSummary');
+  resultBox.classList.add('hidden');
+  resultBox.innerHTML = '';
+  container.innerHTML = '<p class="muted">Carregando formulário seguro do Mercado Pago...</p>';
+  summaryEl.innerHTML = `<span><strong>${esc(plan.name)}</strong> (${plan.duration_days} dias · 1x à vista)</span><strong>${fmtMoney(plan.price_cents)}</strong>`;
+  box.classList.remove('hidden');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
   try {
-    const result = await api(`/api/student/me/pix/${Number(box.dataset.chargeId)}/check`, { method: 'POST' });
-    if (!result.paid) {
-      showToast('O Mercado Pago ainda está aguardando a confirmação.');
-      return;
-    }
-    box.classList.add('hidden');
-    delete box.dataset.chargeId;
-    await loadStudentPortal();
-    showToast('Pagamento confirmado!');
+    await unmountCardBrick();
+    const MercadoPagoCtor = await loadMercadoPagoSdk();
+    const mp = new MercadoPagoCtor(publicKey, { locale: 'pt-BR' });
+    const bricksBuilder = mp.bricks();
+    const payerEmail = String(document.getElementById('stPayEmail')?.value || d?.member?.email || '').trim();
+    const isDark = document.documentElement.dataset.theme === 'dark'
+      || window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+
+    container.innerHTML = '';
+    activeCardBrickController = await bricksBuilder.create('cardPayment', 'stCardBrickContainer', {
+      initialization: {
+        amount: Number((Number(plan.price_cents) / 100).toFixed(2)),
+        payer: {
+          ...(payerEmail ? { email: payerEmail } : {}),
+        },
+      },
+      customization: {
+        paymentMethods: {
+          minInstallments: 1,
+          maxInstallments: 1,
+        },
+        visual: {
+          style: {
+            theme: isDark ? 'dark' : 'default',
+          },
+        },
+      },
+      callbacks: {
+        onReady: () => {},
+        onSubmit: async (cardFormData) => {
+          const res = await api('/api/student/me/card-payment', {
+            method: 'POST',
+            body: JSON.stringify({
+              plan_id: plan.id,
+              class_id: classId,
+              token: cardFormData.token,
+              payment_method_id: cardFormData.payment_method_id,
+              issuer_id: cardFormData.issuer_id || null,
+              payer_email: cardFormData.payer?.email || payerEmail || null,
+              identification_type: cardFormData.payer?.identification?.type || null,
+              identification_number: cardFormData.payer?.identification?.number || null,
+              device_id: window.MP_DEVICE_SESSION_ID || null,
+            }),
+          });
+          if (res.approved) {
+            await unmountCardBrick();
+            container.innerHTML = '';
+            resultBox.innerHTML = `
+              <strong>Pagamento aprovado!</strong>
+              <p style="margin:6px 0 0;">Plano <strong>${esc(res.plan_name)}</strong> (${fmtMoney(res.amount_cents)}) confirmado · Transação MP #${esc(res.external_id)}. Seu acesso já está liberado.</p>
+            `;
+            resultBox.classList.remove('hidden');
+            showToast('Pagamento aprovado! Matrícula liberada.');
+            await loadStudentPortal();
+            return;
+          }
+          if (res.status === 'in_process' || res.status === 'pending') {
+            await unmountCardBrick();
+            container.innerHTML = '';
+            resultBox.innerHTML = `
+              <strong>Pagamento em análise</strong>
+              <p style="margin:6px 0 0;">Transação #${esc(res.external_id)} recebida pelo Mercado Pago. Assim que for aprovada, sua matrícula será liberada automaticamente.</p>
+            `;
+            resultBox.classList.remove('hidden');
+            showToast('Pagamento em análise pelo banco.');
+            return;
+          }
+          throw new Error(translateMpCardDetail(res.status_detail));
+        },
+        onError: (err) => {
+          showToast(err?.message || 'Verifique os dados do cartão e tente novamente.', true);
+        },
+      },
+    });
   } catch (err) {
+    container.innerHTML = '';
     showToast(err.message, true);
   }
-}, 'Verificando...'));
+}, 'Carregando...'));
 
 document.getElementById('btnStGeneratePix').addEventListener('click', async (e) => {
   if (!validateStudentPaymentSelection()) return;
@@ -1648,7 +1759,7 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
         body: JSON.stringify({ plan_id: planId, class_id: classId }),
       });
       studentState.activePixChargeId = charge.id;
-      document.getElementById('stCheckoutBox')?.classList.add('hidden');
+      document.getElementById('stCardBox')?.classList.add('hidden');
       document.getElementById('stSubBox')?.classList.add('hidden');
       document.getElementById('stPixBox').classList.remove('hidden');
       document.getElementById('stPixInfo').textContent = `Valor: ${fmtMoney(charge.amount_cents)} · Aguardando pagamento (verificação automática ativa)`;
@@ -1722,7 +1833,7 @@ document.getElementById('btnStSubscribeCard').addEventListener('click', async (e
       const safeHref = sanitizeHttpUrl(sub.init_point);
       if (!safeHref) throw new Error('Link de checkout inválido.');
       document.getElementById('stPixBox')?.classList.add('hidden');
-      document.getElementById('stCheckoutBox')?.classList.add('hidden');
+      document.getElementById('stCardBox')?.classList.add('hidden');
       const subBox = document.getElementById('stSubBox');
       subBox.classList.remove('hidden');
       document.getElementById('stSubInfo').textContent = `Plano: ${sub.reason || 'Assinatura'} · Valor: ${fmtMoney(sub.amount_cents)}`;

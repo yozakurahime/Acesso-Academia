@@ -699,6 +699,89 @@ export class GatewayService {
     return this.getSubscriptionById(ins.lastInsertRowid);
   }
 
+  async createCardPayment({
+    member_id,
+    plan_id = null,
+    token,
+    payment_method_id,
+    issuer_id = null,
+    payer_email = null,
+    identification_type = null,
+    identification_number = null,
+    device_id = null,
+  }) {
+    const settings = this.store.getSettings();
+    const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
+    if (!member) throw new Error('Aluno não encontrado.');
+
+    const cleanToken = String(token || '').trim();
+    const cleanMethod = String(payment_method_id || '').trim();
+    if (!cleanToken) throw new Error('Token do cartão não informado.');
+    if (!cleanMethod) throw new Error('Bandeira do cartão não identificada.');
+
+    const { plan, cents, charge } = this.resolveBillableMember(member, plan_id);
+    const rawEmail = String(payer_email || member.email || '').trim();
+    const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : `aluno${member.id}@academiaoxigenio.com`;
+    const cpfDigits = String(identification_number || member.document || '').replace(/\D/g, '');
+    const idType = identification_type || (cpfDigits.length === 14 ? 'CNPJ' : 'CPF');
+    const externalRef = `ox_card:${member.id}:${crypto.randomUUID().slice(0, 8)}`;
+    const description = `${settings.gym_name || 'Academia Oxigênio'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 250);
+
+    const headers = {
+      ...this.getMpAuth(settings),
+      'X-Idempotency-Key': `mp_card:${member.id}:${cleanToken.slice(0, 32)}`,
+    };
+    if (device_id) headers['X-meli-session-id'] = String(device_id).slice(0, 128);
+
+    const body = {
+      transaction_amount: Number((cents / 100).toFixed(2)),
+      token: cleanToken,
+      description,
+      installments: 1,
+      payment_method_id: cleanMethod,
+      external_reference: externalRef,
+      payer: {
+        email,
+        ...(cpfDigits ? { identification: { type: idType, number: cpfDigits } } : {}),
+      },
+    };
+    if (issuer_id) body.issuer_id = String(issuer_id);
+
+    const response = await this.fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify(body),
+    });
+    const data = await this.safeJson(response);
+    if (!response.ok || !data?.id) {
+      throw new Error(data?.message || data?.cause?.[0]?.description || 'Não foi possível processar o pagamento no cartão.');
+    }
+
+    const mpStatus = String(data.status || '').toLowerCase();
+    const localStatus = mpStatus === 'approved' ? 'approved' : (mpStatus === 'in_process' || mpStatus === 'pending' ? 'pending' : 'rejected');
+    const res = this.store.run(
+      `INSERT INTO gateway_charges
+       (provider, external_id, member_id, plan_id, amount_cents, status, membership_charge_id, checkout_ref)
+       VALUES ('mercadopago', ?, ?, ?, ?, ?, ?, ?)`,
+      [String(data.id), member.id, plan?.id || null, cents, localStatus, charge?.id ?? null, externalRef],
+    );
+    const saved = this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [res.lastInsertRowid]);
+    if (mpStatus === 'approved') {
+      await this.settleCharge(saved, { paymentId: String(data.id), method: 'credit', notes: 'Cartão transparente (Mercado Pago)' });
+    }
+
+    return {
+      id: saved.id,
+      external_id: String(data.id),
+      status: mpStatus,
+      status_detail: data.status_detail || null,
+      approved: mpStatus === 'approved',
+      amount_cents: cents,
+      plan_name: plan?.name || 'Mensalidade',
+    };
+  }
+
   async settleMpSubscriptionPayment({ sub, mpPaymentId, amountCents, method = 'credit' }) {
     if (!mpPaymentId || !Number.isSafeInteger(amountCents) || amountCents !== sub.amount_cents) {
       throw new Error('Valor confirmado difere da assinatura registrada.');

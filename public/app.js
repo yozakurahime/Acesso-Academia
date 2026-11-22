@@ -4666,6 +4666,7 @@ async function loadSettings() {
 
   document.getElementById('gwPosProvider').value = s.pos_provider || 'mercadopago';
   document.getElementById('gwMpToken').value = s.mp_access_token || '';
+  if (document.getElementById('gwMpPublicKey')) document.getElementById('gwMpPublicKey').value = s.mp_public_key || '';
   document.getElementById('gwMpPointToken').value = s.mp_point_access_token || '';
   document.getElementById('gwMpWebhookSecret').value = s.mp_webhook_secret || '';
   document.getElementById('gwMpPointWebhookSecret').value = s.mp_point_webhook_secret || '';
@@ -6326,6 +6327,7 @@ document.getElementById('gatewaysForm')?.addEventListener('submit', async (e) =>
         body: JSON.stringify({
           pos_provider: document.getElementById('gwPosProvider').value,
           mp_access_token: document.getElementById('gwMpToken').value.trim(),
+          mp_public_key: document.getElementById('gwMpPublicKey')?.value.trim() || '',
           mp_point_access_token: document.getElementById('gwMpPointToken').value.trim(),
           mp_webhook_secret: document.getElementById('gwMpWebhookSecret').value.trim(),
           mp_point_webhook_secret: document.getElementById('gwMpPointWebhookSecret').value.trim(),
@@ -6337,6 +6339,7 @@ document.getElementById('gatewaysForm')?.addEventListener('submit', async (e) =>
       });
       document.getElementById('gwPosProvider').value = settings.pos_provider || 'mercadopago';
       document.getElementById('gwMpToken').value = settings.mp_access_token || '';
+      if (document.getElementById('gwMpPublicKey')) document.getElementById('gwMpPublicKey').value = settings.mp_public_key || '';
       document.getElementById('gwMpPointToken').value = settings.mp_point_access_token || '';
       document.getElementById('gwMpWebhookSecret').value = settings.mp_webhook_secret || '';
       document.getElementById('gwMpPointWebhookSecret').value = settings.mp_point_webhook_secret || '';

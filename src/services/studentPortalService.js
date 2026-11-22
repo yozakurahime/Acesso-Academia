@@ -229,6 +229,7 @@ export class StudentPortalService {
 
     return {
       gymName,
+      mpPublicKey: settings.mp_public_key || '',
       pixRecipientKey: settings.pix_recipient_key || '',
       pixRecipientName: settings.pix_recipient_name || '',
       member: {

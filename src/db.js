@@ -962,6 +962,7 @@ export class DatabaseStore {
       whatsapp_meta_app_secret: '',
       whatsapp_meta_api_version: 'v21.0',
       mp_access_token: process.env.MP_ACCESS_TOKEN || '',
+      mp_public_key: process.env.MP_PUBLIC_KEY || '',
       mp_point_access_token: process.env.MP_POINT_ACCESS_TOKEN || '',
       mp_point_terminal_id: process.env.MP_POINT_TERMINAL_ID || '',
       wellhub_enabled: '1',
