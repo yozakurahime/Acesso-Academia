@@ -264,7 +264,7 @@ async function start() {
   };
   cron.schedule('0 12 * * *', runScheduledBackup);
   cron.schedule('30 21 * * *', runScheduledBackup);
-  if (whatsappService.hasSavedSession()) {
+  if (whatsappService.hasSavedSession() || whatsappService.isReadyToSend()) {
     whatsappService.connect().catch((err) => {
       console.error('[WHATSAPP STARTUP]', err.message);
     });
