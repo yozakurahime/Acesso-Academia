@@ -455,6 +455,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (!plan) {
       return res.status(400).json({ error: 'Plano selecionado nao encontrado.' });
     }
+    const planNorm = String(plan.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const planRequiresClass = planNorm.includes('nata') || planNorm.includes('hidro') || planNorm.includes('pilates');
+    if (planRequiresClass && !cls) {
+      return res.status(400).json({ error: 'Selecione uma turma / horario para este plano.' });
+    }
 
     if (document) {
       const existing = store.get("SELECT id, status FROM members WHERE REPLACE(REPLACE(COALESCE(document, ''), '.', ''), '-', '') = ?", [document]);

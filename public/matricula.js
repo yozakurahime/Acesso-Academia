@@ -82,6 +82,47 @@
     return s.includes('nata') || s.includes('hidro') || s.includes('pilates');
   }
 
+  function normalizeText(text) {
+    return String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  function findModalityForPlan(planName) {
+    const p = normalizeText(planName);
+    const modalities = optionsData.modalities || [];
+    const keywords = ['hidro', 'pilates', 'nata'];
+    for (const kw of keywords) {
+      if (!p.includes(kw)) continue;
+      const matches = modalities.filter((m) => normalizeText(m.name).includes(kw));
+      if (matches.length === 0) continue;
+      if (kw === 'nata') {
+        const isKidsPlan = p.includes('infantil') || p.includes('baby') || p.includes('crian');
+        const exact = matches.find((m) => {
+          const mn = normalizeText(m.name);
+          const isKidsMod = mn.includes('infantil') || mn.includes('baby') || mn.includes('crian');
+          return isKidsPlan ? isKidsMod : !isKidsMod;
+        });
+        if (exact) return exact;
+      }
+      return matches[0];
+    }
+    return null;
+  }
+
+  function syncModalityFromPlan() {
+    const selectedPlan = (optionsData.plans || []).find((p) => String(p.id) === planSelect.value);
+    if (!selectedPlan) return;
+    const matchedMod = findModalityForPlan(selectedPlan.name);
+    if (!matchedMod) return;
+    if (String(modalitySelect.value) !== String(matchedMod.id)) {
+      modalitySelect.value = String(matchedMod.id);
+      populateClassesForModality();
+      updateModeUI();
+    }
+  }
+
   function stopCamera() {
     if (mediaStream) {
       mediaStream.getTracks().forEach((t) => t.stop());
@@ -243,6 +284,7 @@
 
       modalitySelect.disabled = false;
       planSelect.disabled = false;
+      syncModalityFromPlan();
       populateClassesForModality();
       updateModeUI();
     } catch {
@@ -258,6 +300,7 @@
     updateModeUI();
   });
   classSelect.addEventListener('change', updateModeUI);
+  planSelect.addEventListener('change', syncModalityFromPlan);
 
   document.getElementById('phoneInput')?.addEventListener('input', (e) => {
     e.target.value = formatPhoneMask(e.target.value);

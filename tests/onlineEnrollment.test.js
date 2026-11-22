@@ -43,6 +43,8 @@ test('POST /api/public/enroll exige turma obrigatoria para Natacao, Hidroginasti
   const authService = new AuthService(store);
 
   const plan = accessService.createPlan({ name: 'Mensal Teste', duration_days: 30, price_cents: 15000, online_available: 1 });
+  const planHidro = accessService.createPlan({ name: 'Hidroginástica Mensal', duration_days: 30, price_cents: 17000, online_available: 1 });
+  const modMusc = store.get("SELECT id FROM modalities WHERE active = 1 AND lower(name) LIKE '%muscul%' LIMIT 1");
   const modHidro = gymService.createModality({ name: 'Hidroginástica' });
   const modPilates = gymService.createModality({ name: 'Pilates' });
   const modNatAdult = gymService.createModality({ name: 'Natação Adulto' });
@@ -71,6 +73,21 @@ test('POST /api/public/enroll exige turma obrigatoria para Natacao, Hidroginasti
       assert.equal(res.status, 400);
       const body = await res.json();
       assert.match(body.error, /turma/i);
+    }
+
+    if (modMusc) {
+      const planBlockedRes = await fetch(`${baseUrl}/api/public/enroll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Teste Plano Hidro',
+          phone: '62999990088',
+          modality_id: modMusc.id,
+          plan_id: planHidro.id,
+        }),
+      });
+      assert.equal(planBlockedRes.status, 400);
+      assert.match((await planBlockedRes.json()).error, /turma/i);
     }
 
     const okRes = await fetch(`${baseUrl}/api/public/enroll`, {
