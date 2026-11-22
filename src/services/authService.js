@@ -274,7 +274,7 @@ export class AuthService {
     return this._verifyPortalToken(token, {
       role: 'professor',
       secret: this.getProfessorSecret(),
-      allowedAccessRoles: ['instructor', 'admin'],
+      allowedAccessRoles: ['instructor', 'staff', 'user', 'admin'],
     });
   }
 

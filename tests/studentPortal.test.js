@@ -332,6 +332,12 @@ test('Portal do Professor (/api/professor/*): convite, login isolado, treinos, m
     phone: '62999994444',
     access_role: 'instructor',
   });
+  const staffMember = await accessService.createMember({
+    name: 'Func. Carla',
+    document: '98765432100',
+    phone: '62999996666',
+    access_role: 'staff',
+  });
   const student = await accessService.createMember({
     name: 'Aluno Treino',
     document: '11144477735',
@@ -340,6 +346,7 @@ test('Portal do Professor (/api/professor/*): convite, login isolado, treinos, m
   });
 
   const { code } = studentPortalService.issueInvite(prof.id);
+  const { code: staffCode } = studentPortalService.issueInvite(staffMember.id);
   const { code: stuCode } = studentPortalService.issueInvite(student.id);
 
   const app = express();
@@ -356,6 +363,14 @@ test('Portal do Professor (/api/professor/*): convite, login isolado, treinos, m
       body: JSON.stringify({ identifier: '62999995555', secret: stuCode }),
     });
     assert.equal(deniedRes.status, 401);
+
+    // Funcionario (access_role='staff') tambem entra no portal do professor
+    const staffLoginRes = await fetch(`${baseUrl}/api/professor/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: '62999996666', secret: staffCode }),
+    });
+    assert.equal(staffLoginRes.status, 200);
 
     // Professor entra com codigo de convite de 4 digitos
     const loginRes = await fetch(`${baseUrl}/api/professor/auth/login`, {

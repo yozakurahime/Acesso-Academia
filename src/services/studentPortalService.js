@@ -20,6 +20,8 @@ function httpError(message, statusCode = 400) {
 
 const MAX_PHOTO_DATA_URL_LEN = 2 * 1024 * 1024; // ~1.5MB em base64
 
+const TEAM_PORTAL_ROLES = ['instructor', 'staff', 'user', 'admin'];
+
 export class StudentPortalService {
   constructor(store, gymService) {
     this.store = store;
@@ -100,7 +102,7 @@ export class StudentPortalService {
     return this.findMemberByIdentifier(identifier, ['student']);
   }
 
-  issueInvite(memberId, { allowedRoles = ['student', 'instructor', 'admin'] } = {}) {
+  issueInvite(memberId, { allowedRoles = ['student', ...TEAM_PORTAL_ROLES] } = {}) {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 4; i += 1) {
@@ -150,15 +152,16 @@ export class StudentPortalService {
   }
 
   authenticateProfessor(identifier, secret) {
-    return this.authenticatePortalMember(identifier, secret, ['instructor', 'admin']);
+    return this.authenticatePortalMember(identifier, secret, TEAM_PORTAL_ROLES);
   }
 
   getProfessorProfile(memberId, { includePhoto = true } = {}) {
+    const placeholders = TEAM_PORTAL_ROLES.map(() => '?').join(', ');
     const row = this.store.get(
-      "SELECT * FROM members WHERE id = ? AND access_role IN ('instructor', 'admin')",
-      [Number(memberId)],
+      `SELECT * FROM members WHERE id = ? AND access_role IN (${placeholders})`,
+      [Number(memberId), ...TEAM_PORTAL_ROLES],
     );
-    if (!row) throw httpError('Professor não encontrado.', 404);
+    if (!row) throw httpError('Integrante da equipe não encontrado.', 404);
     const settings = this.store.getSettings();
     return {
       gymName: settings.gym_name || 'Academia Oxigênio',
@@ -358,6 +361,6 @@ export class StudentPortalService {
   }
 
   updateProfessorPassword(memberId, payload = {}) {
-    return this.updatePortalPassword(memberId, { ...payload, allowedRoles: ['instructor', 'admin'] });
+    return this.updatePortalPassword(memberId, { ...payload, allowedRoles: TEAM_PORTAL_ROLES });
   }
 }
