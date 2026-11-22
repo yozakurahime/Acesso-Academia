@@ -109,3 +109,38 @@ test('POST /api/public/enroll exige turma obrigatoria para Natacao, Hidroginasti
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('GymService gerencia turmas: atualizar modalidade/professor, listar alunos, remover aluno e excluir turma', async () => {
+  const store = await DatabaseStore.create(null);
+  const gymService = new GymService(store);
+  const accessService = new AccessService(store);
+
+  const mod1 = gymService.createModality({ name: 'Pilates Solo' });
+  const mod2 = gymService.createModality({ name: 'Pilates Aparelhos' });
+  const inst = gymService.createInstructor({ name: 'Prof. Ana' });
+  const cls = gymService.createClass({ name: 'Pilates 09h', modality_id: mod1.id, schedule: '09:00', capacity: 8 });
+  const member = await accessService.createMember({ name: 'Aluno Turma', document: '52998224725', phone: '62999997777' });
+  gymService.enrollMemberInClass(cls.id, member.id);
+
+  const updated = gymService.updateClass(cls.id, {
+    name: 'Pilates Aparelhos 09h',
+    modality_id: mod2.id,
+    instructor_id: inst.id,
+    allow_new_enrollments: 0,
+    online_enrollment_mode: 'reception_only',
+  });
+  assert.equal(updated.modality_id, mod2.id);
+  assert.equal(updated.instructor_id, inst.id);
+  assert.equal(updated.allow_new_enrollments, 0);
+  assert.equal(updated.online_enrollment_mode, 'reception_only');
+
+  const listed = gymService.listClassMembers(cls.id);
+  assert.equal(listed.members.length, 1);
+  assert.equal(listed.members[0].id, member.id);
+
+  gymService.removeMemberFromClass(cls.id, member.id);
+  assert.equal(gymService.listClassMembers(cls.id).members.length, 0);
+
+  gymService.deleteClass(cls.id);
+  assert.equal(gymService.listClasses().some((c) => c.id === cls.id), false);
+});

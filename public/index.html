@@ -1027,12 +1027,26 @@
       </section>
 
       <section id="tab-classes" class="tab-panel">
-        <div class="page-title"><h2>Turmas & Professores</h2><button type="button" class="btn btn-secondary" data-go="settings" data-expand="settings-classes">Configurar turmas</button></div>
+        <div class="page-title">
+          <h2>Turmas & Professores</h2>
+          <div class="inline-actions">
+            <button type="button" id="btnNewClassModal" class="btn btn-primary">+ Nova Turma</button>
+            <button type="button" class="btn btn-secondary" data-go="settings" data-expand="settings-classes">Configurar turmas</button>
+          </div>
+        </div>
         <div class="panel">
-          <h2>Turmas Ativas</h2>
+          <div class="panel-header">
+            <h2>Turmas Ativas</h2>
+            <div class="inline-actions">
+              <select id="clsFilterModality" aria-label="Filtrar por modalidade">
+                <option value="">Todas as modalidades</option>
+              </select>
+              <input type="search" id="clsSearch" aria-label="Buscar turma" placeholder="Buscar turma, horário ou professor..." />
+            </div>
+          </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Turma</th><th>Modalidade</th><th>Professor</th><th>Horário</th><th>Alunos</th></tr></thead>
+              <thead><tr><th>Turma</th><th>Modalidade</th><th>Professor</th><th>Horário</th><th>Vagas</th><th>Regras</th><th>Ações</th></tr></thead>
               <tbody id="classesBody"></tbody>
             </table>
           </div>
@@ -1654,6 +1668,11 @@
                   <select id="clsInstructor" aria-label="Professor da turma"></select>
                   <input type="text" id="clsSchedule" aria-label="Horário da turma" placeholder="Seg/Qua/Sex 08:00" required />
                   <input type="number" id="clsCap" aria-label="Capacidade da turma" value="20" min="1" />
+                  <select id="clsOnlineMode" aria-label="Modo de matrícula online">
+                    <option value="auto">Matrícula online: Automática</option>
+                    <option value="reception_only">Matrícula online: Somente recepção</option>
+                  </select>
+                  <label class="checkbox-label"><input type="checkbox" id="clsAllowNew" checked /> Permitir novas matrículas</label>
                   <button type="submit" class="btn btn-primary">Criar Turma</button>
                 </form>
               </section>
@@ -2531,6 +2550,79 @@
       </div>
     </section>
   </dialog>
+
+  <div id="classEditModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="classEditModalTitle">
+    <div class="modal-content modal-lg" style="max-height:90vh;overflow-y:auto;">
+      <div class="panel-header" style="margin-bottom:14px;">
+        <div>
+          <span class="eyebrow">Turmas</span>
+          <h2 id="classEditModalTitle" style="margin:4px 0 0;">Nova Turma</h2>
+        </div>
+        <button type="button" id="btnCloseClassEditModal" class="btn btn-secondary btn-sm">Fechar</button>
+      </div>
+      <form id="classEditForm" class="form-grid">
+        <input type="hidden" id="ceId" />
+        <label>Nome da turma *
+          <input type="text" id="ceName" placeholder="Ex: Hidroginástica 08h" required />
+        </label>
+        <label>Modalidade
+          <select id="ceModality"></select>
+        </label>
+        <label>Professor
+          <select id="ceInstructor"></select>
+        </label>
+        <label>Horário *
+          <input type="text" id="ceSchedule" placeholder="Seg/Qua/Sex 08:00" required />
+        </label>
+        <label>Capacidade (vagas) *
+          <input type="number" id="ceCapacity" min="1" value="20" required />
+        </label>
+        <label>Matrícula online
+          <select id="ceOnlineMode">
+            <option value="auto">Automática (site / WhatsApp)</option>
+            <option value="reception_only">Somente recepção</option>
+          </select>
+        </label>
+        <label class="checkbox-label" style="align-self:end;">
+          <input type="checkbox" id="ceAllowNew" checked />
+          Permitir novas matrículas
+        </label>
+        <label class="checkbox-label" style="align-self:end;">
+          <input type="checkbox" id="ceActive" checked />
+          Turma ativa
+        </label>
+        <div class="inline-actions" style="grid-column:1 / -1;justify-content:flex-end;margin-top:8px;">
+          <button type="button" id="btnCancelClassEditModal" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" id="btnSaveClassEditModal" class="btn btn-primary">Salvar turma</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="classMembersModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="classMembersModalTitle">
+    <div class="modal-content modal-lg" style="max-height:90vh;overflow-y:auto;">
+      <div class="panel-header" style="margin-bottom:12px;">
+        <div>
+          <span class="eyebrow">Alunos na Turma</span>
+          <h2 id="classMembersModalTitle" style="margin:4px 0 0;">Turma</h2>
+          <p id="classMembersModalMeta" class="muted" style="margin:4px 0 0;"></p>
+        </div>
+        <button type="button" id="btnCloseClassMembersModal" class="btn btn-secondary btn-sm">Fechar</button>
+      </div>
+      <form id="classMemberEnrollForm" class="form-grid" style="margin-bottom:14px;align-items:end;">
+        <label style="grid-column:1 / -1;">Matricular aluno nesta turma
+          <input type="search" id="cmMemberSearch" list="membersDatalist" placeholder="Digite nome ou CPF do aluno..." autocomplete="off" required />
+        </label>
+        <div><button type="submit" class="btn btn-primary btn-sm">Adicionar à turma</button></div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Aluno</th><th>Telefone</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="classMembersBody"><tr><td colspan="4" class="muted">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <dialog id="debtPayModal" aria-labelledby="debtPayTitle">
     <div class="modal-content" style="max-width:460px;">

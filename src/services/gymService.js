@@ -372,6 +372,15 @@ export class GymService {
     if (!cls) throw new Error('Turma nao encontrada.');
     const nextName = payload.name !== undefined ? String(payload.name).trim() : cls.name;
     const nextSchedule = payload.schedule !== undefined ? String(payload.schedule).trim() : cls.schedule;
+    if (!nextName || !nextSchedule) {
+      throw new Error('Nome da turma e horario sao obrigatorios.');
+    }
+    const nextModalityId = payload.modality_id !== undefined
+      ? (payload.modality_id ? Number(payload.modality_id) : null)
+      : cls.modality_id;
+    const nextInstructorId = payload.instructor_id !== undefined
+      ? (payload.instructor_id ? Number(payload.instructor_id) : null)
+      : cls.instructor_id;
     const nextCapacity = payload.capacity !== undefined ? Math.max(1, Number(payload.capacity || cls.capacity)) : cls.capacity;
     const nextActive = payload.active !== undefined ? (Number(payload.active) ? 1 : 0) : cls.active;
     const nextAllowNew = payload.allow_new_enrollments !== undefined
@@ -383,11 +392,58 @@ export class GymService {
 
     this.store.run(
       `UPDATE classes
-       SET name = ?, schedule = ?, capacity = ?, active = ?, allow_new_enrollments = ?, online_enrollment_mode = ?
+       SET name = ?, modality_id = ?, instructor_id = ?, schedule = ?, capacity = ?, active = ?, allow_new_enrollments = ?, online_enrollment_mode = ?
        WHERE id = ?`,
-      [nextName, nextSchedule, nextCapacity, nextActive, nextAllowNew, nextOnlineMode, cls.id],
+      [nextName, nextModalityId, nextInstructorId, nextSchedule, nextCapacity, nextActive, nextAllowNew, nextOnlineMode, cls.id],
     );
-    return this.store.get('SELECT * FROM classes WHERE id = ?', [cls.id]);
+    return this.store.get(
+      `SELECT c.*, mod.name AS modality_name, i.name AS instructor_name,
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
+       FROM classes c
+       LEFT JOIN modalities mod ON mod.id = c.modality_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       WHERE c.id = ?`,
+      [cls.id],
+    );
+  }
+
+  deleteClass(id) {
+    const classId = Number(id);
+    const cls = this.store.get('SELECT id, name FROM classes WHERE id = ?', [classId]);
+    if (!cls) throw new Error('Turma nao encontrada.');
+    this.store.run('DELETE FROM class_enrollments WHERE class_id = ?', [classId]);
+    this.store.run('DELETE FROM class_bookings WHERE class_id = ?', [classId]);
+    this.store.run('DELETE FROM classes WHERE id = ?', [classId]);
+    return { ok: true, id: classId };
+  }
+
+  listClassMembers(classId) {
+    const cls = this.store.get(
+      `SELECT c.*, mod.name AS modality_name, i.name AS instructor_name
+       FROM classes c
+       LEFT JOIN modalities mod ON mod.id = c.modality_id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       WHERE c.id = ?`,
+      [Number(classId)],
+    );
+    if (!cls) throw new Error('Turma nao encontrada.');
+    const members = this.store.all(
+      `SELECT m.id, m.name, m.phone, m.status, m.valid_until, p.name AS plan_name, ce.enrolled_at
+       FROM class_enrollments ce
+       JOIN members m ON m.id = ce.member_id
+       LEFT JOIN plans p ON p.id = m.plan_id
+       WHERE ce.class_id = ?
+       ORDER BY m.name ASC`,
+      [cls.id],
+    );
+    return { class: cls, members };
+  }
+
+  removeMemberFromClass(classId, memberId) {
+    const cls = this.store.get('SELECT id FROM classes WHERE id = ?', [Number(classId)]);
+    if (!cls) throw new Error('Turma nao encontrada.');
+    this.store.run('DELETE FROM class_enrollments WHERE class_id = ? AND member_id = ?', [cls.id, Number(memberId)]);
+    return { ok: true };
   }
 
   enrollMemberInClass(classId, memberId) {

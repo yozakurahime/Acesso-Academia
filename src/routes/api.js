@@ -1689,6 +1689,21 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     requireReception,
     handle(async (req, res) => res.json(gymService.enrollMemberInClass(req.params.id, req.body.member_id))),
   );
+  router.delete(
+    '/classes/:id',
+    requireReception,
+    handle(async (req, res) => res.json(gymService.deleteClass(req.params.id))),
+  );
+  router.get(
+    '/classes/:id/members',
+    requireReception,
+    handle(async (req, res) => res.json(gymService.listClassMembers(req.params.id))),
+  );
+  router.delete(
+    '/classes/:id/enroll/:memberId',
+    requireReception,
+    handle(async (req, res) => res.json(gymService.removeMemberFromClass(req.params.id, req.params.memberId))),
+  );
 
   router.get('/online-enrollment-requests', requireReception, (_req, res) => {
     const rows = store.all('SELECT * FROM online_enrollment_requests ORDER BY id DESC LIMIT 100');

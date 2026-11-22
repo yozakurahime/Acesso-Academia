@@ -1244,6 +1244,210 @@ document.getElementById('pmBody')?.addEventListener('click', async (e) => {
 });
 
 // --- Modalidades, Professores & Turmas ---
+let activeClassMembersId = null;
+
+function renderClassesTable() {
+  const tbody = document.getElementById('classesBody');
+  if (!tbody) return;
+  const classes = state.classes || [];
+  const modFilter = document.getElementById('clsFilterModality')?.value || '';
+  const query = String(document.getElementById('clsSearch')?.value || '').trim().toLowerCase();
+
+  const filtered = classes.filter((c) => {
+    if (modFilter && String(c.modality_id || '') !== String(modFilter)) return false;
+    if (query) {
+      const hay = `${c.name || ''} ${c.modality_name || ''} ${c.instructor_name || ''} ${c.schedule || ''}`.toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+    return true;
+  });
+
+  tbody.innerHTML = filtered.length
+    ? filtered
+        .map((c) => {
+          const enrolled = Number(c.enrolled_count || 0);
+          const cap = Number(c.capacity || 0);
+          const isFull = cap > 0 && enrolled >= cap;
+          const isActive = Number(c.active ?? 1) === 1;
+          const allowNew = Number(c.allow_new_enrollments ?? 1) === 1;
+          const isReception = c.online_enrollment_mode === 'reception_only';
+          const badges = [
+            !isActive ? '<span class="badge badge-danger">Inativa</span>' : '',
+            !allowNew ? '<span class="badge badge-warn">Fechada</span>' : '<span class="badge badge-ok">Aberta</span>',
+            isReception ? '<span class="badge badge-neutral">Somente recepção</span>' : '',
+            isFull ? '<span class="badge badge-danger">Lotada</span>' : '',
+          ].filter(Boolean).join(' ');
+          return `
+        <tr>
+          <td><strong>${escapeHtml(c.name)}</strong></td>
+          <td>${escapeHtml(c.modality_name || '-')}</td>
+          <td>${escapeHtml(c.instructor_name || '-')}</td>
+          <td>${escapeHtml(c.schedule)}</td>
+          <td><strong>${enrolled}</strong> / ${cap}</td>
+          <td>${badges}</td>
+          <td>
+            <div class="inline-actions">
+              <button type="button" class="btn btn-secondary btn-sm" data-class-members="${c.id}">Alunos (${enrolled})</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-edit-class="${c.id}">Editar</button>
+              <button type="button" class="btn btn-danger btn-sm" data-delete-class="${c.id}">Excluir</button>
+            </div>
+          </td>
+        </tr>`;
+        })
+        .join('')
+    : '<tr><td colspan="7" class="muted">Nenhuma turma encontrada.</td></tr>';
+}
+
+function openClassEditModal(cls = null) {
+  document.getElementById('ceId').value = cls ? String(cls.id) : '';
+  document.getElementById('classEditModalTitle').textContent = cls ? `Editar Turma: ${cls.name}` : 'Nova Turma';
+  document.getElementById('ceName').value = cls?.name || '';
+  document.getElementById('ceModality').value = cls?.modality_id ? String(cls.modality_id) : '';
+  document.getElementById('ceInstructor').value = cls?.instructor_id ? String(cls.instructor_id) : '';
+  document.getElementById('ceSchedule').value = cls?.schedule || '';
+  document.getElementById('ceCapacity').value = cls?.capacity ? String(cls.capacity) : '20';
+  document.getElementById('ceOnlineMode').value = cls?.online_enrollment_mode === 'reception_only' ? 'reception_only' : 'auto';
+  document.getElementById('ceAllowNew').checked = cls ? Number(cls.allow_new_enrollments ?? 1) === 1 : true;
+  document.getElementById('ceActive').checked = cls ? Number(cls.active ?? 1) === 1 : true;
+  showModal('classEditModal', 'btnCloseClassEditModal');
+}
+
+async function openClassMembersModal(classId) {
+  activeClassMembersId = Number(classId);
+  const tbody = document.getElementById('classMembersBody');
+  tbody.innerHTML = '<tr><td colspan="4" class="muted">Carregando...</td></tr>';
+  showModal('classMembersModal', 'btnCloseClassMembersModal');
+  try {
+    const data = await api(`/api/classes/${activeClassMembersId}/members`);
+    const cls = data.class;
+    const members = data.members || [];
+    document.getElementById('classMembersModalTitle').textContent = cls.name;
+    document.getElementById('classMembersModalMeta').textContent = `${cls.modality_name || 'Sem modalidade'} · ${cls.schedule} · ${members.length}/${cls.capacity} vagas`;
+    tbody.innerHTML = members.length
+      ? members
+          .map((m) => `
+          <tr>
+            <td><strong>${escapeHtml(m.name)}</strong>${m.plan_name ? `<div class="muted" style="font-size:12px;">${escapeHtml(m.plan_name)}</div>` : ''}</td>
+            <td>${escapeHtml(m.phone || '—')}</td>
+            <td>${statusBadge(m.status)}</td>
+            <td>
+              <div class="inline-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-open-member-profile="${m.id}">Ficha</button>
+                <button type="button" class="btn btn-danger btn-sm" data-remove-class-member="${m.id}">Remover</button>
+              </div>
+            </td>
+          </tr>`)
+          .join('')
+      : '<tr><td colspan="4" class="muted">Nenhum aluno matriculado nesta turma.</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+document.getElementById('clsFilterModality')?.addEventListener('change', renderClassesTable);
+document.getElementById('clsSearch')?.addEventListener('input', renderClassesTable);
+document.getElementById('btnNewClassModal')?.addEventListener('click', () => openClassEditModal(null));
+document.getElementById('btnCloseClassEditModal')?.addEventListener('click', () => hideModal('classEditModal'));
+document.getElementById('btnCancelClassEditModal')?.addEventListener('click', () => hideModal('classEditModal'));
+document.getElementById('btnCloseClassMembersModal')?.addEventListener('click', () => hideModal('classMembersModal'));
+
+document.getElementById('classesBody')?.addEventListener('click', async (e) => {
+  const membersBtn = e.target.closest('[data-class-members]');
+  if (membersBtn) {
+    await openClassMembersModal(Number(membersBtn.dataset.classMembers));
+    return;
+  }
+  const editBtn = e.target.closest('[data-edit-class]');
+  if (editBtn) {
+    const cls = (state.classes || []).find((c) => Number(c.id) === Number(editBtn.dataset.editClass));
+    if (cls) openClassEditModal(cls);
+    return;
+  }
+  const delBtn = e.target.closest('[data-delete-class]');
+  if (delBtn) {
+    const classId = Number(delBtn.dataset.deleteClass);
+    const cls = (state.classes || []).find((c) => Number(c.id) === classId);
+    if (!confirm(`Excluir a turma "${cls?.name || classId}"? Os vínculos de alunos nesta turma serão removidos.`)) return;
+    try {
+      await api(`/api/classes/${classId}`, { method: 'DELETE' });
+      showToast('Turma excluída!');
+      await loadGymStructure();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+});
+
+document.getElementById('classEditForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await withLoading(e.target, async () => {
+    try {
+      const id = document.getElementById('ceId').value.trim();
+      const payload = {
+        name: document.getElementById('ceName').value,
+        modality_id: document.getElementById('ceModality').value || null,
+        instructor_id: document.getElementById('ceInstructor').value || null,
+        schedule: document.getElementById('ceSchedule').value,
+        capacity: Number(document.getElementById('ceCapacity').value),
+        online_enrollment_mode: document.getElementById('ceOnlineMode').value,
+        allow_new_enrollments: document.getElementById('ceAllowNew').checked ? 1 : 0,
+        active: document.getElementById('ceActive').checked ? 1 : 0,
+      };
+      if (id) {
+        await api(`/api/classes/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+        showToast('Turma atualizada!');
+      } else {
+        await api('/api/classes', { method: 'POST', body: JSON.stringify(payload) });
+        showToast('Turma criada!');
+      }
+      hideModal('classEditModal');
+      await loadGymStructure();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('classMemberEnrollForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!activeClassMembersId) return;
+  const member = resolveMemberFromInput(document.getElementById('cmMemberSearch')?.value || '');
+  if (!member) return showToast('Selecione um aluno válido na lista.', true);
+  await withLoading(e.target, async () => {
+    try {
+      await api(`/api/classes/${activeClassMembersId}/enroll`, {
+        method: 'POST',
+        body: JSON.stringify({ member_id: member.id }),
+      });
+      document.getElementById('cmMemberSearch').value = '';
+      showToast(`${member.name} adicionado(a) à turma!`);
+      await Promise.all([openClassMembersModal(activeClassMembersId), loadGymStructure()]);
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('classMembersBody')?.addEventListener('click', async (e) => {
+  const profileBtn = e.target.closest('[data-open-member-profile]');
+  if (profileBtn) {
+    hideModal('classMembersModal', false);
+    openMemberProfile(Number(profileBtn.dataset.openMemberProfile));
+    return;
+  }
+  const removeBtn = e.target.closest('[data-remove-class-member]');
+  if (removeBtn && activeClassMembersId) {
+    const memberId = Number(removeBtn.dataset.removeClassMember);
+    try {
+      await api(`/api/classes/${activeClassMembersId}/enroll/${memberId}`, { method: 'DELETE' });
+      showToast('Aluno removido da turma.');
+      await Promise.all([openClassMembersModal(activeClassMembersId), loadGymStructure()]);
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+});
+
 async function loadGymStructure() {
   const [modalities, instructors, classes] = await Promise.all([
     api('/api/modalities'),
@@ -1265,9 +1469,19 @@ async function loadGymStructure() {
   profileModality.innerHTML = `<option value="">Nenhuma</option>${modOpts}`;
   profileModality.value = selectedModality;
   document.getElementById('clsModality').innerHTML = `<option value="">Modalidade...</option>${modOpts}`;
+  const clsFilterModEl = document.getElementById('clsFilterModality');
+  if (clsFilterModEl) {
+    const prevFilterMod = clsFilterModEl.value;
+    clsFilterModEl.innerHTML = `<option value="">Todas as modalidades</option>${modOpts}`;
+    if (prevFilterMod) clsFilterModEl.value = prevFilterMod;
+  }
+  const ceModEl = document.getElementById('ceModality');
+  if (ceModEl) ceModEl.innerHTML = `<option value="">Sem modalidade</option>${modOpts}`;
 
   const instOpts = instructors.map((i) => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join('');
   document.getElementById('clsInstructor').innerHTML = `<option value="">Professor...</option>${instOpts}`;
+  const ceInstEl = document.getElementById('ceInstructor');
+  if (ceInstEl) ceInstEl.innerHTML = `<option value="">Sem professor</option>${instOpts}`;
 
   document.getElementById('instructorsBody').innerHTML = instructors.length
     ? instructors.map((i) => `<tr><td>#${i.id}</td><td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.specialty || '—')}</td><td>${escapeHtml(i.phone || '—')}</td></tr>`).join('')
@@ -1293,20 +1507,7 @@ async function loadGymStructure() {
     renderClassOptions(modality, select, document.getElementById(select).value);
   }
 
-  document.getElementById('classesBody').innerHTML = classes.length
-    ? classes
-        .map(
-          (c) => `
-        <tr>
-          <td><strong>${escapeHtml(c.name)}</strong></td>
-          <td>${escapeHtml(c.modality_name || '-')}</td>
-          <td>${escapeHtml(c.instructor_name || '-')}</td>
-          <td>${escapeHtml(c.schedule)}</td>
-          <td>${c.enrolled_count} / ${c.capacity}</td>
-        </tr>`,
-        )
-        .join('')
-    : '<tr><td colspan="5" class="muted">Nenhuma turma cadastrada.</td></tr>';
+  renderClassesTable();
 
   renderMemberModalityPills();
   renderMemberPlanPicker();
@@ -5334,6 +5535,8 @@ document.getElementById('classForm').addEventListener('submit', async (e) => {
           instructor_id: document.getElementById('clsInstructor').value || null,
           schedule: document.getElementById('clsSchedule').value,
           capacity: Number(document.getElementById('clsCap').value),
+          online_enrollment_mode: document.getElementById('clsOnlineMode')?.value || 'auto',
+          allow_new_enrollments: document.getElementById('clsAllowNew')?.checked !== false ? 1 : 0,
         }),
       });
       e.target.reset();
