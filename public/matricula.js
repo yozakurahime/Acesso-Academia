@@ -74,6 +74,14 @@
     return (s.includes('nata') || s.includes('baby')) && (s.includes('infantil') || s.includes('baby') || s.includes('crian'));
   }
 
+  function requiresClassSelection(text) {
+    const s = String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    return s.includes('nata') || s.includes('hidro') || s.includes('pilates');
+  }
+
   function stopCamera() {
     if (mediaStream) {
       mediaStream.getTracks().forEach((t) => t.stop());
@@ -106,16 +114,21 @@
     formError.textContent = '';
   }
 
-  function updateModeUI() {
-    clearFormError();
+  function populateClassesForModality() {
     const modId = Number(modalitySelect.value || 0);
     const mod = optionsData.modalities.find((m) => Number(m.id) === modId);
     const modClasses = optionsData.classes.filter((c) => Number(c.modality_id) === modId);
     const modName = mod?.name || '';
+    const mustChooseClass = requiresClassSelection(modName);
 
     classSelect.innerHTML = '';
     if (modClasses.length > 0) {
       classWrap.hidden = false;
+      classSelect.required = mustChooseClass || modClasses.length > 0;
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Selecione uma turma / horário...';
+      classSelect.appendChild(placeholder);
       for (const c of modClasses) {
         const opt = document.createElement('option');
         opt.value = String(c.id);
@@ -132,15 +145,30 @@
         }
         classSelect.appendChild(opt);
       }
-      const firstEnabled = Array.from(classSelect.options).find((o) => !o.disabled);
-      if (firstEnabled) classSelect.value = firstEnabled.value;
+      classSelect.value = '';
     } else {
       classWrap.hidden = true;
+      classSelect.required = false;
     }
+  }
 
+  function updateModeUI() {
+    clearFormError();
+    const modId = Number(modalitySelect.value || 0);
+    const mod = optionsData.modalities.find((m) => Number(m.id) === modId);
+    const modClasses = optionsData.classes.filter((c) => Number(c.modality_id) === modId);
+    const modName = mod?.name || '';
+    const mustChooseClass = requiresClassSelection(modName);
     const selectedClass = modClasses.find((c) => String(c.id) === classSelect.value) || null;
     const receptionOnly = isKidsSwimText(modName) || selectedClass?.online_enrollment_mode === 'reception_only';
-    const allClosed = modClasses.length > 0 && modClasses.every((c) => c.allow_new_enrollments === 0 || (c.online_enrollment_mode !== 'reception_only' && c.spots_left === 0));
+    const noOpenClasses = mustChooseClass && !receptionOnly && (
+      modClasses.length === 0
+      || modClasses.every((c) => c.allow_new_enrollments === 0 || (c.online_enrollment_mode !== 'reception_only' && c.spots_left === 0))
+    );
+    const allClosed = noOpenClasses || (
+      modClasses.length > 0
+      && modClasses.every((c) => c.allow_new_enrollments === 0 || (c.online_enrollment_mode !== 'reception_only' && c.spots_left === 0))
+    );
 
     if (receptionOnly) {
       modalityNotice.hidden = false;
@@ -155,7 +183,9 @@
       submitBtn.disabled = false;
     } else if (allClosed) {
       modalityNotice.hidden = false;
-      modalityNotice.textContent = 'As turmas desta modalidade estão fechadas ou lotadas no momento. Fale com nossa recepção no WhatsApp (62) 98102-0169.';
+      modalityNotice.textContent = modClasses.length === 0
+        ? 'Não há turmas abertas para esta modalidade no momento. Fale com nossa recepção no WhatsApp (62) 98102-0169.'
+        : 'As turmas desta modalidade estão fechadas ou lotadas no momento. Fale com nossa recepção no WhatsApp (62) 98102-0169.';
       planWrap.hidden = true;
       planSelect.required = false;
       docWrap.hidden = true;
@@ -213,6 +243,7 @@
 
       modalitySelect.disabled = false;
       planSelect.disabled = false;
+      populateClassesForModality();
       updateModeUI();
     } catch {
       modalitySelect.innerHTML = '<option value="">Erro ao carregar</option>';
@@ -222,7 +253,10 @@
     }
   }
 
-  modalitySelect.addEventListener('change', updateModeUI);
+  modalitySelect.addEventListener('change', () => {
+    populateClassesForModality();
+    updateModeUI();
+  });
   classSelect.addEventListener('change', updateModeUI);
 
   document.getElementById('phoneInput')?.addEventListener('input', (e) => {
@@ -360,6 +394,14 @@
     const docValue = docInput.value.trim();
     const docDigits = docValue.replace(/\D/g, '');
     const planId = !planWrap.hidden && planSelect.value ? Number(planSelect.value) : null;
+    const selectedMod = optionsData.modalities.find((m) => Number(m.id) === Number(modalitySelect.value || 0));
+    const mustChooseClass = requiresClassSelection(selectedMod?.name || '') || (!classWrap.hidden && classSelect.options.length > 1);
+
+    if (mustChooseClass && !classSelect.value) {
+      showFormError('Selecione uma turma / horário para continuar.');
+      if (!classWrap.hidden) classSelect.focus();
+      return;
+    }
 
     if (name.length < 3) {
       showFormError('Informe seu nome completo.');

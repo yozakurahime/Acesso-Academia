@@ -405,7 +405,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       return res.status(400).json({ error: 'Esta turma esta fechada para novas matriculas no momento.' });
     }
 
-    const lowerMod = `${modalityName} ${cls?.name || ''}`.toLowerCase();
+    const lowerMod = `${modalityName} ${cls?.name || ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const isKidsSwim = (lowerMod.includes('nata') || lowerMod.includes('baby'))
       && (lowerMod.includes('infantil') || lowerMod.includes('baby') || lowerMod.includes('crian'));
     const isReceptionOnly = isKidsSwim || cls?.online_enrollment_mode === 'reception_only';
@@ -437,6 +437,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       });
     }
 
+    const requiresClass = lowerMod.includes('nata') || lowerMod.includes('hidro') || lowerMod.includes('pilates');
+    if (requiresClass && !cls) {
+      return res.status(400).json({ error: 'Selecione uma turma / horario para esta modalidade.' });
+    }
+    if (cls && modality && cls.modality_id && Number(cls.modality_id) !== Number(modality.id)) {
+      return res.status(400).json({ error: 'A turma selecionada nao pertence a modalidade escolhida.' });
+    }
     if (cls && Number(cls.enrolled_count || 0) >= Number(cls.capacity || 0)) {
       return res.status(400).json({ error: 'Esta turma atingiu o limite máximo de vagas.' });
     }
