@@ -639,7 +639,11 @@ export class GatewayService {
       throw new Error('Ciclo de recorrência inválido.');
     }
 
-    const email = String(payer_email || member.email || '').trim() || `aluno${member.id}@academiaoxigenio.com`;
+    const rawEmail = String(payer_email || member.email || '').trim();
+    if (payer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+      throw new Error('Informe um e-mail válido para assinatura no cartão.');
+    }
+    const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : `aluno${member.id}@academiaoxigenio.com`;
     const externalRef = `mp_sub:${member.id}:${crypto.randomUUID().slice(0, 8)}`;
     const reason = `${settings.gym_name || 'Academia Oxigênio'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 120);
     const idempotencyKey = `mp_sub:${member.id}:${plan.id}:${finalAmount}:${cycleKey}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;

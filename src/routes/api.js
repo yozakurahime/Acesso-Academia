@@ -2404,6 +2404,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     handle(async (req, res) => {
       if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
       const planId = assertStudentPlanAllowed(req.studentMemberId, req.body?.plan_id);
+      assertStudentClassAllowed(req.studentMemberId, req.body?.class_id);
       const charge = await gatewayService.createPixCharge({ member_id: req.studentMemberId, plan_id: planId });
       res.status(201).json(charge);
     }),
@@ -2430,9 +2431,38 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     return planId;
   }
 
+  function assertStudentClassAllowed(memberId, rawClassId) {
+    if (rawClassId == null || rawClassId === '') return null;
+    const classId = Number(rawClassId);
+    const cls = store.get(
+      `SELECT c.id, c.active, c.capacity, COALESCE(c.allow_new_enrollments, 1) AS allow_new_enrollments,
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
+       FROM classes c WHERE c.id = ?`,
+      [classId],
+    );
+    if (!cls || Number(cls.active) !== 1) {
+      const err = new Error('Turma selecionada não está ativa.');
+      err.status = 400;
+      throw err;
+    }
+    const alreadyEnrolled = Boolean(store.get('SELECT 1 FROM class_enrollments WHERE class_id = ? AND member_id = ?', [classId, Number(memberId)]));
+    if (!alreadyEnrolled && Number(cls.allow_new_enrollments) === 0) {
+      const err = new Error('Esta turma está fechada para novas matrículas.');
+      err.status = 400;
+      throw err;
+    }
+    if (!alreadyEnrolled && Number(cls.capacity || 0) > 0 && Number(cls.enrolled_count || 0) >= Number(cls.capacity)) {
+      const err = new Error('Esta turma atingiu o limite máximo de vagas.');
+      err.status = 400;
+      throw err;
+    }
+    return classId;
+  }
+
   router.post('/student/me/checkout', requireStudentAuth, limitExpensive, handle(async (req, res) => {
     if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
     const planId = assertStudentPlanAllowed(req.studentMemberId, req.body?.plan_id);
+    assertStudentClassAllowed(req.studentMemberId, req.body?.class_id);
     const charge = await gatewayService.createCheckoutCharge({ member_id: req.studentMemberId, plan_id: planId });
     res.set('Cache-Control', 'no-store').status(201).json({ id: charge.id, amount_cents: charge.amount_cents, payment_url: charge.payment_url });
   }));
@@ -2458,8 +2488,9 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     limitExpensive,
     handle(async (req, res) => {
       if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
-      const { plan_id: rawPlanId = null, payer_email = null } = req.body || {};
+      const { plan_id: rawPlanId = null, class_id: rawClassId = null, payer_email = null } = req.body || {};
       const plan_id = assertStudentPlanAllowed(req.studentMemberId, rawPlanId);
+      assertStudentClassAllowed(req.studentMemberId, rawClassId);
       const sub = await gatewayService.createMpSubscription({
         member_id: req.studentMemberId,
         plan_id,

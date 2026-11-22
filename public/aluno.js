@@ -1601,15 +1601,19 @@ document.getElementById('btnStCheckout').addEventListener('click', (event) => wi
   try {
     const memberId = studentState.data?.member?.id;
     const plan_id = Number(document.getElementById('stPayPlan').value) || null;
-    const charge = await api('/api/student/me/checkout', { method: 'POST', body: JSON.stringify({ plan_id }) });
+    const class_id = Number(document.getElementById('stPayClass')?.value) || null;
+    const charge = await api('/api/student/me/checkout', { method: 'POST', body: JSON.stringify({ plan_id, class_id }) });
     if (!memberId || studentState.data?.member?.id !== memberId) return;
     const url = sanitizeHttpUrl(charge.payment_url);
     if (!url) throw new Error('Link de pagamento inválido.');
+    document.getElementById('stPixBox')?.classList.add('hidden');
+    document.getElementById('stSubBox')?.classList.add('hidden');
     const box = document.getElementById('stCheckoutBox');
     box.dataset.chargeId = charge.id;
     document.getElementById('stCheckoutAmount').textContent = `Valor a pagar ${fmtMoney(charge.amount_cents)}`;
     document.getElementById('stCheckoutLink').href = url;
     box.classList.remove('hidden');
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (err) {
     showToast(err.message, true);
   }
@@ -1638,11 +1642,14 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
   await withBusyButton(e.currentTarget, async () => {
     try {
       const planId = Number(document.getElementById('stPayPlan').value) || null;
+      const classId = Number(document.getElementById('stPayClass')?.value) || null;
       const charge = await api('/api/student/me/pix', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: planId }),
+        body: JSON.stringify({ plan_id: planId, class_id: classId }),
       });
       studentState.activePixChargeId = charge.id;
+      document.getElementById('stCheckoutBox')?.classList.add('hidden');
+      document.getElementById('stSubBox')?.classList.add('hidden');
       document.getElementById('stPixBox').classList.remove('hidden');
       document.getElementById('stPixInfo').textContent = `Valor: ${fmtMoney(charge.amount_cents)} · Aguardando pagamento (verificação automática ativa)`;
       document.getElementById('stPixCode').value = charge.qr_code || charge.qr_code_text || '';
@@ -1701,16 +1708,26 @@ document.getElementById('btnStSubscribeCard').addEventListener('click', async (e
   await withBusyButton(e.currentTarget, async () => {
     try {
       const planId = Number(document.getElementById('stPayPlan').value) || null;
+      const classId = Number(document.getElementById('stPayClass')?.value) || null;
       const payerEmail = document.getElementById('stPayEmail').value.trim() || null;
+      if (payerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
+        showToast('Informe um e-mail válido para assinatura no cartão.', true);
+        document.getElementById('stPayEmail').focus();
+        return;
+      }
       const sub = await api('/api/student/me/subscription', {
         method: 'POST',
-        body: JSON.stringify({ plan_id: planId, payer_email: payerEmail }),
+        body: JSON.stringify({ plan_id: planId, class_id: classId, payer_email: payerEmail }),
       });
       const safeHref = sanitizeHttpUrl(sub.init_point);
       if (!safeHref) throw new Error('Link de checkout inválido.');
-      document.getElementById('stSubBox').classList.remove('hidden');
+      document.getElementById('stPixBox')?.classList.add('hidden');
+      document.getElementById('stCheckoutBox')?.classList.add('hidden');
+      const subBox = document.getElementById('stSubBox');
+      subBox.classList.remove('hidden');
       document.getElementById('stSubInfo').textContent = `Plano: ${sub.reason || 'Assinatura'} · Valor: ${fmtMoney(sub.amount_cents)}`;
       document.getElementById('stSubLink').href = safeHref;
+      subBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       showToast('Link de assinatura criado!');
     } catch (err) {
       showToast(err.message, true);
