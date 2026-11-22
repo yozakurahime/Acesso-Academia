@@ -58,14 +58,15 @@ export class StudentPortalService {
     };
   }
 
-  findStudentByIdentifier(identifier) {
+  findMemberByIdentifier(identifier, allowedRoles = ['student']) {
     const raw = String(identifier || '').trim();
     if (!raw) return null;
+    const placeholders = allowedRoles.map(() => '?').join(', ');
 
     if (raw.includes('@')) {
       const matches = this.store.all(
-        "SELECT * FROM members WHERE access_role = 'student' AND LOWER(TRIM(COALESCE(email, ''))) = LOWER(?)",
-        [raw],
+        `SELECT * FROM members WHERE access_role IN (${placeholders}) AND LOWER(TRIM(COALESCE(email, ''))) = LOWER(?)`,
+        [...allowedRoles, raw],
       );
       return matches.length === 1 ? matches[0] : null;
     }
@@ -76,12 +77,12 @@ export class StudentPortalService {
     const noCountry = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
     const candidates = this.store.all(
       `SELECT * FROM members
-       WHERE access_role = 'student'
+       WHERE access_role IN (${placeholders})
          AND (
            replace(replace(replace(replace(replace(replace(COALESCE(document, ''), '.', ''), '-', ''), '/', ''), ' ', ''), '(', ''), ')', '') = ?
            OR replace(replace(replace(replace(replace(replace(replace(COALESCE(phone, ''), '.', ''), '-', ''), '/', ''), ' ', ''), '(', ''), ')', ''), '+', '') IN (?, ?, ?)
          )`,
-      [digits, digits, noCountry, `55${noCountry}`],
+      [...allowedRoles, digits, digits, noCountry, `55${noCountry}`],
     );
     const matches = candidates.filter((m) => {
       const docDigits = onlyDigits(m.document);
@@ -95,21 +96,28 @@ export class StudentPortalService {
     return matches.length === 1 ? matches[0] : null;
   }
 
-  issueInvite(memberId) {
+  findStudentByIdentifier(identifier) {
+    return this.findMemberByIdentifier(identifier, ['student']);
+  }
+
+  issueInvite(memberId, { allowedRoles = ['student', 'instructor', 'admin'] } = {}) {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 4; i += 1) {
       code += alphabet[randomInt(alphabet.length)];
     }
     const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-    const result = this.store.run("UPDATE members SET portal_invite_hash = ?, portal_invite_expires_at = ? WHERE id = ? AND access_role = 'student' AND portal_password_hash IS NULL",
-      [hashInviteCode(code), expiresAt, Number(memberId)]);
-    if (!result.changes) throw httpError('Aluno não encontrado ou já possui senha.', 409);
+    const placeholders = allowedRoles.map(() => '?').join(', ');
+    const result = this.store.run(
+      `UPDATE members SET portal_invite_hash = ?, portal_invite_expires_at = ? WHERE id = ? AND access_role IN (${placeholders}) AND portal_password_hash IS NULL`,
+      [hashInviteCode(code), expiresAt, Number(memberId), ...allowedRoles],
+    );
+    if (!result.changes) throw httpError('Cadastro não encontrado ou já possui senha.', 409);
     return { code, expiresAt };
   }
 
-  authenticateStudent(identifier, secret) {
-    const member = this.findStudentByIdentifier(identifier);
+  authenticatePortalMember(identifier, secret, allowedRoles = ['student']) {
+    const member = this.findMemberByIdentifier(identifier, allowedRoles);
     if (!member) {
       throw httpError('Identificador ou credencial inválidos.', 401);
     }
@@ -135,6 +143,27 @@ export class StudentPortalService {
       throw httpError('Identificador ou credencial inválidos. Solicite um convite à recepção.', 401);
     }
     return this._sanitizeMember(member);
+  }
+
+  authenticateStudent(identifier, secret) {
+    return this.authenticatePortalMember(identifier, secret, ['student']);
+  }
+
+  authenticateProfessor(identifier, secret) {
+    return this.authenticatePortalMember(identifier, secret, ['instructor', 'admin']);
+  }
+
+  getProfessorProfile(memberId, { includePhoto = true } = {}) {
+    const row = this.store.get(
+      "SELECT * FROM members WHERE id = ? AND access_role IN ('instructor', 'admin')",
+      [Number(memberId)],
+    );
+    if (!row) throw httpError('Professor não encontrado.', 404);
+    const settings = this.store.getSettings();
+    return {
+      gymName: settings.gym_name || 'Academia Oxigênio',
+      professor: this._sanitizeMember(row, { includePhoto }),
+    };
   }
 
   getStudentProfile(memberId, { includePhoto = true } = {}) {
@@ -308,9 +337,13 @@ export class StudentPortalService {
     return { profile_photo: dataUrl };
   }
 
-  updatePortalPassword(memberId, { current_password = '', new_password, force = false } = {}) {
-    const member = this.store.get("SELECT id, portal_password_hash FROM members WHERE id = ? AND access_role = 'student'", [Number(memberId)]);
-    if (!member) throw httpError('Aluno não encontrado.', 404);
+  updatePortalPassword(memberId, { current_password = '', new_password, force = false, allowedRoles = ['student'] } = {}) {
+    const placeholders = allowedRoles.map(() => '?').join(', ');
+    const member = this.store.get(
+      `SELECT id, portal_password_hash FROM members WHERE id = ? AND access_role IN (${placeholders})`,
+      [Number(memberId), ...allowedRoles],
+    );
+    if (!member) throw httpError('Cadastro não encontrado.', 404);
 
     if (!force && member.portal_password_hash && !verifyPassword(current_password, member.portal_password_hash)) {
       throw httpError('A senha atual está incorreta.', 401);
@@ -322,5 +355,9 @@ export class StudentPortalService {
       [hash, Number(memberId)],
     );
     return { ok: true, has_portal_password: true };
+  }
+
+  updateProfessorPassword(memberId, payload = {}) {
+    return this.updatePortalPassword(memberId, { ...payload, allowedRoles: ['instructor', 'admin'] });
   }
 }

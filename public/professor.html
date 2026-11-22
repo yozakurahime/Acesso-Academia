@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#ff6b2b" />
+  <title>Portal do Professor — Academia Oxigênio</title>
+  <link rel="icon" href="/oxigenio.jpg" type="image/jpeg" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/aluno.css?v=20261122.1" />
+  <link rel="stylesheet" href="/professor.css?v=20261122.1" />
+</head>
+<body class="student-body">
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <!-- LOGIN DO PROFESSOR -->
+  <main id="profLoginView" class="student-login-wrap">
+    <aside class="student-login-feature">
+      <div class="student-brand">
+        <img src="/oxigenio.jpg" alt="" width="48" height="48" />
+        <span><strong>Oxigênio</strong><small>Portal do Professor</small></span>
+      </div>
+      <div class="student-login-feature-copy">
+        <p>Gerencie treinos e exercícios</p>
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg> Monte fichas e modelos de treino.</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14M4 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/></svg> Grave vídeos de execução direto pelo celular.</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M7 15v-4m5 4V8m5 7V4"/></svg> Registre avaliações físicas e acompanhe turmas.</li>
+        </ul>
+      </div>
+    </aside>
+    <section class="panel login-card">
+      <div class="student-login-brand">
+        <h1>Portal do Professor</h1>
+        <p id="profLoginGymName" class="muted">Academia Oxigênio</p>
+      </div>
+      <form id="profLoginForm" class="form-stack">
+        <label>CPF, WhatsApp ou E-mail cadastrado
+          <input type="text" id="profLoginIdentifier" autocomplete="username" enterkeyhint="next" required />
+        </label>
+        <div class="password-field">
+          <label for="profLoginSecret">Senha ou código de convite</label>
+          <div class="password-input-wrap">
+            <input type="password" id="profLoginSecret" autocomplete="current-password" enterkeyhint="go" required />
+            <button type="button" class="btn btn-secondary btn-sm password-toggle-btn" data-toggle-password="profLoginSecret">Mostrar</button>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Entrar como Professor</button>
+      </form>
+
+      <details class="first-access-guide">
+        <summary>1º acesso com código de 4 dígitos? Veja como entrar</summary>
+        <ol class="first-access-steps">
+          <li><strong>Identificação:</strong> informe seu <strong>CPF</strong>, <strong>WhatsApp</strong> ou <strong>E-mail</strong> cadastrado na equipe.</li>
+          <li><strong>Senha inicial:</strong> digite o <strong>código de convite</strong> gerado pela recepção/admin.</li>
+          <li><strong>Próximos acessos:</strong> abra a aba <strong>Perfil</strong> para criar sua senha pessoal.</li>
+        </ol>
+      </details>
+
+      <div class="student-login-enroll">
+        <span class="muted">É aluno da academia?</span>
+        <a href="/aluno" class="btn btn-secondary">Ir para o Portal do Aluno</a>
+      </div>
+    </section>
+  </main>
+
+  <!-- PORTAL AUTENTICADO DO PROFESSOR -->
+  <div id="profPortalView" class="student-shell hidden">
+    <header class="student-topbar">
+      <div class="student-brand">
+        <img src="/oxigenio.jpg" alt="Academia Oxigênio" width="38" height="38" />
+        <span>
+          <strong id="profHeaderName">Professor</strong>
+          <small id="profGymHeader">Academia Oxigênio</small>
+        </span>
+      </div>
+      <div class="student-topbar-actions">
+        <button type="button" id="btnProfTheme" class="btn btn-secondary btn-sm" aria-label="Alternar tema">Tema</button>
+        <button type="button" id="btnProfLogout" class="btn btn-secondary btn-sm">Sair</button>
+      </div>
+    </header>
+
+    <main class="student-main">
+      <section class="prof-stats-row" id="profStatsRow"></section>
+
+      <!-- ABA ALUNOS & TREINOS -->
+      <section id="profTabStudents" class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 style="margin:0;">Alunos &amp; Fichas de Treino</h2>
+            <p class="muted" style="margin:4px 0 0;">Selecione um aluno para montar treinos ou registrar avaliação física.</p>
+          </div>
+          <input type="search" id="profStudentSearch" placeholder="Buscar aluno por nome, telefone ou plano..." aria-label="Buscar aluno" />
+        </div>
+        <div id="profStudentsList" class="prof-cards-grid"></div>
+      </section>
+
+      <!-- DETALHE DO ALUNO SELECIONADO -->
+      <section id="profStudentDetail" class="panel hidden">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">Aluno selecionado</span>
+            <h2 id="profDetailName" style="margin:4px 0 0;">Aluno</h2>
+            <p id="profDetailMeta" class="muted" style="margin:4px 0 0;"></p>
+          </div>
+          <button type="button" id="btnProfBackStudents" class="btn btn-secondary btn-sm">Voltar à lista</button>
+        </div>
+
+        <div class="prof-split-grid">
+          <div>
+            <div class="panel-header" style="margin-bottom:10px;">
+              <h3 style="margin:0;">Fichas de Treino</h3>
+              <button type="button" id="btnProfNewWorkout" class="btn btn-primary btn-sm">+ Novo Treino</button>
+            </div>
+            <div id="profMemberWorkouts" class="prof-stack"></div>
+
+            <form id="profWorkoutForm" class="prof-subcard hidden">
+              <div class="panel-header" style="margin-bottom:10px;">
+                <h4 id="profWorkoutFormTitle" style="margin:0;">Montar Treino</h4>
+                <button type="button" id="btnProfCancelWorkout" class="btn btn-secondary btn-sm">Cancelar</button>
+              </div>
+              <input type="hidden" id="pwId" />
+              <div class="form-grid">
+                <label>Aplicar modelo pronto (opcional)
+                  <select id="pwTemplateSelect"></select>
+                </label>
+                <label>Título da ficha *
+                  <input type="text" id="pwTitle" placeholder="Ex: Treino A — Superiores" required />
+                </label>
+                <label>Objetivo
+                  <input type="text" id="pwGoal" placeholder="Ex: Hipertrofia / Resistência" />
+                </label>
+                <label>Observações
+                  <input type="text" id="pwNotes" placeholder="Orientações gerais..." />
+                </label>
+              </div>
+              <div class="prof-ex-builder">
+                <div class="panel-header" style="margin:10px 0 8px;">
+                  <strong>Exercícios do treino</strong>
+                  <button type="button" id="btnProfAddExRow" class="btn btn-secondary btn-sm">+ Adicionar exercício</button>
+                </div>
+                <div id="pwExercisesList" class="prof-stack"></div>
+              </div>
+              <div class="inline-actions" style="justify-content:flex-end;margin-top:12px;">
+                <button type="submit" class="btn btn-primary">Salvar ficha de treino</button>
+              </div>
+            </form>
+          </div>
+
+          <div>
+            <h3 style="margin-top:0;">Avaliação Física</h3>
+            <form id="profAssessmentForm" class="prof-subcard form-grid">
+              <label>Peso (kg) <input type="number" step="0.1" id="paWeight" placeholder="72.5" /></label>
+              <label>Altura (cm) <input type="number" step="0.1" id="paHeight" placeholder="175" /></label>
+              <label>% Gordura <input type="number" step="0.1" id="paBodyFat" placeholder="18.0" /></label>
+              <label>Observações <input type="text" id="paNotes" placeholder="Medidas / metas..." /></label>
+              <div style="grid-column:1 / -1;display:flex;justify-content:flex-end;">
+                <button type="submit" class="btn btn-secondary btn-sm">Registrar avaliação</button>
+              </div>
+            </form>
+            <ul id="profAssessmentsList" class="simple-list" style="margin-top:10px;"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA MODELOS DE TREINO -->
+      <section id="profTabTemplates" class="panel hidden">
+        <div class="panel-header">
+          <div>
+            <h2 style="margin:0;">Modelos de Treino</h2>
+            <p class="muted" style="margin:4px 0 0;">Crie modelos reutilizáveis para aplicar rapidamente aos alunos.</p>
+          </div>
+          <button type="button" id="btnProfNewTemplate" class="btn btn-primary btn-sm">+ Novo Modelo</button>
+        </div>
+
+        <form id="profTemplateForm" class="prof-subcard hidden" style="margin-bottom:14px;">
+          <div class="panel-header" style="margin-bottom:10px;">
+            <h3 id="profTplFormTitle" style="margin:0;">Novo Modelo</h3>
+            <button type="button" id="btnProfCancelTpl" class="btn btn-secondary btn-sm">Cancelar</button>
+          </div>
+          <input type="hidden" id="ptId" />
+          <div class="form-grid">
+            <label>Nome do modelo * <input type="text" id="ptTitle" placeholder="Ex: Adaptação Iniciante" required /></label>
+            <label>Objetivo <input type="text" id="ptGoal" placeholder="Condicionamento / Hipertrofia" /></label>
+            <label>Observações <input type="text" id="ptNotes" placeholder="Notas do modelo..." /></label>
+          </div>
+          <div class="panel-header" style="margin:10px 0 8px;">
+            <strong>Exercícios do modelo</strong>
+            <button type="button" id="btnProfAddTplEx" class="btn btn-secondary btn-sm">+ Adicionar exercício</button>
+          </div>
+          <div id="ptExercisesList" class="prof-stack"></div>
+          <div class="inline-actions" style="justify-content:flex-end;margin-top:12px;">
+            <button type="submit" class="btn btn-primary">Salvar modelo</button>
+          </div>
+        </form>
+
+        <div id="profTemplatesList" class="prof-cards-grid"></div>
+      </section>
+
+      <!-- ABA EXERCÍCIOS & VÍDEOS -->
+      <section id="profTabExercises" class="panel hidden">
+        <div class="panel-header">
+          <div>
+            <h2 style="margin:0;">Catálogo de Exercícios &amp; Vídeos</h2>
+            <p class="muted" style="margin:4px 0 0;">Grave ou envie vídeos reais de execução direto do celular (até 30 MB).</p>
+          </div>
+          <button type="button" id="btnProfNewExercise" class="btn btn-primary btn-sm">+ Novo Exercício</button>
+        </div>
+
+        <div class="prof-filter-bar">
+          <input type="search" id="profExSearch" placeholder="Buscar exercício ou grupo muscular..." aria-label="Buscar exercício" />
+          <label class="checkbox-label"><input type="checkbox" id="profExOnlyNoVideo" /> Apenas sem vídeo</label>
+        </div>
+
+        <form id="profExerciseForm" class="prof-subcard hidden" style="margin-bottom:14px;">
+          <div class="panel-header" style="margin-bottom:10px;">
+            <h3 id="profExFormTitle" style="margin:0;">Novo Exercício</h3>
+            <button type="button" id="btnProfCancelEx" class="btn btn-secondary btn-sm">Cancelar</button>
+          </div>
+          <input type="hidden" id="peKey" />
+          <div class="form-grid">
+            <label>Nome do exercício * <input type="text" id="peName" placeholder="Ex: Supino Reto com Barra" required /></label>
+            <label>Grupo muscular * <input type="text" id="peMuscle" placeholder="Ex: Peito, Costas, Pernas..." required /></label>
+            <label class="checkbox-label" style="align-self:end;"><input type="checkbox" id="peUsesEq" checked /> Usa equipamento</label>
+            <label id="peEqWrap">Equipamento <input type="text" id="peEquipment" placeholder="Ex: Barra, Halteres, Máquina..." /></label>
+            <label style="grid-column:1 / -1;">Dicas de execução
+              <input type="text" id="peTips" placeholder="Postura, respiração, amplitude..." />
+            </label>
+          </div>
+          <div class="inline-actions" style="justify-content:flex-end;margin-top:10px;">
+            <button type="submit" class="btn btn-primary">Salvar exercício</button>
+          </div>
+        </form>
+
+        <div id="profVideoPanel" class="prof-subcard hidden" style="margin-bottom:14px;">
+          <div class="panel-header" style="margin-bottom:10px;">
+            <div>
+              <span class="eyebrow">Vídeo de execução</span>
+              <h3 id="profVideoExName" style="margin:4px 0 0;">Exercício</h3>
+            </div>
+            <button type="button" id="btnProfCloseVideo" class="btn btn-secondary btn-sm">Fechar</button>
+          </div>
+          <video id="profVideoPlayer" controls playsinline class="prof-video-player hidden"></video>
+          <p id="profVideoStatus" class="muted"></p>
+          <input type="file" id="profVideoFileInput" accept="video/*" capture="environment" class="hidden" />
+          <div class="inline-actions" style="flex-wrap:wrap;">
+            <button type="button" id="btnProfRecordVideo" class="btn btn-primary">Gravar ou escolher vídeo</button>
+            <button type="button" id="btnProfDeleteVideo" class="btn btn-danger btn-sm hidden">Remover vídeo</button>
+          </div>
+        </div>
+
+        <div id="profExercisesGrid" class="prof-cards-grid"></div>
+      </section>
+
+      <!-- ABA TURMAS -->
+      <section id="profTabClasses" class="panel hidden">
+        <div class="panel-header">
+          <div>
+            <h2 style="margin:0;">Turmas &amp; Chamada</h2>
+            <p class="muted" style="margin:4px 0 0;">Confira horários, vagas e os alunos matriculados em cada turma.</p>
+          </div>
+        </div>
+        <div id="profClassesGrid" class="prof-cards-grid"></div>
+        <div id="profClassRosterBox" class="prof-subcard hidden" style="margin-top:14px;">
+          <div class="panel-header" style="margin-bottom:8px;">
+            <h3 id="profClassRosterTitle" style="margin:0;">Alunos da turma</h3>
+            <button type="button" id="btnProfCloseRoster" class="btn btn-secondary btn-sm">Fechar</button>
+          </div>
+          <ul id="profClassRosterList" class="simple-list"></ul>
+        </div>
+      </section>
+
+      <!-- ABA PERFIL -->
+      <section id="profTabProfile" class="panel hidden">
+        <h2 style="margin-top:0;">Meu Perfil &amp; Senha</h2>
+        <p id="profProfileMeta" class="muted"></p>
+        <form id="profPasswordForm" class="form-stack" style="max-width:420px;margin-top:14px;">
+          <label id="profCurrentPassWrap">Senha atual
+            <input type="password" id="profCurrentPass" autocomplete="current-password" />
+          </label>
+          <label>Nova senha (mínimo 6 caracteres)
+            <input type="password" id="profNewPass" minlength="6" autocomplete="new-password" required />
+          </label>
+          <button type="submit" class="btn btn-primary">Salvar nova senha</button>
+        </form>
+      </section>
+    </main>
+
+    <nav class="student-nav" aria-label="Navegação do Portal do Professor">
+      <button type="button" class="active" data-prof-tab="students">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5H3v14h3m12-14h3v14h-3M6 3h3v18H6zm9 0h3v18h-3zm-6 9h6"/></svg>
+        <span>Treinos</span>
+      </button>
+      <button type="button" data-prof-tab="templates">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <span>Modelos</span>
+      </button>
+      <button type="button" data-prof-tab="exercises">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l4.55-2.28A1 1 0 0 1 21 8.62v6.76a1 1 0 0 1-1.45.9L15 14M4 7h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/></svg>
+        <span>Vídeos</span>
+      </button>
+      <button type="button" data-prof-tab="classes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+        <span>Turmas</span>
+      </button>
+      <button type="button" data-prof-tab="profile">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+        <span>Perfil</span>
+      </button>
+    </nav>
+  </div>
+
+  <script src="/professor.js?v=20261122.1" defer></script>
+</body>
+</html>

@@ -318,3 +318,112 @@ test('online_available filtra planos em /public/plans, /public/enrollment-option
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('Portal do Professor (/api/professor/*): convite, login isolado, treinos, modelos, catalogo, avaliacao e troca de senha', async () => {
+  const store = await DatabaseStore.create(null);
+  const accessService = new AccessService(store);
+  const gymService = new GymService(store);
+  const authService = new AuthService(store);
+  const studentPortalService = new StudentPortalService(store, gymService);
+
+  const prof = await accessService.createMember({
+    name: 'Prof. Lucas',
+    document: '52998224725',
+    phone: '62999994444',
+    access_role: 'instructor',
+  });
+  const student = await accessService.createMember({
+    name: 'Aluno Treino',
+    document: '11144477735',
+    phone: '62999995555',
+    access_role: 'student',
+  });
+
+  const { code } = studentPortalService.issueInvite(prof.id);
+  const { code: stuCode } = studentPortalService.issueInvite(student.id);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api', createApiRouter({ store, accessService, gymService, authService, studentPortalService }));
+  const server = app.listen(0);
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  try {
+    // Aluno comum nao entra no portal do professor
+    const deniedRes = await fetch(`${baseUrl}/api/professor/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: '62999995555', secret: stuCode }),
+    });
+    assert.equal(deniedRes.status, 401);
+
+    // Professor entra com codigo de convite de 4 digitos
+    const loginRes = await fetch(`${baseUrl}/api/professor/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: '62999994444', secret: code }),
+    });
+    assert.equal(loginRes.status, 200);
+    const cookie = loginRes.headers.get('set-cookie').split(';')[0];
+
+    // Sessao de professor nao acessa rotas exclusivas de aluno
+    const stuRouteRes = await fetch(`${baseUrl}/api/student/me`, { headers: { cookie } });
+    assert.equal(stuRouteRes.status, 401);
+
+    const dashRes = await fetch(`${baseUrl}/api/professor/dashboard`, { headers: { cookie } });
+    assert.equal(dashRes.status, 200);
+    const dash = await dashRes.json();
+    assert.equal(dash.professor.id, prof.id);
+    assert.equal(dash.students.some((s) => s.id === student.id), true);
+
+    const exRes = await fetch(`${baseUrl}/api/professor/exercise-catalog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'Remada Curvada', muscle_group: 'Costas', uses_equipment: true, equipment: 'Barra', tips: 'Coluna neutra' }),
+    });
+    assert.equal(exRes.status, 201);
+    const ex = await exRes.json();
+
+    const tplRes = await fetch(`${baseUrl}/api/professor/workout-templates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({
+        title: 'Modelo Costas',
+        goal: 'Hipertrofia',
+        exercises: [{ exercise_key: ex.key, exercise_name: ex.name, muscle_group: ex.muscle_group, sets: 4, reps: '10', rest_seconds: 60 }],
+      }),
+    });
+    assert.equal(tplRes.status, 201);
+
+    const wkRes = await fetch(`${baseUrl}/api/professor/members/${student.id}/workouts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({
+        title: 'Treino B',
+        goal: 'Hipertrofia',
+        exercises: [{ exercise_key: ex.key, exercise_name: ex.name, muscle_group: ex.muscle_group, sets: 4, reps: '10', rest_seconds: 60 }],
+      }),
+    });
+    assert.equal(wkRes.status, 201);
+
+    const assessRes = await fetch(`${baseUrl}/api/professor/members/${student.id}/assessments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ weight_kg: 74.5, height_cm: 178, body_fat_pct: 15.2 }),
+    });
+    assert.equal(assessRes.status, 201);
+
+    const pwdRes = await fetch(`${baseUrl}/api/professor/me/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ new_password: 'prof-senha-segura' }),
+    });
+    assert.equal(pwdRes.status, 200);
+
+    // Token antigo foi invalidado
+    const staleRes = await fetch(`${baseUrl}/api/professor/dashboard`, { headers: { cookie } });
+    assert.equal(staleRes.status, 401);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

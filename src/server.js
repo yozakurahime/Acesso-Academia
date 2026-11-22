@@ -126,6 +126,7 @@ async function start() {
   };
   const STUDENT_HOST_ASSETS = new Set([
     '/', '/aluno', '/aluno/', '/aluno.html', '/aluno.css', '/aluno.js',
+    '/professor', '/professor/', '/professor.html', '/professor.css', '/professor.js',
     '/matricula', '/matricula/', '/matricula.html', '/matricula.js',
     '/landing', '/landing/', '/landing.html',
     '/styles.css', '/exercises.js', '/exercise-catalog.js', '/oxigenio.jpg',
@@ -133,6 +134,7 @@ async function start() {
   ]);
   app.use((req, res, next) => {
     const isAlunoPath = req.path === '/aluno' || req.path === '/aluno/' || req.path === '/aluno.html';
+    const isProfessorPath = req.path === '/professor' || req.path === '/professor/' || req.path === '/professor.html';
     const isMatriculaPath = req.path === '/matricula' || req.path === '/matricula/' || req.path === '/matricula.html';
     const isLandingPath = req.path === '/landing' || req.path === '/landing/' || req.path === '/landing.html';
     const isCatracaPath = req.path === '/catraca' || req.path === '/catraca/';
@@ -143,6 +145,9 @@ async function start() {
       if (req.method === 'GET') {
         if (req.path === '/aluno' || req.path === '/aluno/') {
           return res.sendFile(path.join(rootDir, 'public', 'aluno.html'));
+        }
+        if (req.path === '/professor' || req.path === '/professor/') {
+          return res.sendFile(path.join(rootDir, 'public', 'professor.html'));
         }
         if (req.path === '/matricula' || req.path === '/matricula/') {
           return res.sendFile(path.join(rootDir, 'public', 'matricula.html'));
@@ -163,6 +168,9 @@ async function start() {
     if (isAlunoPath) {
       return res.sendFile(path.join(rootDir, 'public', 'aluno.html'));
     }
+    if (isProfessorPath) {
+      return res.sendFile(path.join(rootDir, 'public', 'professor.html'));
+    }
     if (isMatriculaPath) {
       return res.sendFile(path.join(rootDir, 'public', 'matricula.html'));
     }
@@ -170,7 +178,13 @@ async function start() {
       const landingFile = path.join(rootDir, 'public', 'landing.html');
       return res.sendFile(fs.existsSync(landingFile) ? landingFile : path.join(rootDir, 'public', 'aluno.html'));
     }
-    if (req.path.startsWith('/api/student/') || req.path.startsWith('/api/public/') || req.path === '/api/health' || /^\/api\/exercise-catalog\/[^/]+\/video$/.test(req.path)) {
+    if (
+      req.path.startsWith('/api/student/')
+      || req.path.startsWith('/api/professor/')
+      || req.path.startsWith('/api/public/')
+      || req.path === '/api/health'
+      || /^\/api\/exercise-catalog\/[^/]+\/video$/.test(req.path)
+    ) {
       return next();
     }
     if (req.method === 'GET' && (STUDENT_HOST_ASSETS.has(req.path) || req.path.startsWith('/landing-assets/') || req.path.startsWith('/icons/'))) {

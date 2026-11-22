@@ -2578,6 +2578,144 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(accessService.signMemberContract(req.studentMemberId, req.body || {}));
   }));
 
+  // --- Portal do Professor (/professor) ---
+  const requireProfessorAuth = authService
+    ? authService.professorMiddleware()
+    : (_req, res) => res.status(500).json({ error: 'AuthService não configurado.' });
+
+  router.get('/professor/auth/status', (req, res) => {
+    const session = authService?.getProfessorSessionFromRequest(req);
+    if (!session?.m) {
+      return res.json({ authenticated: false, gymName: store.getSettings().gym_name || 'Academia Oxigênio' });
+    }
+    try {
+      const profile = portalService.getProfessorProfile(session.m, { includePhoto: false });
+      return res.json({ authenticated: true, ...profile });
+    } catch {
+      authService.clearProfessorSessionCookie(res);
+      return res.json({ authenticated: false, gymName: store.getSettings().gym_name || 'Academia Oxigênio' });
+    }
+  });
+
+  router.post(
+    '/professor/auth/login',
+    limitLogin,
+    handle(async (req, res) => {
+      if (!authService) throw new Error('Serviço de autenticação não inicializado.');
+      const { identifier, secret } = req.body || {};
+      const professor = portalService.authenticateProfessor(identifier, secret);
+      authService.setProfessorSessionCookie(req, res, professor.id);
+      res.json({ ok: true, professor });
+    }),
+  );
+
+  router.post('/professor/auth/logout', (req, res) => {
+    if (authService) {
+      const session = authService.getProfessorSessionFromRequest(req);
+      if (session?.m) authService.revokeStudentTokens(session.m);
+      authService.clearProfessorSessionCookie(res);
+    }
+    res.json({ ok: true });
+  });
+
+  router.put(
+    '/professor/me/password',
+    requireProfessorAuth,
+    handle(async (req, res) => {
+      const { current_password = '', new_password = '' } = req.body || {};
+      if (String(new_password).trim().length < 6) {
+        return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+      }
+      const out = portalService.updateProfessorPassword(req.professorMemberId, {
+        current_password,
+        new_password: String(new_password).trim(),
+      });
+      if (authService) authService.setProfessorSessionCookie(req, res, req.professorMemberId);
+      res.json(out);
+    }),
+  );
+
+  router.get(
+    '/professor/dashboard',
+    requireProfessorAuth,
+    handle(async (req, res) => {
+      const profile = portalService.getProfessorProfile(req.professorMemberId);
+      const students = store.all(
+        `SELECT m.id, m.name, m.phone, m.status, m.valid_until, p.name AS plan_name,
+                (SELECT COUNT(*) FROM workouts w WHERE w.member_id = m.id AND w.active = 1) AS active_workouts_count
+         FROM members m
+         LEFT JOIN plans p ON p.id = m.plan_id
+         WHERE m.access_role = 'student'
+         ORDER BY m.name ASC`,
+      );
+      const exerciseCatalog = listExerciseCatalog(store);
+      const workoutTemplates = gymService.listWorkoutTemplates();
+      const classes = gymService.listClasses();
+      const activeStudents = students.filter((s) => s.status === 'active').length;
+      const withVideo = exerciseCatalog.filter((e) => Boolean(e.has_video)).length;
+      res.json({
+        ...profile,
+        students,
+        exerciseCatalog,
+        workoutTemplates,
+        classes,
+        stats: {
+          totalStudents: students.length,
+          activeStudents,
+          templatesCount: workoutTemplates.length,
+          catalogCount: exerciseCatalog.length,
+          videosCount: withVideo,
+        },
+      });
+    }),
+  );
+
+  router.get(
+    '/professor/members/:id/workouts',
+    requireProfessorAuth,
+    handle(async (req, res) => res.json(gymService.listWorkoutsByMember(req.params.id))),
+  );
+  router.post(
+    '/professor/members/:id/workouts',
+    requireProfessorAuth,
+    handle(async (req, res) => {
+      const workout = gymService.createWorkout({ ...req.body, member_id: req.params.id });
+      res.status(201).json(workout);
+    }),
+  );
+  router.put(
+    '/professor/workouts/:workoutId',
+    requireProfessorAuth,
+    handle(async (req, res) => res.json(gymService.updateWorkout(req.params.workoutId, req.body || {}))),
+  );
+  router.delete(
+    '/professor/workouts/:workoutId',
+    requireProfessorAuth,
+    handle(async (req, res) => res.json(gymService.deleteWorkout(req.params.workoutId))),
+  );
+
+  router.get('/professor/workout-templates', requireProfessorAuth, handle(async (_req, res) => res.json(gymService.listWorkoutTemplates())));
+  router.post('/professor/workout-templates', requireProfessorAuth, handle(async (req, res) => res.status(201).json(gymService.saveWorkoutTemplate(req.body))));
+  router.put('/professor/workout-templates/:id', requireProfessorAuth, handle(async (req, res) => res.json(gymService.saveWorkoutTemplate(req.body, req.params.id))));
+  router.delete('/professor/workout-templates/:id', requireProfessorAuth, handle(async (req, res) => res.json(gymService.deleteWorkoutTemplate(req.params.id))));
+
+  router.get('/professor/exercise-catalog', requireProfessorAuth, handle(async (_req, res) => res.set('Cache-Control', 'no-store').json(listExerciseCatalog(store))));
+  router.post('/professor/exercise-catalog', requireProfessorAuth, handle(async (req, res) => res.status(201).json(saveCatalogExercise(store, req.body))));
+  router.put('/professor/exercise-catalog/:key', requireProfessorAuth, handle(async (req, res) => res.json(saveCatalogExercise(store, req.body, req.params.key))));
+  if (exerciseVideos) {
+    const readProfVideo = raw({ type: 'application/octet-stream', limit: MAX_EXERCISE_VIDEO, inflate: false });
+    router.put('/professor/exercise-catalog/:key/video', requireProfessorAuth, (req, res, next) => readProfVideo(req, res, (err) => {
+      if (err?.status === 413) return res.status(413).json({ error: 'O vídeo deve ter até 30 MB.' });
+      if (err) return next(err);
+      next();
+    }), handle(async (req, res) => res.json(await exerciseVideos.save(req.params.key, req.body))));
+    router.delete('/professor/exercise-catalog/:key/video', requireProfessorAuth, handle(async (req, res) => res.json(exerciseVideos.remove(req.params.key))));
+  }
+
+  router.get('/professor/members/:id/assessments', requireProfessorAuth, handle(async (req, res) => res.json(gymService.listAssessments(req.params.id))));
+  router.post('/professor/members/:id/assessments', requireProfessorAuth, handle(async (req, res) => res.status(201).json(gymService.createAssessment(req.params.id, req.body || {}))));
+  router.get('/professor/classes/:id/members', requireProfessorAuth, handle(async (req, res) => res.json(gymService.listClassMembers(req.params.id))));
+
   router.use((_req, res) => {
     res.status(404).json({ error: 'Esta função não está disponível no servidor atual.', code: 'API_NOT_FOUND' });
   });

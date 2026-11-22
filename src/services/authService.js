@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 const SESSION_COOKIE = 'acesso_session';
 const STUDENT_SESSION_COOKIE = 'aluno_session';
+const PROFESSOR_SESSION_COOKIE = 'professor_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 const LOCAL_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 const ALLOWED_USER_ROLES = new Set(['admin', 'reception', 'instructor']);
@@ -97,6 +98,10 @@ export class AuthService {
 
   getStudentSecret() {
     return crypto.createHmac('sha256', this.getSecret()).update('student-session-v1').digest();
+  }
+
+  getProfessorSecret() {
+    return crypto.createHmac('sha256', this.getSecret()).update('professor-session-v1').digest();
   }
 
   rotateSessionSecret() {
@@ -210,34 +215,35 @@ export class AuthService {
     res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
   }
 
-  signStudentToken(memberId, tokenVersion = null) {
+  _signPortalToken(memberId, { role, secret, tokenVersion = null }) {
     let version = tokenVersion;
     if (version === null || version === undefined) {
       const row = this.store.get('SELECT portal_token_version FROM members WHERE id = ?', [Number(memberId)]);
       version = Number(row?.portal_token_version ?? 1);
     }
     const payload = Buffer.from(
-      JSON.stringify({ m: Number(memberId), role: 'student', v: Number(version), exp: Date.now() + SESSION_TTL_MS }),
+      JSON.stringify({ m: Number(memberId), role, v: Number(version), exp: Date.now() + SESSION_TTL_MS }),
       'utf8',
     ).toString('base64url');
-    const sig = crypto.createHmac('sha256', this.getStudentSecret()).update(payload).digest('base64url');
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
     return `${payload}.${sig}`;
   }
 
-  verifyStudentToken(token) {
+  _verifyPortalToken(token, { role, secret, allowedAccessRoles }) {
     if (!token || !String(token).includes('.')) return null;
     const [payload, sig] = String(token).split('.');
     if (!payload || !sig) return null;
-    const expectedSig = crypto.createHmac('sha256', this.getStudentSecret()).update(payload).digest('base64url');
+    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
     const a = Buffer.from(sig);
     const b = Buffer.from(expectedSig);
     if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
     try {
       const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-      if (data?.role !== 'student' || !data?.m || !data?.exp || Date.now() > Number(data.exp)) return null;
+      if (data?.role !== role || !data?.m || !data?.exp || Date.now() > Number(data.exp)) return null;
+      const placeholders = allowedAccessRoles.map(() => '?').join(', ');
       const member = this.store.get(
-        "SELECT portal_token_version FROM members WHERE id = ? AND access_role = 'student'",
-        [Number(data.m)],
+        `SELECT portal_token_version FROM members WHERE id = ? AND access_role IN (${placeholders})`,
+        [Number(data.m), ...allowedAccessRoles],
       );
       if (!member || Number(member.portal_token_version ?? 1) !== Number(data.v)) {
         return null;
@@ -246,6 +252,30 @@ export class AuthService {
     } catch {
       return null;
     }
+  }
+
+  signStudentToken(memberId, tokenVersion = null) {
+    return this._signPortalToken(memberId, { role: 'student', secret: this.getStudentSecret(), tokenVersion });
+  }
+
+  verifyStudentToken(token) {
+    return this._verifyPortalToken(token, {
+      role: 'student',
+      secret: this.getStudentSecret(),
+      allowedAccessRoles: ['student'],
+    });
+  }
+
+  signProfessorToken(memberId, tokenVersion = null) {
+    return this._signPortalToken(memberId, { role: 'professor', secret: this.getProfessorSecret(), tokenVersion });
+  }
+
+  verifyProfessorToken(token) {
+    return this._verifyPortalToken(token, {
+      role: 'professor',
+      secret: this.getProfessorSecret(),
+      allowedAccessRoles: ['instructor', 'admin'],
+    });
   }
 
   getStudentSessionFromRequest(req) {
@@ -278,6 +308,40 @@ export class AuthService {
         return res.status(401).json({ error: 'Sessão do aluno necessária.', code: 'STUDENT_AUTH_REQUIRED' });
       }
       req.studentMemberId = Number(session.m);
+      return next();
+    };
+  }
+
+  getProfessorSessionFromRequest(req) {
+    const cookies = parseCookies(req.headers?.cookie);
+    return this.verifyProfessorToken(cookies[PROFESSOR_SESSION_COOKIE]);
+  }
+
+  setProfessorSessionCookie(req, res, memberId) {
+    const token = this.signProfessorToken(memberId);
+    const isHttps = req.secure || req.headers?.['x-forwarded-proto'] === 'https';
+    const parts = [
+      `${PROFESSOR_SESSION_COOKIE}=${encodeURIComponent(token)}`,
+      'Path=/',
+      'HttpOnly',
+      'SameSite=Lax',
+      `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+    ];
+    if (isHttps) parts.push('Secure');
+    res.setHeader('Set-Cookie', parts.join('; '));
+  }
+
+  clearProfessorSessionCookie(res) {
+    res.setHeader('Set-Cookie', `${PROFESSOR_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  }
+
+  professorMiddleware() {
+    return (req, res, next) => {
+      const session = this.getProfessorSessionFromRequest(req);
+      if (!session?.m) {
+        return res.status(401).json({ error: 'Sessão do professor necessária.', code: 'PROFESSOR_AUTH_REQUIRED' });
+      }
+      req.professorMemberId = Number(session.m);
       return next();
     };
   }
@@ -470,6 +534,7 @@ export class AuthService {
         p === '/auth/login' ||
         p === '/auth/logout' ||
         p.startsWith('/student/') ||
+        p.startsWith('/professor/') ||
         p.startsWith('/webhooks/') ||
         p === '/members/webhook' ||
         p.endsWith('.fcgi')
