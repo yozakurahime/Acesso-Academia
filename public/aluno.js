@@ -1820,9 +1820,9 @@ document.getElementById('btnStSubscribeCard').addEventListener('click', async (e
     try {
       const planId = Number(document.getElementById('stPayPlan').value) || null;
       const classId = Number(document.getElementById('stPayClass')?.value) || null;
-      const payerEmail = document.getElementById('stPayEmail').value.trim() || null;
-      if (payerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
-        showToast('Informe um e-mail válido para assinatura no cartão.', true);
+      const payerEmail = document.getElementById('stPayEmail').value.trim() || String(studentState.data?.member?.email || '').trim();
+      if (!payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
+        showToast('Informe um e-mail válido no campo acima para criar a assinatura no cartão.', true);
         document.getElementById('stPayEmail').focus();
         return;
       }

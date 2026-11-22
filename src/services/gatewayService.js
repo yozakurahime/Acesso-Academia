@@ -619,12 +619,22 @@ export class GatewayService {
     );
   }
 
-  async createMpSubscription({ member_id, plan_id = null, amount_cents = null, cycle = null, payer_email = null }) {
+  async createMpSubscription({ member_id, plan_id = null, amount_cents = null, cycle = null, payer_email = null, card_token_id = null }) {
+    const badReq = (msg) => {
+      const err = new Error(msg);
+      err.status = 400;
+      return err;
+    };
     const settings = this.store.getSettings();
-    const headers = this.getMpAuth(settings);
+    let headers;
+    try {
+      headers = this.getMpAuth(settings);
+    } catch (err) {
+      throw badReq(err.message);
+    }
 
     const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
-    if (!member || member.access_role !== 'student') throw new Error('Selecione um aluno para cobrar.');
+    if (!member || member.access_role !== 'student') throw badReq('Selecione um aluno para cobrar.');
 
     const plan = plan_id
       ? this.store.get('SELECT * FROM plans WHERE id = ?', [Number(plan_id)])
@@ -634,23 +644,38 @@ export class GatewayService {
 
     const finalAmount = Number(amount_cents || plan?.price_cents || 0);
     if (!plan || !Number.isSafeInteger(finalAmount) || finalAmount <= 0) {
-      throw new Error('Informe um valor válido para a assinatura.');
+      throw badReq('Informe um valor válido para a assinatura.');
     }
 
     const cycleKey = String(cycle || mapDurationToCycle(plan?.duration_days)).toUpperCase();
     const cycleSpec = SUB_CYCLE_MAP[cycleKey];
     if (!cycleSpec) {
-      throw new Error('Ciclo de recorrência inválido.');
+      throw badReq('Ciclo de recorrência inválido.');
     }
 
     const rawEmail = String(payer_email || member.email || '').trim();
     if (payer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
-      throw new Error('Informe um e-mail válido para assinatura no cartão.');
+      throw badReq('Informe um e-mail válido para assinatura no cartão.');
     }
     const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : `aluno${member.id}@academiaoxigenio.com`;
     const externalRef = `mp_sub:${member.id}:${crypto.randomUUID().slice(0, 8)}`;
     const reason = `${settings.gym_name || 'Academia Oxigênio'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 120);
     const idempotencyKey = `mp_sub:${member.id}:${plan.id}:${finalAmount}:${cycleKey}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
+
+    const preapprovalBody = {
+      reason,
+      external_reference: externalRef,
+      payer_email: email,
+      back_url: 'https://academiaoxigenio.com',
+      status: card_token_id ? 'authorized' : 'pending',
+      auto_recurring: {
+        frequency: cycleSpec.frequency,
+        frequency_type: cycleSpec.frequency_type,
+        transaction_amount: Number((finalAmount / 100).toFixed(2)),
+        currency_id: 'BRL',
+      },
+    };
+    if (card_token_id) preapprovalBody.card_token_id = String(card_token_id);
 
     const res = await this.fetch('https://api.mercadopago.com/preapproval', {
       method: 'POST',
@@ -659,22 +684,11 @@ export class GatewayService {
         'X-Idempotency-Key': idempotencyKey,
       },
       signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({
-        reason,
-        external_reference: externalRef,
-        payer_email: email,
-        back_url: 'https://academiaoxigenio.com',
-        auto_recurring: {
-          frequency: cycleSpec.frequency,
-          frequency_type: cycleSpec.frequency_type,
-          transaction_amount: Number((finalAmount / 100).toFixed(2)),
-          currency_id: 'BRL',
-        },
-      }),
+      body: JSON.stringify(preapprovalBody),
     });
     const data = await this.safeJson(res);
     if (!res.ok || !data?.id) {
-      throw new Error(data?.message || data?.cause?.[0]?.description || `Erro ao criar assinatura Mercado Pago (${res.status})`);
+      throw badReq(data?.message || data?.cause?.[0]?.description || `Erro ao criar assinatura Mercado Pago (${res.status})`);
     }
 
     const ins = this.store.run(
@@ -755,7 +769,9 @@ export class GatewayService {
     });
     const data = await this.safeJson(response);
     if (!response.ok || !data?.id) {
-      throw new Error(data?.message || data?.cause?.[0]?.description || 'Não foi possível processar o pagamento no cartão.');
+      const err = new Error(data?.message || data?.cause?.[0]?.description || 'Não foi possível processar o pagamento no cartão.');
+      err.status = 400;
+      throw err;
     }
 
     const mpStatus = String(data.status || '').toLowerCase();
