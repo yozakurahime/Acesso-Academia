@@ -3533,10 +3533,17 @@ document.getElementById('btnConvertVisitor')?.addEventListener('click', async (e
 document.getElementById('profileForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = state.selectedProfileId;
+  const partnerVal = document.getElementById('profPartnerProvider')?.value || '';
+  const wellhubVal = document.getElementById('profWellhubId')?.value.trim() || '';
+  if (partnerVal === 'wellhub' && !wellhubVal) {
+    showToast('Informe o ID Wellhub (Gympass) para salvar.', true);
+    document.getElementById('profWellhubId')?.focus();
+    return;
+  }
   const cpfCheck = await validateCpfField('profDoc', 'profDocFeedback', {
     excludeId: id,
     remoteCheck: true,
-    showEmptyError: true,
+    showEmptyError: partnerVal !== 'wellhub',
   });
   if (!cpfCheck.valid) {
     showToast(cpfCheck.message, true);

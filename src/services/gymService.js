@@ -117,7 +117,7 @@ export class GymService {
       this.assertUniqueWellhubId(nextPartner.wellhub_id, id);
     }
     const nextStatus =
-      existing.access_role === 'student' && existing.status === 'pending' && nextPartner.partner_provider
+      existing.access_role === 'student' && nextPartner.partner_provider && existing.status !== 'active'
         ? 'active'
         : existing.status;
 

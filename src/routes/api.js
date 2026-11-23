@@ -1618,7 +1618,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/members/:id',
     requireReception,
     handle(async (req, res) => {
-      res.json(gymService.updateMember(req.params.id, req.body));
+      const updated = gymService.updateMember(req.params.id, req.body);
+      if (updated?.member) {
+        await accessService.trySyncMemberToDevice(updated.member).catch(() => {});
+      }
+      res.json(updated);
     }),
   );
 
