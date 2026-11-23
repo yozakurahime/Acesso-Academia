@@ -1928,10 +1928,9 @@ function openEnrollmentForm(enrollment) {
   document.getElementById('profModality').focus();
 }
 
-document.getElementById('btnNewEnrollment').addEventListener('click', () => openEnrollmentForm());
-document.getElementById('btnCancelEnrollment').addEventListener('click', () => {
+document.getElementById('btnNewEnrollment')?.addEventListener('click', () => openEnrollmentForm());
+document.getElementById('btnCancelEnrollment')?.addEventListener('click', () => {
   document.getElementById('enrollmentForm').classList.add('hidden');
-  document.getElementById('btnNewEnrollment').focus();
 });
 
 // --- Alunos & Perfil ---
@@ -3440,17 +3439,22 @@ document.getElementById('btnRemoveNewEnrollment')?.addEventListener('click', asy
 });
 
 function renderProfileEnrollments(data) {
-  state.profileEnrollments = data.modalities;
+  state.profileEnrollments = data.modalities || [];
   document.getElementById('enrollmentForm').classList.add('hidden');
-  const rows = data.modalities.map((entry) => `<li class="enrollment-row">
+  const hasPlan = Boolean(data.planEnrollment?.plan_id || data.member?.plan_id || data.member?.partner_provider);
+  if (!hasPlan) {
+    document.getElementById('profClassesList').innerHTML = '<li class="muted">Vincule um plano ao aluno primeiro para editar turmas.</li>';
+    return;
+  }
+  const rows = (data.modalities || []).map((entry) => `<li class="enrollment-row">
     <div><strong>${escapeHtml(entry.name)}</strong><div class="muted">${entry.classes.length
       ? entry.classes.map((cls) => escapeHtml(`${cls.name} · ${cls.schedule}`)).join('<br>') : 'Sem turma'}</div></div>
-    <div class="inline-actions"><button type="button" class="btn btn-primary btn-sm" data-receive-modality="${escapeHtml(entry.name)}">Receber</button>
-    <button class="btn btn-secondary btn-sm" data-edit="${entry.id}" aria-label="Editar matrícula em ${escapeHtml(entry.name)}">Editar</button>
-    <button class="btn btn-secondary btn-sm" data-remove="${entry.id}" aria-label="Remover matrícula em ${escapeHtml(entry.name)}">Remover</button></div>
+    <div class="inline-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit="${entry.id}" aria-label="Editar turma em ${escapeHtml(entry.name)}">Editar</button></div>
   </li>`);
-  if (!rows.length) rows.push('<li class="muted">Sem matrícula em modalidades.</li>');
-  for (const cls of data.classes.filter((entry) => !entry.modality_id)) {
+  if (!rows.length) {
+    rows.push(`<li class="enrollment-row"><div><strong>Sem turma vinculada</strong><div class="muted">Clique em Editar para escolher a turma deste plano.</div></div><div class="inline-actions"><button type="button" class="btn btn-secondary btn-sm" data-edit="">Editar</button></div></li>`);
+  }
+  for (const cls of (data.classes || []).filter((entry) => !entry.modality_id)) {
     rows.push(`<li class="muted">${escapeHtml(cls.name)} · ${escapeHtml(cls.schedule)} · Turma sem modalidade</li>`);
   }
   document.getElementById('profClassesList').innerHTML = rows.join('');
@@ -3799,7 +3803,6 @@ async function refreshEnrollmentProfile(data) {
     state.selectedProfileMember = data.member;
     renderProfileEnrollments(data);
     renderProfileEnrollmentTable(data);
-    document.getElementById('btnNewEnrollment').focus();
   }
   await Promise.all([loadMembers(), loadGymStructure()]).catch(() => {
     showToast('Matrícula gravada. Recarregue a página para atualizar a lista e a lotação.', true);
