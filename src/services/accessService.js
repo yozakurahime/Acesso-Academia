@@ -1953,6 +1953,10 @@ export class AccessService {
       return count;
     });
 
+    if (inserted > 0) {
+      this.emitAccessLog({ inserted });
+    }
+
     return {
       inserted,
       logs: this.store.all('SELECT * FROM access_logs ORDER BY id DESC LIMIT 50'),

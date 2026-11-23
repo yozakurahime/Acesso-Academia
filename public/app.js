@@ -311,10 +311,12 @@ function startTurnstileEventsStream() {
 if (!window.oxigenioDemo && !window.__liveLogsPollStarted) {
   window.__liveLogsPollStarted = true;
   setInterval(() => {
-    if (document.hidden || !state.authReady) return;
+    const loginOverlay = document.getElementById('loginOverlay');
+    if (document.hidden || (loginOverlay && !loginOverlay.classList.contains('hidden'))) return;
     if (state.activeTab === 'balcao') loadBalcaoRecentLogs().catch(() => {});
     else if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
-  }, 10000);
+    else if (state.activeTab === 'logs') loadLogs().catch(() => {});
+  }, 5000);
 }
 
 function cpfDigits(value) {
