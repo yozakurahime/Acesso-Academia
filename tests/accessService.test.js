@@ -768,3 +768,22 @@ test('deletePayment exclui pagamento duplicado, recalcula valid_until e reabre c
   assert.equal(del1.member.status, 'pending');
   assert.ok(store.get('SELECT id FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]));
 });
+
+test('deletePayment recalcula validade corretamente mesmo quando o primeiro pagamento duplicado e excluido', async () => {
+  const { service } = await createTestEnv();
+  const mensal = service.listPlans().find((p) => p.duration_days === 30);
+  const member = await service.createMember({
+    name: 'Victoria Teste Duplicado 2',
+    document: nextCpf(),
+    phone: '62999990022',
+    plan_id: mensal.id,
+  });
+
+  const p1 = await service.recordPayment({ member_id: member.id, plan_id: mensal.id, method: 'pix' });
+  const p2 = await service.recordPayment({ member_id: member.id, plan_id: mensal.id, method: 'pix' });
+  assert.notEqual(p2.member.valid_until, p1.member.valid_until);
+
+  const delFirst = await service.deletePayment(p1.payment.id);
+  assert.equal(delFirst.ok, true);
+  assert.equal(delFirst.member.valid_until, p1.member.valid_until);
+});

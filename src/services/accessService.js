@@ -1557,15 +1557,34 @@ export class AccessService {
 
       if (member && member.access_role === 'student') {
         const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
-        const latestRemaining = this.store.get(
-          `SELECT * FROM payments
-           WHERE member_id = ? AND COALESCE(status, 'paid') = 'paid' AND enrollment_ends_on IS NOT NULL
-           ORDER BY enrollment_ends_on DESC, id DESC LIMIT 1`,
+        const remainingPaid = this.store.all(
+          `SELECT p.*, pl.duration_days AS plan_duration_days
+           FROM payments p
+           LEFT JOIN plans pl ON pl.id = p.plan_id
+           WHERE p.member_id = ? AND COALESCE(p.status, 'paid') = 'paid' AND p.enrollment_ends_on IS NOT NULL
+           ORDER BY p.paid_at ASC, p.id ASC`,
           [member.id],
         );
-        if (latestRemaining?.enrollment_ends_on) {
-          const nextEndsOn = latestRemaining.enrollment_ends_on;
-          const nextPlanId = latestRemaining.plan_id || member.plan_id;
+        if (remainingPaid.length > 0) {
+          let runningValidUntil = null;
+          let lastPlanId = member.plan_id;
+          for (const p of remainingPaid) {
+            const paidDate = String(p.paid_at || today).slice(0, 10);
+            const durationDays = Number(p.plan_duration_days || 30);
+            const notesStr = String(p.notes || '');
+            const isFollowupSplit =
+              /Pagamento misto \(\d+\/\d+\)/.test(notesStr) && !/Pagamento misto \(1\/\d+\)/.test(notesStr);
+            if (!isFollowupSplit) {
+              const baseDate = runningValidUntil && runningValidUntil >= paidDate ? runningValidUntil : paidDate;
+              runningValidUntil = addDays(baseDate, durationDays);
+            }
+            if (runningValidUntil) {
+              this.store.run('UPDATE payments SET enrollment_ends_on = ? WHERE id = ?', [runningValidUntil, p.id]);
+            }
+            if (p.plan_id) lastPlanId = p.plan_id;
+          }
+          const nextEndsOn = runningValidUntil;
+          const nextPlanId = lastPlanId || member.plan_id;
           const nextStatus = nextEndsOn >= this.enrollmentCutoff(today) ? 'active' : 'blocked';
           this.store.run(
             `UPDATE members SET valid_until = ?, plan_id = COALESCE(?, plan_id), status = ?,
