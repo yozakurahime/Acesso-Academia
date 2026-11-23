@@ -941,15 +941,19 @@ export class AccessService {
     }
 
     if (member.face_registered && member.controlid_user_id && typeof this.controlId?.getUserImage === 'function') {
-      if (this.controlId.getDeviceUser && !this.controlId.getConfig?.().mockMode) {
-        const user = await this.controlId.getDeviceUser(member.controlid_user_id);
-        if (!user || !matchesDeviceIdentity(member, user)) return null;
-      }
-      const buf = await this.controlId.getUserImage(member.controlid_user_id);
-      if (buf) {
-        this.saveLocalPhoto(member.id, buf);
-        this._saveProfilePhotoIfMissing(member.id, buf);
-        return buf;
+      try {
+        if (this.controlId.getDeviceUser && !this.controlId.getConfig?.().mockMode) {
+          const user = await this.controlId.getDeviceUser(member.controlid_user_id);
+          if (!user || !matchesDeviceIdentity(member, user)) return null;
+        }
+        const buf = await this.controlId.getUserImage(member.controlid_user_id);
+        if (buf) {
+          this.saveLocalPhoto(member.id, buf);
+          this._saveProfilePhotoIfMissing(member.id, buf);
+          return buf;
+        }
+      } catch {
+        return null;
       }
     }
 

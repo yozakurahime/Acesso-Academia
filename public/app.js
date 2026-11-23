@@ -5590,13 +5590,13 @@ let waPollResumeOnVisible = false;
 
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    stopTurnstileEvents();
+    if (typeof stopTurnstileEventsStream === 'function') stopTurnstileEventsStream();
     clearTimeout(chatPollTimer);
     chatPollTimer = null;
     return;
   }
-  if (state.authReady && typeof startTurnstileEvents === 'function') {
-    startTurnstileEvents();
+  if (state.authReady && typeof startTurnstileEventsStream === 'function') {
+    startTurnstileEventsStream();
   }
   if (waPollResumeOnVisible && state.activeTab === 'settings') {
     waPollResumeOnVisible = false;
