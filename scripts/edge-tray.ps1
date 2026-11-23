@@ -45,7 +45,69 @@ if (-not $nodeCmd) {
 $script:runnerProc = $null
 $script:exiting = $false
 $script:screensOpened = $false
+$script:lastUpdateCheckAt = [DateTime]::UtcNow
+$script:updating = $false
 $abrirTelasScript = Join-Path $RootDir 'scripts\abrir-telas.ps1'
+
+function Invoke-EdgeAutoUpdate([switch]$ForceLog) {
+  if ($script:exiting -or $script:updating) { return }
+  $script:updating = $true
+  try {
+    $gitCmd = (Get-Command git -ErrorAction SilentlyContinue).Source
+    if (-not $gitCmd) { return }
+    $psiFetch = New-Object System.Diagnostics.ProcessStartInfo
+    $psiFetch.FileName = $gitCmd
+    $psiFetch.Arguments = 'fetch origin main --quiet'
+    $psiFetch.WorkingDirectory = $RootDir
+    $psiFetch.CreateNoWindow = $true
+    $psiFetch.UseShellExecute = $false
+    $pFetch = [System.Diagnostics.Process]::Start($psiFetch)
+    if (-not $pFetch.WaitForExit(15000) -or $pFetch.ExitCode -ne 0) {
+      try { if (-not $pFetch.HasExited) { $pFetch.Kill() } } catch {}
+      return
+    }
+
+    $localHead = (& $gitCmd -C $RootDir rev-parse HEAD 2>$null | Out-String).Trim()
+    $remoteHead = (& $gitCmd -C $RootDir rev-parse origin/main 2>$null | Out-String).Trim()
+    if (-not $localHead -or -not $remoteHead -or $localHead -eq $remoteHead) {
+      if ($ForceLog) {
+        $itemStatus.Text = 'Status: Sistema ja atualizado'
+      }
+      return
+    }
+
+    $changedFiles = (& $gitCmd -C $RootDir diff --name-only $localHead $remoteHead 2>$null | Out-String)
+    $itemStatus.Text = 'Status: Atualizando sistema...'
+    & $gitCmd -C $RootDir pull --ff-only origin main *> $null
+    if ($LASTEXITCODE -ne 0) { return }
+
+    if ($changedFiles -match '(?m)^package(-lock)?\.json$') {
+      $npmCmd = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
+      if ($npmCmd) {
+        & $npmCmd install --omit=dev --no-audit --no-fund *> $null
+      }
+    }
+
+    Stop-EdgeProcesses
+    Start-Sleep -Seconds 1
+    if ($changedFiles -match '(?m)^scripts/edge-tray\.ps1$') {
+      $script:exiting = $true
+      $timer.Stop()
+      $notifyIcon.Visible = $false
+      $notifyIcon.Dispose()
+      if ($mutex) {
+        try { $mutex.ReleaseMutex() } catch {}
+        $mutex.Dispose()
+      }
+      Start-Process wscript.exe -ArgumentList @('//B', '//Nologo', (Join-Path $RootDir 'scripts\launch-tray.vbs')) -WorkingDirectory $RootDir
+      [System.Windows.Forms.Application]::Exit()
+      return
+    }
+    Start-EdgeRunner
+  } finally {
+    $script:updating = $false
+  }
+}
 
 function Open-CatracaAndPanel([switch]$SomenteCatraca) {
   if (-not (Test-Path $abrirTelasScript)) { return }
@@ -123,6 +185,12 @@ $itemRestart.Add_Click({
   Start-EdgeRunner
 })
 
+$itemUpdate = $menu.Items.Add('Atualizar Sistema Agora')
+$itemUpdate.Add_Click({
+  $script:lastUpdateCheckAt = [DateTime]::UtcNow
+  Invoke-EdgeAutoUpdate -ForceLog
+})
+
 $itemExit = $menu.Items.Add('Sair')
 $itemExit.Add_Click({
   $script:exiting = $true
@@ -140,6 +208,11 @@ $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 3000
 $timer.Add_Tick({
   if ($script:exiting) { return }
+  if (([DateTime]::UtcNow - $script:lastUpdateCheckAt).TotalMinutes -ge 5) {
+    $script:lastUpdateCheckAt = [DateTime]::UtcNow
+    Invoke-EdgeAutoUpdate
+    if ($script:exiting) { return }
+  }
   if (-not $script:runnerProc -or $script:runnerProc.HasExited) {
     Start-EdgeRunner
   }
