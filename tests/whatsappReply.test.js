@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import express from 'express';
 import { DatabaseStore } from '../src/db.js';
 import { createApiRouter } from '../src/routes/api.js';
@@ -58,4 +59,52 @@ test('resposta do chat informa configuração ausente e erro Meta sem expor toke
   assert.equal(success.status, 200);
   assert.equal((await success.json()).ok, true);
   assert.equal(recorded, 1);
+});
+
+test('POST /api/whatsapp/webhook valida x-hub-signature-256 contra req.rawBody', async (context) => {
+  const store = await DatabaseStore.create(null);
+  const appSecret = 'meta-secret-123';
+  store.updateSettings({ whatsapp_meta_app_secret: appSecret });
+
+  let handledPayload = null;
+  const whatsappService = {
+    handleMetaWebhook: async (body) => {
+      handledPayload = body;
+    },
+  };
+
+  const app = express();
+  app.post(
+    '/api/whatsapp/webhook',
+    express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } }),
+  );
+  app.use(express.json({ limit: '1mb' }));
+  app.use('/api', createApiRouter({ store, whatsappService }));
+
+  const server = await new Promise((resolve) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+  });
+  context.after(() => server.close());
+
+  // Payload com formatacao diferente de JSON.stringify(req.body) para provar uso de req.rawBody
+  const rawPayload = '{\n  "object": "whatsapp_business_account",\n  "entry": []\n}';
+  const validSig = 'sha256=' + createHmac('sha256', appSecret).update(Buffer.from(rawPayload)).digest('hex');
+  const url = `http://127.0.0.1:${server.address().port}/api/whatsapp/webhook`;
+
+  const badRes = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': 'sha256=deadbeef' },
+    body: rawPayload,
+  });
+  assert.equal(badRes.status, 401);
+  assert.equal(handledPayload, null);
+
+  const okRes = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-hub-signature-256': validSig },
+    body: rawPayload,
+  });
+  assert.equal(okRes.status, 200);
+  assert.deepEqual(await okRes.json(), { ok: true });
+  assert.deepEqual(handledPayload, { object: 'whatsapp_business_account', entry: [] });
 });

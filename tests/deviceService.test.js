@@ -8,7 +8,7 @@ import { AccessService } from '../src/services/accessService.js';
 
 test('DeviceService: seeds default turnstile and reader and lists allowed callback IPs', async () => {
   const store = await DatabaseStore.create(null);
-  store.updateSettings({ controlid_ip: '192.168.100.50', toletus_ip: '192.168.100.242' });
+  store.updateSettings({ controlid_mock_mode: 'true', controlid_ip: '192.168.100.50', toletus_ip: '192.168.100.242' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const toletus = new ToletusClient(() => store.getSettings());
   const devices = new DeviceService(store, controlId, toletus);
@@ -25,6 +25,7 @@ test('DeviceService: seeds default turnstile and reader and lists allowed callba
 
 test('DeviceService: turnstile CRUD validates release_seconds, direction and free_side', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const toletus = new ToletusClient(() => store.getSettings());
   const devices = new DeviceService(store, controlId, toletus);
@@ -59,6 +60,7 @@ test('DeviceService: turnstile CRUD validates release_seconds, direction and fre
 
 test('DeviceService: applyTurnstileConfig sends Toletus 0x010A duration and 0x0102 flow control packets', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const toletus = new ToletusClient(() => store.getSettings());
   const sent = [];
@@ -94,6 +96,7 @@ test('DeviceService: applyTurnstileConfig sends Toletus 0x010A duration and 0x01
 
 test('DeviceService: reader CRUD masks password and links to turnstile', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const toletus = new ToletusClient(() => store.getSettings());
   const devices = new DeviceService(store, controlId, toletus);

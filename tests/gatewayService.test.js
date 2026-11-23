@@ -7,10 +7,10 @@ import { GatewayService } from '../src/services/gatewayService.js';
 
 test('GatewayService gera Pix no Mercado Pago e dá baixa via webhook sem duplicar', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const accessService = new AccessService(store, controlId);
 
-  store.updateSettings({ mp_access_token: 'APP_USR_TEST' });
   const plan = accessService.listPlans().find((p) => p.price_cents === 12000);
   const member = await accessService.createMember({ name: 'Lucas MP', document: '52998224725', plan_id: plan.id });
   const installment = accessService.createMembershipCharge(member.id, { due: '2020-01-01', amount: 12000 });
@@ -71,8 +71,8 @@ test('GatewayService gera Pix no Mercado Pago e dá baixa via webhook sem duplic
 
 test('Checkout do portal e WhatsApp reutilizam a cobrança mais antiga e dão baixa uma vez', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST' });
   const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
-  store.updateSettings({ mp_access_token: 'APP_USR_TEST' });
   const [plan, otherPlan] = access.listPlans();
   const member = await access.createMember({ name: 'Aluno Checkout', document: '52998224725', phone: '11987654321', plan_id: plan.id });
   const oldest = access.createMembershipCharge(member.id, { due: '2024-01-01', amount: 9500 });
@@ -118,9 +118,9 @@ test('Checkout do portal e WhatsApp reutilizam a cobrança mais antiga e dão ba
 
 test('Mercado Pago Assinatura Recorrente: cria link, sincroniza/webhook dá baixa idempotente e cancela', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_SUB' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const accessService = new AccessService(store, controlId);
-  store.updateSettings({ mp_access_token: 'APP_USR_SUB' });
 
   const plan = accessService.listPlans().find((p) => p.price_cents === 12000) || accessService.listPlans()[0];
   const member = await accessService.createMember({
@@ -220,9 +220,9 @@ test('Mercado Pago Assinatura Recorrente: cria link, sincroniza/webhook dá baix
 
 test('Mercado Pago Point Smart: lista terminais, envia cobrança, dá baixa via webhook/check e cancela', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_POINT', mp_point_terminal_id: 'PAX_A910__SMART01' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const accessService = new AccessService(store, controlId);
-  store.updateSettings({ mp_access_token: 'APP_USR_POINT', mp_point_terminal_id: 'PAX_A910__SMART01' });
 
   const plan = accessService.listPlans().find((p) => p.price_cents === 12000) || accessService.listPlans()[0];
   const member = await accessService.createMember({ name: 'Carlos Point', document: '39053344705', plan_id: plan.id });
@@ -291,8 +291,8 @@ test('Mercado Pago Point Smart: lista terminais, envia cobrança, dá baixa via 
 
 test('GatewayService.createCardPayment processa cartao transparente em 1x com valor do servidor e libera acesso', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST', mp_public_key: 'APP_USR_PUB_TEST' });
   const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
-  store.updateSettings({ mp_access_token: 'APP_USR_TEST', mp_public_key: 'APP_USR_PUB_TEST' });
 
   const plan = access.listPlans().find((p) => p.name === 'Mensal');
   const member = await access.createMember({

@@ -9,7 +9,10 @@ function httpError(message, status = 400) {
 
 function csvEscape(val) {
   if (val === null || val === undefined) return '';
-  const s = String(val);
+  let s = String(val);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
   if (/[",\r\n]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }

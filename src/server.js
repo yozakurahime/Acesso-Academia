@@ -101,7 +101,7 @@ async function start() {
   app.post(['/api/receipts/analyze', '/api/members/:id/face', '/api/import/sca'], uploadJsonParser);
   app.put('/api/student/me/photo', uploadJsonParser);
   app.post(
-    ['/api/webhooks/wellhub', '/api/webhooks/totalpass', '/api/webhooks/mercadopago', '/api/webhooks/payment'],
+    ['/api/webhooks/wellhub', '/api/webhooks/totalpass', '/api/webhooks/mercadopago', '/api/webhooks/payment', '/api/whatsapp/webhook'],
     express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } }),
   );
   app.use(express.json({ limit: '1mb' }));
@@ -344,7 +344,7 @@ async function start() {
             }
           }
 
-          if (cfg.toletus_mock_mode === 'true') {
+          if (cfg.controlid_mock_mode === 'true') {
             watchdogState.turnstileConnected = true;
             watchdogState.turnstileError = null;
           } else if (cfg.toletus_ip) {

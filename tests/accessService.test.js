@@ -654,3 +654,26 @@ test('recordPayment permite valor maior como crédito e valor menor como descont
   const charge2 = store.get('SELECT payment_id FROM membership_charges WHERE id = ?', [enr2.charge.id]);
   assert.equal(charge2.payment_id, r2.payment.id);
 });
+
+test('deleteMember remove aluno com partner_access_requests e gateway_charges vinculada a membership_charges', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.listPlans()[0];
+  const member = await service.createMember({ name: 'Aluno Excluir FK', document: nextCpf(), plan_id: plan.id });
+  const charge = service.createMembershipCharge(member.id, { due: '2026-12-01', amount: plan.price_cents });
+
+  store.run(
+    "INSERT INTO partner_access_requests (member_id, provider, status) VALUES (?, 'wellhub', 'pending')",
+    [member.id],
+  );
+  store.run(
+    "INSERT INTO gateway_charges (provider, external_id, member_id, plan_id, amount_cents, status, membership_charge_id) VALUES ('mercadopago', 'ext-del-1', ?, ?, ?, 'pending', ?)",
+    [member.id, plan.id, plan.price_cents, charge.id],
+  );
+
+  const res = await service.deleteMember(member.id);
+  assert.equal(res.ok, true);
+  assert.equal(store.get('SELECT id FROM members WHERE id = ?', [member.id]), null);
+  assert.equal(store.get('SELECT id FROM partner_access_requests WHERE member_id = ?', [member.id]), null);
+  assert.equal(store.get('SELECT id FROM gateway_charges WHERE member_id = ?', [member.id]), null);
+  assert.equal(store.get('SELECT id FROM membership_charges WHERE member_id = ?', [member.id]), null);
+});

@@ -740,7 +740,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.json(accessService.listPendingPartnerRequests());
   });
 
-  router.post('/partner-requests/:id/approve', async (req, res, next) => {
+  router.post('/partner-requests/:id/approve', requireReception, async (req, res, next) => {
     try {
       res.json(await accessService.approvePartnerRequest(req.params.id));
     } catch (err) {
@@ -748,7 +748,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }
   });
 
-  router.post('/partner-requests/:id/cancel', (req, res, next) => {
+  router.post('/partner-requests/:id/cancel', requireReception, (req, res, next) => {
     try {
       res.json(accessService.cancelPartnerRequest(req.params.id));
     } catch (err) {

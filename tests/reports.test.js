@@ -6,6 +6,7 @@ import { AccessService } from '../src/services/accessService.js';
 
 test('AccessService gera resumo financeiro mensal, projeções, alunos, cancelamentos e permanência média', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const access = new AccessService(store, controlId);
 

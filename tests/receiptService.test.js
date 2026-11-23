@@ -26,6 +26,7 @@ function makeMockGeminiFetch(payload) {
 
 test('ReceiptService analisa comprovante via Gemini, identifica aluno por telefone, bloqueia duplicidade e dá baixa', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const accessService = new AccessService(store, controlId);
   const gymService = new GymService(store);
@@ -86,6 +87,7 @@ test('ReceiptService analisa comprovante via Gemini, identifica aluno por telefo
 
 test('ReceiptService deixa comprovante pendente até a conferência humana', async () => {
   const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
   const accessService = new AccessService(store, controlId);
   const gymService = new GymService(store);

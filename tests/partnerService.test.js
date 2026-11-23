@@ -230,3 +230,70 @@ test('Convênio bloqueia por padrão e gera notificação persistente até recep
   assert.ok(events.some((e) => e.type === 'partner_request_resolved' && e.payload.status === 'cancelled'));
   unsub();
 });
+
+test('RBAC: /partner-requests/:id/approve e /cancel exigem recepcao/admin', async (t) => {
+  const { default: express } = await import('express');
+  const { AuthService } = await import('../src/services/authService.js');
+  const { createApiRouter } = await import('../src/routes/api.js');
+
+  const store = await DatabaseStore.create(null);
+  const authService = new AuthService(store);
+  authService.configure({ enabled: true, username: 'admin', password: 'admin-password-123' });
+
+  let approvedId = null;
+  let cancelledId = null;
+  const accessService = {
+    approvePartnerRequest: async (id) => {
+      approvedId = id;
+      return { ok: true, id };
+    },
+    cancelPartnerRequest: (id) => {
+      cancelledId = id;
+      return { ok: true, id };
+    },
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api', authService.middleware());
+  app.use('/api', createApiRouter({ store, authService, accessService }));
+  const server = await new Promise((resolve) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+  });
+  t.after(() => server.close());
+
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  authService.createUser({ username: 'inst', password: 'inst-password-123', role: 'instructor' });
+  authService.createUser({ username: 'recep', password: 'recep-password-123', role: 'reception' });
+  const instToken = authService.signToken('inst', 'instructor');
+  const recepToken = authService.signToken('recep', 'reception');
+
+  const unauthApprove = await fetch(`${base}/partner-requests/10/approve`, { method: 'POST' });
+  assert.equal(unauthApprove.status, 401);
+
+  const instApprove = await fetch(`${base}/partner-requests/10/approve`, {
+    method: 'POST',
+    headers: { Cookie: `acesso_session=${encodeURIComponent(instToken)}` },
+  });
+  assert.equal(instApprove.status, 403);
+
+  const instCancel = await fetch(`${base}/partner-requests/10/cancel`, {
+    method: 'POST',
+    headers: { Cookie: `acesso_session=${encodeURIComponent(instToken)}` },
+  });
+  assert.equal(instCancel.status, 403);
+
+  const recepApprove = await fetch(`${base}/partner-requests/10/approve`, {
+    method: 'POST',
+    headers: { Cookie: `acesso_session=${encodeURIComponent(recepToken)}` },
+  });
+  assert.equal(recepApprove.status, 200);
+  assert.equal(approvedId, '10');
+
+  const recepCancel = await fetch(`${base}/partner-requests/11/cancel`, {
+    method: 'POST',
+    headers: { Cookie: `acesso_session=${encodeURIComponent(recepToken)}` },
+  });
+  assert.equal(recepCancel.status, 200);
+  assert.equal(cancelledId, '11');
+});

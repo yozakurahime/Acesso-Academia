@@ -961,6 +961,7 @@ export class DatabaseStore {
         '{saudacao} {primeiro_nome}! Sentimos sua falta na {academia} — já faz {dias_sem_vir} dias desde seu último treino. Bora retomar o ritmo hoje?',
       gemini_api_key: process.env.GEMINI_API_KEY || '',
       gemini_model: 'gemini-3.8-flash',
+      gemini_transcribe_model: 'gemini-3.5-transcribe',
       pix_recipient_name: '',
       pix_recipient_key: '',
       whatsapp_receipt_enabled: '1',

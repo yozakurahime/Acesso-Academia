@@ -40,3 +40,32 @@ test('BackupService gera CSVs de alunos (padrao SCA), planos, cobrancas e recebi
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('BackupService neutraliza formula injection (=, +, -, @) ao exportar CSV', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oxigenio-backup-formula-'));
+  try {
+    const store = await DatabaseStore.create(null);
+    store.updateSettings({ controlid_mock_mode: 'true' });
+    const access = new AccessService(store);
+    const plan = access.createPlan({ name: '+Plano', duration_days: 30, price_cents: 10000 });
+    await access.createMember({
+      name: '=CMD("calc")',
+      document: '52998224725',
+      email: '@evil.com',
+      notes: '-1+1',
+      plan_id: plan.id,
+    });
+
+    const backupSvc = new BackupService(store, dir);
+    const info = backupSvc.createBackup();
+    const alunosCsv = fs.readFileSync(`${info.path}.csv/alunos.csv`, 'utf8');
+    assert.ok(alunosCsv.includes(`"'=CMD(""calc"")"`));
+    assert.ok(alunosCsv.includes("'@evil.com"));
+    assert.ok(alunosCsv.includes("'-1+1"));
+
+    const planosCsv = fs.readFileSync(`${info.path}.csv/planos_vencimentos.csv`, 'utf8');
+    assert.ok(planosCsv.includes("'+Plano"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
