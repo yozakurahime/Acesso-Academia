@@ -1045,8 +1045,23 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/device/test',
     requireAdmin,
     handle(async (_req, res) => {
-      const result = await controlId.testConnection();
-      res.json(result);
+      if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+        const st = edgeHub.getStatus();
+        return res.json({
+          ok: st.connectedClients > 0,
+          edgeManaged: true,
+          message: st.connectedClients > 0
+            ? 'Modo Nuvem ativo: agente local (Edge) conectado e comunicando com o FaceID na recepção.'
+            : 'Modo Nuvem ativo, mas o agente local (Edge) está offline no momento.',
+        });
+      }
+      try {
+        const result = await controlId.testConnection();
+        res.json(result);
+      } catch (err) {
+        err.statusCode = err.statusCode || 400;
+        throw err;
+      }
     }),
   );
 
@@ -1054,8 +1069,23 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/device/test-toletus',
     requireAdmin,
     handle(async (_req, res) => {
-      const result = await toletus.testConnection();
-      res.json(result);
+      if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+        const st = edgeHub.getStatus();
+        return res.json({
+          ok: st.connectedClients > 0,
+          edgeManaged: true,
+          message: st.connectedClients > 0
+            ? 'Modo Nuvem ativo: agente local (Edge) conectado e comunicando com a catraca Toletus na recepção.'
+            : 'Modo Nuvem ativo, mas o agente local (Edge) está offline no momento.',
+        });
+      }
+      try {
+        const result = await toletus.testConnection();
+        res.json(result);
+      } catch (err) {
+        err.statusCode = err.statusCode || 400;
+        throw err;
+      }
     }),
   );
 

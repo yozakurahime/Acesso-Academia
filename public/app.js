@@ -8562,7 +8562,12 @@ document.getElementById('btnSyncAllReaders')?.addEventListener('click', async (e
   await withLoading(e.currentTarget, async () => {
     try {
       const res = await api('/api/devices/readers/sync-all', { method: 'POST' });
-      showToast(`Sincronização concluída: ${res.totalSynced ?? 0} face(s), ${res.totalErrors ?? 0} erro(s).`, (res.totalErrors ?? 0) > 0);
+      if (res.queuedForEdge) {
+        showToast('Sincronização enviada para o agente local (Edge)! Os avisos antigos foram limpos.');
+        await loadMembers().catch(() => {});
+      } else {
+        showToast(`Sincronização concluída: ${res.totalSynced ?? 0} face(s), ${res.totalErrors ?? 0} erro(s).`, (res.totalErrors ?? 0) > 0);
+      }
     } catch (err) {
       showToast(err.message, true);
     }

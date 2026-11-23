@@ -2721,6 +2721,7 @@ export class AccessService {
 
   async syncAllReaders() {
     if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+      this.store.run("UPDATE members SET last_sync_error = NULL, updated_at = datetime('now', 'localtime') WHERE last_sync_error IS NOT NULL");
       this.edgeCloudHub?.enqueueCommand('sync_all_readers', {});
       return { queuedForEdge: true, totalSynced: 0, totalErrors: 0, readers: [] };
     }
@@ -2766,6 +2767,7 @@ export class AccessService {
         try {
           const allowed = !this.getAccessDenial(member);
           await client.syncMember(member, allowed);
+          this.store.run('UPDATE members SET last_sync_error = NULL WHERE id = ? AND last_sync_error IS NOT NULL', [member.id]);
           synced += 1;
           totalSynced += 1;
         } catch (err) {
