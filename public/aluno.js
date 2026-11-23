@@ -1573,24 +1573,40 @@ document.getElementById('stPasswordForm').addEventListener('submit', async (e) =
 function startPortalPixPolling(chargeId) {
   stopPortalPixPolling();
   let attempts = 0;
-  studentState.pixPollTimer = setInterval(async () => {
-    attempts += 1;
-    if (attempts > 60 || Number(studentState.activePixChargeId) !== Number(chargeId)) {
-      stopPortalPixPolling();
-      return;
-    }
+  let checking = false;
+  const checkOnce = async () => {
+    if (checking || Number(studentState.activePixChargeId) !== Number(chargeId)) return;
+    checking = true;
     try {
       const res = await api(`/api/student/me/pix/${chargeId}/check`, { method: 'POST' });
       if (res.paid || res.status === 'paid') {
-        stopPortalPixPolling();
+        cleanup();
         document.getElementById('stPixBox')?.classList.add('hidden');
         showToast('Pagamento confirmado! Matrícula renovada.');
         await loadStudentPortal();
       } else if (res.status === 'expired' || res.status === 'cancelled') {
-        stopPortalPixPolling();
+        cleanup();
         document.getElementById('stPixInfo').textContent = 'Pix expirado ou cancelado. Gere um novo código para pagar.';
       }
-    } catch {}
+    } catch {} finally {
+      checking = false;
+    }
+  };
+  const onVisibility = () => {
+    if (!document.hidden) checkOnce();
+  };
+  const cleanup = () => {
+    document.removeEventListener('visibilitychange', onVisibility);
+    stopPortalPixPolling();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  studentState.pixPollTimer = setInterval(() => {
+    attempts += 1;
+    if (attempts > 60 || Number(studentState.activePixChargeId) !== Number(chargeId)) {
+      cleanup();
+      return;
+    }
+    if (!document.hidden) checkOnce();
   }, 5000);
 }
 

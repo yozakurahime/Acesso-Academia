@@ -672,13 +672,30 @@
       return;
     }
     const status = document.getElementById('profVideoStatus');
-    status.textContent = 'Enviando vídeo...';
+    status.textContent = 'Enviando vídeo... 0%';
     try {
-      const buf = await file.arrayBuffer();
-      await api(`/api/professor/exercise-catalog/${encodeURIComponent(state.videoExerciseKey)}/video`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: buf,
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', `/api/professor/exercise-catalog/${encodeURIComponent(state.videoExerciseKey)}/video`);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            const pct = Math.min(99, Math.round((ev.loaded / ev.total) * 100));
+            status.textContent = `Enviando vídeo... ${pct}%`;
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            let errMsg = `Erro (${xhr.status})`;
+            try { errMsg = JSON.parse(xhr.responseText)?.error || errMsg; } catch {}
+            reject(new Error(errMsg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Falha de conexão ao enviar vídeo.'));
+        xhr.send(file);
       });
       showToast('Vídeo salvo com sucesso!');
       await loadDashboard();
@@ -743,6 +760,16 @@
       }
     });
   });
+
+  function syncOfflineBanner() {
+    document.getElementById('profOfflineBanner')?.classList.toggle('hidden', navigator.onLine !== false);
+  }
+  window.addEventListener('online', syncOfflineBanner);
+  window.addEventListener('offline', syncOfflineBanner);
+  syncOfflineBanner();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+  }
 
   init();
 })();
