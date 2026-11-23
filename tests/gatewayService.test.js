@@ -334,3 +334,45 @@ test('GatewayService.createCardPayment processa cartao transparente em 1x com va
   assert.equal(capturedPayment.token, 'tok_test_123456');
   assert.equal(store.get('SELECT status FROM members WHERE id = ?', [member.id]).status, 'active');
 });
+
+test('GatewayService.createPointOrder retorna statusCode 400 com mensagem real quando aluno nao tem plano ou Point retorna erro', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    mp_access_token: 'APP_USR_TEST',
+    mp_point_terminal_id: 'PAX_A910__TEST',
+  });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+
+  const memberNoPlan = await access.createMember({
+    name: 'Sem Plano',
+    document: '52998224725',
+    phone: '62999994444',
+  });
+
+  const plan = access.listPlans().find((p) => p.name === 'Mensal');
+  const memberWithPlan = await access.createMember({
+    name: 'Com Plano',
+    document: '15350946056',
+    phone: '62999995555',
+    plan_id: plan.id,
+  });
+
+  const gw = new GatewayService(store, access, {
+    fetchFn: async () => ({
+      ok: false,
+      status: 409,
+      json: async () => ({ message: 'Terminal ocupado com outra cobrança em andamento.' }),
+    }),
+  });
+
+  await assert.rejects(
+    () => gw.createPointOrder({ member_id: memberNoPlan.id, payment_method: 'credit' }),
+    (err) => err?.statusCode === 400 && /plano/i.test(err.message),
+  );
+
+  await assert.rejects(
+    () => gw.createPointOrder({ member_id: memberWithPlan.id, payment_method: 'credit' }),
+    (err) => err?.statusCode === 400 && /Terminal ocupado/i.test(err.message),
+  );
+});

@@ -162,13 +162,19 @@ export class GatewayService {
     return { ...agg, items };
   }
 
+  _badRequest(message) {
+    const err = new Error(message);
+    err.statusCode = 400;
+    return err;
+  }
+
   resolveBillableMember(member, planId, amount) {
-    if (!member || member.access_role !== 'student') throw new Error('Selecione um aluno para cobrar.');
+    if (!member || member.access_role !== 'student') throw this._badRequest('Selecione um aluno para cobrar.');
     const charge = this.store.get('SELECT id, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due, id LIMIT 1', [member.id]);
     const plan = this.store.get('SELECT * FROM plans WHERE id = ?', [charge ? member.plan_id : Number(planId || member.plan_id)]);
-    if (!plan) throw new Error('Selecione um plano para cobrar.');
+    if (!plan) throw this._badRequest('Selecione um plano para cobrar.');
     const cents = charge?.amount ?? Number(amount ?? plan.price_cents);
-    if (!Number.isSafeInteger(cents) || cents <= 0) throw new Error('Valor da cobrança inválido.');
+    if (!Number.isSafeInteger(cents) || cents <= 0) throw this._badRequest('Valor da cobrança inválido.');
     return { plan, cents, charge };
   }
 
@@ -909,7 +915,7 @@ export class GatewayService {
     const data = (await this.safeJson(res)) || {};
     if (!res.ok) {
       const detail = data?.message || data?.errors?.[0]?.message || data?.cause?.[0]?.description || '';
-      throw new Error(detail ? `${detail} (HTTP ${res.status})` : `Erro ao listar maquininhas Point (HTTP ${res.status})`);
+      throw this._badRequest(detail ? `${detail} (HTTP ${res.status})` : `Erro ao listar maquininhas Point (HTTP ${res.status})`);
     }
     return data?.data?.terminals || data?.terminals || (Array.isArray(data?.data) ? data.data : []);
   }
@@ -918,7 +924,7 @@ export class GatewayService {
     const settings = this.store.getSettings();
     const headers = this.getPointAuth(settings);
     const id = this.getPointTerminalId(terminalId, settings);
-    if (!id) throw new Error('Informe o ID da maquininha Point.');
+    if (!id) throw this._badRequest('Informe o ID da maquininha Point.');
     const mode = ['PDV', 'STANDALONE'].includes(String(operatingMode).toUpperCase())
       ? String(operatingMode).toUpperCase()
       : 'PDV';
@@ -934,7 +940,7 @@ export class GatewayService {
     const data = (await this.safeJson(res)) || {};
     if (!res.ok) {
       const detail = data?.message || data?.errors?.[0]?.message || data?.cause?.[0]?.description || '';
-      throw new Error(detail ? `${detail} (HTTP ${res.status})` : `Erro ao configurar modo da maquininha (HTTP ${res.status})`);
+      throw this._badRequest(detail ? `${detail} (HTTP ${res.status})` : `Erro ao configurar modo da maquininha (HTTP ${res.status})`);
     }
     return { terminalId: id, operatingMode: mode, data };
   }
@@ -965,7 +971,7 @@ export class GatewayService {
   getStoneAuth(settings = this.store.getSettings()) {
     const key = String(process.env.STONE_API_KEY || settings?.stone_api_key || '').trim();
     if (!key) {
-      throw new Error('Configure a chave API da Stone / Pagar.me em Configurações.');
+      throw this._badRequest('Configure a chave API da Stone / Pagar.me em Configurações.');
     }
     const basic = Buffer.from(`${key}:`).toString('base64');
     return {
@@ -1030,11 +1036,11 @@ export class GatewayService {
     const productionTerminal = this.getPointTerminalId(terminal_id, settings);
     const chosenTerminal = process.env.MP_POINT_TEST_MODE === 'true' ? 'NEWLAND_N950__SBX0000001' : productionTerminal;
     if (!chosenTerminal) {
-      throw new Error('Configure o ID da maquininha Point Smart em Configurações.');
+      throw this._badRequest('Configure o ID da maquininha Point Smart em Configurações.');
     }
 
     const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
-    if (!member) throw new Error('Aluno não encontrado.');
+    if (!member) throw this._badRequest('Aluno não encontrado.');
 
     const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
 
@@ -1078,7 +1084,7 @@ export class GatewayService {
 
     const data = await this.safeJson(res);
     if (!res.ok || !data?.id) {
-      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao enviar cobrança para Point (${res.status})`);
+      throw this._badRequest(data?.message || data?.errors?.[0]?.message || `Erro ao enviar cobrança para Point (${res.status})`);
     }
 
     const ins = this.store.run(
@@ -1094,11 +1100,11 @@ export class GatewayService {
     const headers = this.getStoneAuth(settings);
     const chosenSerial = this.getStoneSerial(terminal_id, settings);
     if (!chosenSerial) {
-      throw new Error('Configure o serial da maquininha Stone em Configurações.');
+      throw this._badRequest('Configure o serial da maquininha Stone em Configurações.');
     }
 
     const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
-    if (!member) throw new Error('Aluno não encontrado.');
+    if (!member) throw this._badRequest('Aluno não encontrado.');
 
     const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
     if (charge?.id) {
@@ -1144,7 +1150,7 @@ export class GatewayService {
 
     const data = await this.safeJson(res);
     if (!res.ok || !data?.id) {
-      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao enviar cobrança para Stone (${res.status})`);
+      throw this._badRequest(data?.message || data?.errors?.[0]?.message || `Erro ao enviar cobrança para Stone (${res.status})`);
     }
 
     const ins = this.store.run(
@@ -1158,7 +1164,7 @@ export class GatewayService {
 
   async checkPointOrder(id) {
     const order = this.store.get('SELECT * FROM point_orders WHERE id = ?', [Number(id)]);
-    if (!order) throw new Error('Cobrança da maquininha não encontrada.');
+    if (!order) throw this._badRequest('Cobrança da maquininha não encontrada.');
     if (order.status === 'paid') {
       return { paid: true, alreadyPaid: true, order: this.getPointOrderById(order.id) };
     }
@@ -1171,7 +1177,7 @@ export class GatewayService {
       });
       const data = await this.safeJson(res);
       if (!res.ok) {
-        throw new Error(data?.message || `Erro ao consultar pedido Stone (${res.status})`);
+        throw this._badRequest(data?.message || `Erro ao consultar pedido Stone (${res.status})`);
       }
       const orderStatus = String(data?.status || '').toLowerCase();
       if (orderStatus === 'paid') {
@@ -1192,7 +1198,7 @@ export class GatewayService {
     });
     const data = await this.safeJson(res);
     if (!res.ok) {
-      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao consultar ordem Point (${res.status})`);
+      throw this._badRequest(data?.message || data?.errors?.[0]?.message || `Erro ao consultar ordem Point (${res.status})`);
     }
 
     const payItem = data?.transactions?.payments?.[0];
@@ -1201,7 +1207,7 @@ export class GatewayService {
 
     if (orderStatus === 'processed' || payStatus === 'processed') {
       if (Math.round(Number(payItem?.amount) * 100) !== order.amount_cents) {
-        throw new Error('Valor processado pela maquininha difere da cobrança registrada.');
+        throw this._badRequest('Valor processado pela maquininha difere da cobrança registrada.');
       }
       const mpType = String(payItem?.payment_method?.type || '').toLowerCase();
       const method = mpType === 'debit_card' ? 'debit' : mpType === 'pix' ? 'pix' : order.payment_method || 'credit';
@@ -1244,8 +1250,8 @@ export class GatewayService {
 
   async cancelPointOrder(id) {
     const order = this.store.get('SELECT * FROM point_orders WHERE id = ?', [Number(id)]);
-    if (!order) throw new Error('Cobrança da maquininha não encontrada.');
-    if (order.status === 'paid') throw new Error('Cobrança já foi paga e não pode ser cancelada.');
+    if (!order) throw this._badRequest('Cobrança da maquininha não encontrada.');
+    if (order.status === 'paid') throw this._badRequest('Cobrança já foi paga e não pode ser cancelada.');
 
     if (order.provider === 'stone') {
       const headers = this.getStoneAuth();
@@ -1257,7 +1263,7 @@ export class GatewayService {
       });
       if (!res.ok && res.status !== 404) {
         const data = (await this.safeJson(res)) || {};
-        throw new Error(data?.message || `Erro ao cancelar pedido na Stone (${res.status})`);
+        throw this._badRequest(data?.message || `Erro ao cancelar pedido na Stone (${res.status})`);
       }
       this.store.run(`UPDATE point_orders SET status = 'canceled' WHERE id = ?`, [order.id]);
       return { canceled: true, order: this.getPointOrderById(order.id) };
@@ -1274,7 +1280,7 @@ export class GatewayService {
     });
     if (!res.ok && res.status !== 404) {
       const data = (await this.safeJson(res)) || {};
-      throw new Error(data?.message || data?.errors?.[0]?.message || `Erro ao cancelar cobrança na Point (${res.status})`);
+      throw this._badRequest(data?.message || data?.errors?.[0]?.message || `Erro ao cancelar cobrança na Point (${res.status})`);
     }
 
     this.store.run(`UPDATE point_orders SET status = 'canceled' WHERE id = ?`, [order.id]);
