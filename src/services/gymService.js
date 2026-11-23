@@ -103,9 +103,6 @@ export class GymService {
     if (!existing) throw new Error('Aluno nao encontrado.');
     const name = data.name?.trim() || existing.name;
     if (normalizeMemberName(name) !== normalizeMemberName(existing.name)) this.assertUniqueMemberName(name, id);
-    const nextDocument = Object.hasOwn(data, 'document')
-      ? this.assertValidAndUniqueCpf(data.document, id)
-      : existing.document;
     const hasPartnerFields = Object.hasOwn(data, 'partner_provider') || Object.hasOwn(data, 'wellhub_id');
     const nextPartner = hasPartnerFields
       ? normalizePartnerInput({
@@ -116,6 +113,13 @@ export class GymService {
     if (nextPartner.partner_provider === 'wellhub') {
       this.assertUniqueWellhubId(nextPartner.wellhub_id, id);
     }
+    const allowEmptyWellhubCpf =
+      nextPartner.partner_provider === 'wellhub' &&
+      !normalizeCpf(data.document) &&
+      !normalizeCpf(existing.document);
+    const nextDocument = Object.hasOwn(data, 'document')
+      ? (allowEmptyWellhubCpf ? (existing.document || null) : this.assertValidAndUniqueCpf(data.document, id))
+      : existing.document;
     const nextStatus =
       existing.access_role === 'student' && nextPartner.partner_provider && existing.status !== 'active'
         ? 'active'

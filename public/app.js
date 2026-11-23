@@ -357,7 +357,7 @@ function setCpfFieldState(inputEl, feedbackEl, status, message = '') {
   }
 }
 
-async function validateCpfField(inputId, feedbackId, { excludeId = 0, remoteCheck = false, showEmptyError = false } = {}) {
+async function validateCpfField(inputId, feedbackId, { excludeId = 0, remoteCheck = false, showEmptyError = false, allowEmpty = false } = {}) {
   const inputEl = document.getElementById(inputId);
   const feedbackEl = document.getElementById(feedbackId);
   if (!inputEl) return { valid: false, message: 'Campo CPF não encontrado.' };
@@ -365,6 +365,10 @@ async function validateCpfField(inputId, feedbackId, { excludeId = 0, remoteChec
   inputEl.value = formatCpfMask(digits);
 
   if (!digits) {
+    if (allowEmpty) {
+      setCpfFieldState(inputEl, feedbackEl, 'neutral', '');
+      return { valid: true, message: '' };
+    }
     const msg = showEmptyError ? 'CPF é obrigatório.' : '';
     setCpfFieldState(inputEl, feedbackEl, showEmptyError ? 'error' : 'neutral', msg);
     return { valid: false, message: 'CPF é obrigatório.' };
@@ -3544,6 +3548,7 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
     excludeId: id,
     remoteCheck: true,
     showEmptyError: partnerVal !== 'wellhub',
+    allowEmpty: partnerVal === 'wellhub',
   });
   if (!cpfCheck.valid) {
     showToast(cpfCheck.message, true);

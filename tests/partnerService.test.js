@@ -79,6 +79,17 @@ test('Wellhub e TotalPass liberam catraca sem matrícula ativa e validam ID Well
   assert.equal(regularPending.status, 'pending');
   const promoted = gymService.updateMember(regularPending.id, { partner_provider: 'totalpass' });
   assert.equal(promoted.member.status, 'active');
+
+  // Aluno já cadastrado sem CPF pode ser vinculado ao Wellhub sem exigir CPF
+  const legacyIns = store.run("INSERT INTO members (name, access_role, status) VALUES ('Aluno Legado Sem CPF', 'student', 'pending')");
+  const legacyPromoted = gymService.updateMember(legacyIns.lastInsertRowid, {
+    document: '',
+    partner_provider: 'wellhub',
+    wellhub_id: '',
+  });
+  assert.equal(legacyPromoted.member.partner_provider, 'wellhub');
+  assert.equal(legacyPromoted.member.status, 'active');
+  assert.equal(legacyPromoted.member.document, null);
   assert.equal(promoted.member.partner_provider, 'totalpass');
 });
 
