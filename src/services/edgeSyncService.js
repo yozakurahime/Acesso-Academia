@@ -92,6 +92,10 @@ export class EdgeCloudHub {
           );
           if (dupCid) continue;
         }
+        const rawMemberId = item.member_id != null ? Number(item.member_id) : null;
+        const safeMemberId = rawMemberId && this.store.get('SELECT 1 FROM members WHERE id = ?', [rawMemberId])
+          ? rawMemberId
+          : null;
         const ins = this.store.run(
           `INSERT OR IGNORE INTO access_logs (
             controlid_log_id, controlid_user_id, member_id, member_name,
@@ -100,7 +104,7 @@ export class EdgeCloudHub {
           [
             item.controlid_log_id != null ? Number(item.controlid_log_id) : null,
             item.controlid_user_id != null ? Number(item.controlid_user_id) : null,
-            item.member_id != null ? Number(item.member_id) : null,
+            safeMemberId,
             item.member_name || null,
             item.event_code != null ? Number(item.event_code) : null,
             String(item.event_label || 'Acesso'),
@@ -111,7 +115,7 @@ export class EdgeCloudHub {
         if (ins.changes > 0) {
           inserted += 1;
           latestItem = {
-            member_id: item.member_id != null ? Number(item.member_id) : null,
+            member_id: safeMemberId,
             member_name: item.member_name || null,
             event_code: item.event_code != null ? Number(item.event_code) : null,
             event_label: String(item.event_label || 'Acesso'),
