@@ -385,6 +385,7 @@
               <div id="mStep2Summary" class="wizard-summary" style="margin-top:14px;"></div>
               <div class="wizard-actions">
                 <button type="button" id="btnMemberStep2Back" class="btn btn-secondary">Voltar</button>
+                <button type="button" id="btnMemberAddToCart" class="btn btn-primary">+ Adicionar ao carrinho</button>
                 <button type="submit" id="btnMemberSubmit" class="btn btn-success">Confirmar e ir para pagamento</button>
               </div>
             </div>
@@ -717,6 +718,29 @@
           </div>
         </div>
 
+        <div id="billingCartPanel" class="panel billing-cart-panel hidden" aria-live="polite">
+          <div class="panel-header" style="margin-bottom:10px;">
+            <div>
+              <h3 style="margin:0;">🛒 Carrinho de Recebimento (<span id="billingCartCount">0</span>)</h3>
+              <p class="muted" style="margin:2px 0 0;font-size:12.5px;">Vários alunos ou novas matrículas pagando juntos em 1 único Pix, Cartão ou Maquininha.</p>
+            </div>
+            <div class="inline-actions">
+              <strong id="billingCartTotal" style="font-size:18px;color:var(--cyan);">R$ 0,00</strong>
+              <button type="button" id="btnClearBillingCart" class="btn btn-secondary btn-sm">Limpar</button>
+            </div>
+          </div>
+          <div id="billingCartItems" class="billing-cart-items"></div>
+          <div class="billing-cart-actions">
+            <button type="button" id="btnCartSendPoint" class="btn btn-primary">Enviar carrinho para a maquininha</button>
+            <div class="billing-cart-quick-methods">
+              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="pix">💠 Confirmar Pix</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="credit">💳 Confirmar Crédito</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="debit">🏧 Confirmar Débito</button>
+              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="cash">💵 Confirmar Dinheiro</button>
+            </div>
+          </div>
+        </div>
+
         <div class="billing-focus-layout" id="billingSection">
           <div class="panel billing-main-card">
             <div id="cashClosedAlert" class="alert-banner hidden">Caixa fechado. <button type="button" id="btnOpenCashForPayment" class="btn btn-secondary btn-sm">Abrir caixa</button></div>
@@ -846,6 +870,7 @@
                         <button type="button" class="btn btn-secondary" data-quick-confirm="cash" disabled>💵 Confirmar Dinheiro</button>
                       </div>
                       <button type="submit" id="btnSubmitPayment" class="btn btn-secondary billing-submit-btn hidden" disabled>Confirmar recebimento</button>
+                      <button type="button" id="btnAddBillingToCart" class="btn btn-secondary billing-submit-btn" disabled>+ Adicionar ao carrinho</button>
                     </div>
                   </div>
                   <div id="whatsappCheckoutBox" class="panel hidden" aria-live="polite">
@@ -2696,6 +2721,26 @@
     </div>
   </div>
 
+  <div id="pointWaitModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pointWaitTitle">
+    <div class="modal-card" style="max-width:460px;text-align:center;">
+      <div class="point-wait-spinner" aria-hidden="true"></div>
+      <h2 id="pointWaitTitle" style="margin:12px 0 6px;">Esperando o pagamento na maquininha</h2>
+      <p id="pointWaitSubtitle" class="muted" style="margin:0 0 12px;">Passe o cartão ou aproxime o Pix na Smart Pro 2…</p>
+      <div class="panel" style="margin:0 0 16px;padding:12px;text-align:left;background:var(--surface-alt);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span class="muted">Valor enviado</span>
+          <strong id="pointWaitAmount" style="font-size:20px;color:var(--cyan);">R$ 0,00</strong>
+        </div>
+        <div id="pointWaitTarget" style="font-size:13.5px;font-weight:600;">—</div>
+        <div id="pointWaitStatus" class="muted" style="font-size:12.5px;margin-top:6px;">Aguardando confirmação automática…</div>
+      </div>
+      <div class="inline-actions" style="justify-content:center;gap:10px;">
+        <button type="button" id="btnPointWaitCheck" class="btn btn-primary">Verificar agora</button>
+        <button type="button" id="btnPointWaitCancel" class="btn btn-danger">Cancelar cobrança</button>
+      </div>
+    </div>
+  </div>
+
   <dialog id="workspaceCommands" class="workspace-commands" aria-labelledby="workspaceCommandsTitle">
     <div class="panel-header">
       <h2 id="workspaceCommandsTitle">Buscar no painel</h2>
@@ -2710,6 +2755,6 @@
   <script src="/exercises.js?v=20261114.2" defer></script>
   <script src="/exercise-catalog.js?v=20261114.5" defer></script>
   <script src="/receipt-print.js?v=20261121.2" defer></script>
-  <script src="/app.js?v=20261122.1" defer></script>
+  <script src="/app.js?v=20261123.1" defer></script>
 </body>
 </html>

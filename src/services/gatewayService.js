@@ -996,6 +996,55 @@ export class GatewayService {
   }
 
   async _markPointOrderPaid(order, method, externalId, notes) {
+    let batchItems = null;
+    if (order.batch_items_json) {
+      try {
+        const parsed = JSON.parse(order.batch_items_json);
+        if (Array.isArray(parsed) && parsed.length > 0) batchItems = parsed;
+      } catch {
+        batchItems = null;
+      }
+    }
+
+    if (batchItems) {
+      const paymentResults = [];
+      for (let i = 0; i < batchItems.length; i += 1) {
+        const item = batchItems[i];
+        const res = await this.accessService.recordPayment(
+          {
+            member_id: item.member_id,
+            plan_id: item.plan_id,
+            amount_cents: item.amount_cents,
+            method,
+            external_id: `${externalId}:batch:${item.member_id}:${i}`,
+            charge_id: item.charge_id ?? null,
+            notes: `${notes} (Carrinho ${i + 1}/${batchItems.length})`,
+          },
+          {
+            reconcileOpenCharge: true,
+            exactCharge: Boolean(item.charge_id),
+            onRecorded: i === 0
+              ? (paymentId) => this.store.run(
+                  `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+                  [method, paymentId, order.id],
+                )
+              : undefined,
+          },
+        );
+        if (this.whatsappService && !res.alreadyRecorded) {
+          this.whatsappService.enqueuePaymentReceipt(res).catch(() => {});
+        }
+        paymentResults.push(res);
+      }
+      return {
+        paid: true,
+        alreadyPaid: paymentResults.every((r) => Boolean(r.alreadyRecorded)),
+        order: this.getPointOrderById(order.id),
+        paymentResult: paymentResults[0] || null,
+        paymentResults,
+      };
+    }
+
     const paymentResult = await this.accessService.recordPayment(
       {
         member_id: order.member_id,
@@ -1026,10 +1075,10 @@ export class GatewayService {
     };
   }
 
-  async createPointOrder({ member_id, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit', provider = null }) {
+  async createPointOrder({ member_id = null, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit', provider = null, items = null }) {
     const settings = this.store.getSettings();
     const activeProvider = this.resolvePosProvider(provider, settings);
-    if (activeProvider === 'stone') {
+    if (activeProvider === 'stone' && !Array.isArray(items)) {
       return this._createStoneOrder({ member_id, plan_id, amount_cents, terminal_id, payment_method, settings });
     }
     const headers = this.getPointAuth(settings);
@@ -1039,47 +1088,85 @@ export class GatewayService {
       throw this._badRequest('Configure o ID da maquininha Point Smart em Configurações.');
     }
 
-    const member = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
-    if (!member) throw this._badRequest('Aluno não encontrado.');
+    let primaryMember;
+    let primaryPlan;
+    let primaryCharge;
+    let finalAmount;
+    let resolvedBatch = null;
+    let description;
 
-    const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
-
-    if (charge?.id) {
-      const existingPending = this.store.get(
-        `SELECT id, order_id, terminal_id, amount_cents, payment_method FROM point_orders
-         WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' AND provider = 'mercadopago'
-         ORDER BY id DESC LIMIT 1`,
-        [member.id, charge.id],
-      );
-      if (existingPending) {
-        let shouldReuse = false;
-        try {
-          const stRes = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(existingPending.order_id)}`, {
-            headers,
-            signal: AbortSignal.timeout(8000),
-          });
-          const stData = await this.safeJson(stRes);
-          const mpStatus = String(stData?.status || '').toLowerCase();
-          if (!stRes.ok || ['canceled', 'cancelled', 'expired', 'failed'].includes(mpStatus)) {
-            const norm = mpStatus === 'cancelled' ? 'canceled' : (mpStatus || 'expired');
-            this.store.run(`UPDATE point_orders SET status = ? WHERE id = ? AND status <> 'paid'`, [norm, existingPending.id]);
-          } else if (
-            existingPending.amount_cents === finalAmount &&
-            existingPending.terminal_id === chosenTerminal &&
-            existingPending.payment_method === String(payment_method || 'credit')
-          ) {
-            shouldReuse = true;
-          } else {
-            await this.cancelPointOrder(existingPending.id).catch(() => {});
-          }
-        } catch {
-          // Se falhar a consulta de status, tenta criar nova ordem normalmente
+    if (Array.isArray(items) && items.length > 0) {
+      resolvedBatch = [];
+      let sum = 0;
+      for (const raw of items) {
+        const m = this.store.get('SELECT * FROM members WHERE id = ?', [Number(raw?.member_id)]);
+        if (!m) throw this._badRequest(`Aluno #${raw?.member_id || '?'} não encontrado.`);
+        const resolved = this.resolveBillableMember(m, raw?.plan_id ?? null, raw?.amount_cents ?? null);
+        resolvedBatch.push({
+          member_id: m.id,
+          member_name: m.name,
+          plan_id: resolved.plan.id,
+          plan_name: resolved.plan.name,
+          amount_cents: resolved.cents,
+          charge_id: resolved.charge?.id ?? null,
+        });
+        sum += resolved.cents;
+        if (!primaryMember) {
+          primaryMember = m;
+          primaryPlan = resolved.plan;
+          primaryCharge = resolved.charge;
         }
-        if (shouldReuse) return this.getPointOrderById(existingPending.id);
+      }
+      finalAmount = sum;
+      description = `${settings.gym_name || 'Academia'} - Lote ${resolvedBatch.length} aluno(s)`.slice(0, 100);
+    } else {
+      primaryMember = this.store.get('SELECT * FROM members WHERE id = ?', [Number(member_id)]);
+      if (!primaryMember) throw this._badRequest('Aluno não encontrado.');
+      const resolved = this.resolveBillableMember(primaryMember, plan_id, amount_cents);
+      primaryPlan = resolved.plan;
+      finalAmount = resolved.cents;
+      primaryCharge = resolved.charge;
+      description = `${settings.gym_name || 'Academia'} - ${primaryPlan?.name || 'Mensalidade'} (${primaryMember.name})`.slice(0, 100);
+
+      if (primaryCharge?.id) {
+        const existingPending = this.store.get(
+          `SELECT id, order_id, terminal_id, amount_cents, payment_method FROM point_orders
+           WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' AND provider = 'mercadopago'
+           ORDER BY id DESC LIMIT 1`,
+          [primaryMember.id, primaryCharge.id],
+        );
+        if (existingPending) {
+          let shouldReuse = false;
+          try {
+            const stRes = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(existingPending.order_id)}`, {
+              headers,
+              signal: AbortSignal.timeout(8000),
+            });
+            const stData = await this.safeJson(stRes);
+            const mpStatus = String(stData?.status || '').toLowerCase();
+            if (!stRes.ok || ['canceled', 'cancelled', 'expired', 'failed'].includes(mpStatus)) {
+              const norm = mpStatus === 'cancelled' ? 'canceled' : (mpStatus || 'expired');
+              this.store.run(`UPDATE point_orders SET status = ? WHERE id = ? AND status <> 'paid'`, [norm, existingPending.id]);
+            } else if (
+              existingPending.amount_cents === finalAmount &&
+              existingPending.terminal_id === chosenTerminal &&
+              existingPending.payment_method === String(payment_method || 'credit')
+            ) {
+              shouldReuse = true;
+            } else {
+              await this.cancelPointOrder(existingPending.id).catch(() => {});
+            }
+          } catch {
+            // Se falhar a consulta de status, tenta criar nova ordem normalmente
+          }
+          if (shouldReuse) return this.getPointOrderById(existingPending.id);
+        }
       }
     }
 
-    const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
+    const member = primaryMember;
+    const plan = primaryPlan;
+    const charge = primaryCharge;
     const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Date.now()}`;
     const res = await this.fetch('https://api.mercadopago.com/v1/orders', {
       method: 'POST',
@@ -1115,9 +1202,18 @@ export class GatewayService {
     }
 
     const ins = this.store.run(
-      `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id, provider)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, 'mercadopago')`,
-      [String(data.id), chosenTerminal, member.id, plan.id, finalAmount, String(payment_method || 'credit'), charge?.id ?? null],
+      `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id, provider, batch_items_json)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, 'mercadopago', ?)`,
+      [
+        String(data.id),
+        chosenTerminal,
+        member.id,
+        plan.id,
+        finalAmount,
+        String(payment_method || 'credit'),
+        resolvedBatch ? null : (charge?.id ?? null),
+        resolvedBatch ? JSON.stringify(resolvedBatch) : null,
+      ],
     );
 
     return this.getPointOrderById(ins.lastInsertRowid);
@@ -1239,32 +1335,7 @@ export class GatewayService {
       const mpType = String(payItem?.payment_method?.type || '').toLowerCase();
       const method = mpType === 'debit_card' ? 'debit' : mpType === 'pix' ? 'pix' : order.payment_method || 'credit';
       const extKey = `mp_order:${order.order_id}`;
-      const paymentResult = await this.accessService.recordPayment(
-          {
-            member_id: order.member_id,
-            plan_id: order.plan_id,
-            amount_cents: order.amount_cents,
-            method,
-            external_id: extKey,
-            charge_id: order.membership_charge_id,
-            notes: `Point Smart (${order.terminal_id})`,
-          },
-          { reconcileOpenCharge: true, exactCharge: Boolean(order.membership_charge_id),
-            onRecorded: (paymentId) => this.store.run(
-              `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
-              [method, paymentId, order.id],
-            ) },
-      );
-      if (this.whatsappService && !paymentResult.alreadyRecorded) {
-        this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
-      }
-
-      return {
-        paid: true,
-        alreadyPaid: Boolean(paymentResult.alreadyRecorded),
-        order: this.getPointOrderById(order.id),
-        paymentResult,
-      };
+      return this._markPointOrderPaid(order, method, extKey, `Point Smart (${order.terminal_id})`);
     }
 
     if (['canceled', 'cancelled', 'expired', 'failed'].includes(orderStatus)) {

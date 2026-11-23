@@ -1541,6 +1541,45 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.post(
+    '/payments/batch',
+    requireReception,
+    handle(async (req, res) => {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const method = String(req.body?.method || 'pix').trim();
+      if (!items.length) {
+        throw Object.assign(new Error('Adicione ao menos um aluno no carrinho.'), { statusCode: 400 });
+      }
+      const results = [];
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i] || {};
+        const result = await accessService.recordPayment(
+          {
+            member_id: item.member_id,
+            plan_id: item.plan_id || null,
+            amount_cents: item.amount_cents ?? null,
+            method,
+            notes: item.notes || `Recebimento em lote (${i + 1}/${items.length})`,
+          },
+          { requireOpenCash: true },
+        );
+        auditService.log({
+          actorUser: req.authUser,
+          actorRole: req.authRole,
+          action: 'payment.create',
+          entity: 'payment',
+          entityId: result?.payment?.id ?? result?.id ?? null,
+          details: { member_id: item.member_id, amount_cents: result?.payment?.amount_cents ?? item.amount_cents, batch: true },
+        });
+        if (whatsappService) {
+          whatsappService.enqueuePaymentReceipt(result).catch(() => {});
+        }
+        results.push(result);
+      }
+      res.status(201).json({ ok: true, count: results.length, results });
+    }),
+  );
+
   router.delete(
     '/payments/:id',
     requireReception,

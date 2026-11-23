@@ -2315,6 +2315,7 @@ function renderBillingSummary() {
 
   const submitBtn = document.querySelector('#paymentForm [type="submit"]');
   const pointBtn = document.getElementById('btnSendPointOrder');
+  const addCartBtn = document.getElementById('btnAddBillingToCart');
   const quickConfirmBox = document.getElementById('quickConfirmMethods');
   if (typeof renderBillingPlanPicker === 'function') renderBillingPlanPicker();
   const isDisabled = !member || team || finalPaidCents <= 0 || !splitValid;
@@ -2324,6 +2325,9 @@ function renderBillingSummary() {
     pointBtn.textContent = pointDisabled
       ? 'Enviar para a maquininha'
       : `Enviar para a maquininha · ${fmtMoney(finalPaidCents)}`;
+  }
+  if (addCartBtn) {
+    addCartBtn.disabled = pointDisabled;
   }
   if (quickConfirmBox) {
     quickConfirmBox.classList.toggle('hidden', splitActive);
@@ -5146,17 +5150,20 @@ document.getElementById('mNameCheckAlert').addEventListener('click', (e) => {
 
 document.getElementById('btnMemberStep2Back').addEventListener('click', () => setMemberWizardStep(1));
 
-document.getElementById('memberForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+async function submitMemberWizard({ addToCart = false, triggerEl = null } = {}) {
   if (memberWizardStep !== 2) return;
   const partnerProvider = document.getElementById('mPartnerProvider')?.value || null;
   const wellhubId = document.getElementById('mWellhubId')?.value.trim() || null;
   const selectedPlanId = document.getElementById('mPlan').value || null;
+  if (addToCart && (partnerProvider || !selectedPlanId)) {
+    showToast('Para adicionar ao carrinho, selecione um plano pago da academia.', true);
+    return;
+  }
   if (!partnerProvider && !selectedPlanId) {
     const proceedWithoutPlan = confirm('Nenhum plano selecionado. O aluno será cadastrado bloqueado para entrar na catraca. Deseja continuar sem plano?');
     if (!proceedWithoutPlan) return;
   }
-  await withLoading(e.target, async () => {
+  await withLoading(triggerEl || document.getElementById('memberForm'), async () => {
     try {
       const created = await api('/api/members', {
         method: 'POST',
@@ -5174,8 +5181,14 @@ document.getElementById('memberForm').addEventListener('submit', async (e) => {
         }),
       });
       resetMemberWizard();
-      setMemberFormOpen(false);
       await Promise.all([loadMembers(), loadDashboard(), loadGymStructure()]);
+      if (addToCart) {
+        addMemberItemToBillingCart({ member: created, planId: created.plan_id });
+        showToast(`Aluno #${created.id} adicionado ao carrinho! Cadastre o próximo ou finalize em Mensalidades.`);
+        document.getElementById('mName')?.focus();
+        return;
+      }
+      setMemberFormOpen(false);
       if (partnerProvider) {
         state.pendingFaceAfterPaymentId = null;
         showToast(`Aluno #${created.id} (${partnerProvider === 'wellhub' ? 'Wellhub' : 'TotalPass'}) cadastrado e ativo!`);
@@ -5193,6 +5206,15 @@ document.getElementById('memberForm').addEventListener('submit', async (e) => {
       showToast(err.message, true);
     }
   });
+}
+
+document.getElementById('btnMemberAddToCart')?.addEventListener('click', (e) => {
+  submitMemberWizard({ addToCart: true, triggerEl: e.currentTarget });
+});
+
+document.getElementById('memberForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await submitMemberWizard({ addToCart: false, triggerEl: e.target });
 });
 
 document.getElementById('openCashForm').addEventListener('submit', async (e) => {
@@ -6177,7 +6199,29 @@ function stopPaymentAutoPoll() {
   paymentPollDeadline = 0;
 }
 
-function startPaymentAutoPoll({ type, id, stayOnMember = false }) {
+let activePointWaitOrderId = null;
+let activePointWaitIsCart = false;
+
+function openPointWaitModal(order, targetLabel, { isCart = false } = {}) {
+  if (!order?.id) return;
+  activePointWaitOrderId = order.id;
+  activePointWaitIsCart = Boolean(isCart);
+  const amountEl = document.getElementById('pointWaitAmount');
+  const targetEl = document.getElementById('pointWaitTarget');
+  const statusEl = document.getElementById('pointWaitStatus');
+  if (amountEl) amountEl.textContent = fmtMoney(order.amount_cents || 0);
+  if (targetEl) targetEl.textContent = targetLabel || order.member_name || 'Cobrança na Smart Pro 2';
+  if (statusEl) statusEl.textContent = 'Aguardando confirmação automática…';
+  showModal('pointWaitModal', 'btnPointWaitCheck');
+}
+
+function closePointWaitModal(restoreFocus = false) {
+  activePointWaitOrderId = null;
+  activePointWaitIsCart = false;
+  hideModal('pointWaitModal', restoreFocus);
+}
+
+function startPaymentAutoPoll({ type, id, stayOnMember = false, isCart = false }) {
   stopPaymentAutoPoll();
   if (!id) return;
   paymentPollDeadline = Date.now() + 2 * 60 * 1000;
@@ -6204,15 +6248,26 @@ function startPaymentAutoPoll({ type, id, stayOnMember = false }) {
         const res = await api(`/api/gateways/mp/point-orders/${id}/check`, { method: 'POST' });
         if (res.paid) {
           stopPaymentAutoPoll();
-          const keepMember = stayOnMember || Boolean(document.getElementById('pSplitToggle')?.checked);
-          showToast(keepMember ? 'Pagamento na maquininha confirmado! Finalize o restante na tela.' : 'Pagamento na Point Smart confirmado e baixado!');
+          const wasCart = isCart || activePointWaitIsCart;
+          closePointWaitModal(false);
+          if (wasCart) {
+            state.billingCart = [];
+            renderBillingCart();
+          }
+          const keepMember = !wasCart && (stayOnMember || Boolean(document.getElementById('pSplitToggle')?.checked));
+          showToast(wasCart
+            ? 'Pagamento do carrinho confirmado e baixado para todos os alunos!'
+            : (keepMember ? 'Pagamento na maquininha confirmado! Finalize o restante na tela.' : 'Pagamento na Point Smart confirmado e baixado!'));
           await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
-          if (isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
+          const firstPayment = res.payment || res.paymentResult?.payment || res.paymentResults?.[0]?.payment;
+          if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
           if (!keepMember) finishPaymentAndReturnHome();
           return;
         }
         if (['canceled', 'failed', 'expired'].includes(res.status)) {
           stopPaymentAutoPoll();
+          closePointWaitModal(false);
+          showToast(`Cobrança na maquininha ${res.status}.`, true);
           await loadPointOrders().catch(() => {});
           return;
         }
@@ -6496,6 +6551,193 @@ async function loadPointOrders() {
     .join('');
 }
 
+function renderBillingCart() {
+  const cart = Array.isArray(state.billingCart) ? state.billingCart : (state.billingCart = []);
+  const panel = document.getElementById('billingCartPanel');
+  const countEl = document.getElementById('billingCartCount');
+  const totalEl = document.getElementById('billingCartTotal');
+  const itemsEl = document.getElementById('billingCartItems');
+  if (!panel || !itemsEl) return;
+
+  panel.classList.toggle('hidden', cart.length === 0);
+  if (countEl) countEl.textContent = String(cart.length);
+  const totalCents = cart.reduce((acc, item) => acc + Number(item.amount_cents || 0), 0);
+  if (totalEl) totalEl.textContent = fmtMoney(totalCents);
+
+  itemsEl.innerHTML = cart
+    .map(
+      (item, idx) => `
+      <div class="billing-cart-row">
+        <div>
+          <strong>${escapeHtml(item.member_name)}</strong>
+          <div class="muted" style="font-size:12px;">${escapeHtml(item.plan_name || 'Mensalidade')} · #${item.member_id}</div>
+        </div>
+        <input type="number" min="0.01" step="0.01" class="cart-item-amount" data-cart-amount="${idx}" value="${(Number(item.amount_cents || 0) / 100).toFixed(2)}" aria-label="Valor de ${escapeHtml(item.member_name)}" />
+        <button type="button" class="btn btn-secondary btn-sm" data-cart-remove="${idx}" title="Remover">&times;</button>
+      </div>`,
+    )
+    .join('');
+}
+
+function addMemberItemToBillingCart({ member, planId = null, amountCents = null } = {}) {
+  if (!member?.id) return false;
+  if (!Array.isArray(state.billingCart)) state.billingCart = [];
+  const plan = state.plans.find((p) => Number(p.id) === Number(planId || member.plan_id));
+  const resolvedAmount = Number(amountCents) > 0
+    ? Number(amountCents)
+    : Number(member.next_charge?.amount || plan?.price_cents || 0);
+  if (!resolvedAmount || resolvedAmount <= 0) {
+    showToast('Selecione um plano ou valor válido para adicionar ao carrinho.', true);
+    return false;
+  }
+  const existingIdx = state.billingCart.findIndex((i) => Number(i.member_id) === Number(member.id));
+  const entry = {
+    member_id: Number(member.id),
+    member_name: member.name,
+    plan_id: plan?.id || member.plan_id || null,
+    plan_name: plan?.name || member.plan_name || 'Mensalidade',
+    amount_cents: resolvedAmount,
+  };
+  if (existingIdx >= 0) state.billingCart[existingIdx] = entry;
+  else state.billingCart.push(entry);
+  renderBillingCart();
+  return true;
+}
+
+document.getElementById('btnAddBillingToCart')?.addEventListener('click', () => {
+  const memberId = Number(document.getElementById('pMember')?.value || 0);
+  const member = state.allMembers.find((m) => Number(m.id) === memberId);
+  if (!member) {
+    showToast('Selecione o aluno primeiro.', true);
+    return;
+  }
+  const asideCents = toCents(document.getElementById('billingAsideFinalAmount')?.value);
+  const amountCents = asideCents > 0 ? asideCents : toCents(document.getElementById('pAmount')?.value);
+  const planId = document.getElementById('pPlan')?.value || member.plan_id || null;
+  if (addMemberItemToBillingCart({ member, planId, amountCents })) {
+    showToast(`${member.name} adicionado ao carrinho!`);
+    document.getElementById('pMemberSearch').value = '';
+    document.getElementById('pMember').value = '';
+    renderBillingSummary();
+    document.getElementById('pMemberSearch')?.focus();
+  }
+});
+
+document.getElementById('billingCartPanel')?.addEventListener('input', (e) => {
+  const input = e.target.closest('[data-cart-amount]');
+  if (!input) return;
+  const idx = Number(input.dataset.cartAmount);
+  if (!Number.isInteger(idx) || !state.billingCart?.[idx]) return;
+  const cents = toCents(input.value);
+  if (cents > 0) state.billingCart[idx].amount_cents = cents;
+  const totalEl = document.getElementById('billingCartTotal');
+  if (totalEl) {
+    const sum = state.billingCart.reduce((acc, item) => acc + Number(item.amount_cents || 0), 0);
+    totalEl.textContent = fmtMoney(sum);
+  }
+});
+
+document.getElementById('billingCartPanel')?.addEventListener('click', async (e) => {
+  const rmBtn = e.target.closest('[data-cart-remove]');
+  if (rmBtn) {
+    state.billingCart.splice(Number(rmBtn.dataset.cartRemove), 1);
+    renderBillingCart();
+    return;
+  }
+  if (e.target.closest('#btnClearBillingCart')) {
+    state.billingCart = [];
+    renderBillingCart();
+    return;
+  }
+  const payBtn = e.target.closest('[data-cart-pay-method]');
+  if (payBtn) {
+    if (!state.billingCart?.length) return;
+    const method = payBtn.dataset.cartPayMethod || 'pix';
+    await withLoading(payBtn, async () => {
+      try {
+        const res = await api('/api/payments/batch', {
+          method: 'POST',
+          body: JSON.stringify({ items: state.billingCart, method }),
+        });
+        state.billingCart = [];
+        renderBillingCart();
+        showToast(`Recebimento (${methodName(method)}) confirmado para ${res.count} aluno(s)!`);
+        await Promise.all([loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
+        const firstPayment = res.results?.[0]?.payment;
+        if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
+  const pointCartBtn = e.target.closest('#btnCartSendPoint');
+  if (pointCartBtn) {
+    if (!state.billingCart?.length) return;
+    await withLoading(pointCartBtn, async () => {
+      try {
+        const order = await api('/api/gateways/mp/point-orders', {
+          method: 'POST',
+          body: JSON.stringify({ items: state.billingCart, payment_method: 'credit' }),
+        });
+        const label = `Carrinho (${state.billingCart.length} alunos): ${state.billingCart.map((i) => i.member_name).join(', ')}`;
+        openPointWaitModal(order, label, { isCart: true });
+        await loadPointOrders();
+        if (order?.id) startPaymentAutoPoll({ type: 'point', id: order.id, isCart: true });
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+});
+
+document.getElementById('btnPointWaitCheck')?.addEventListener('click', async (e) => {
+  if (!activePointWaitOrderId) return;
+  const statusEl = document.getElementById('pointWaitStatus');
+  await withLoading(e.currentTarget, async () => {
+    try {
+      const res = await api(`/api/gateways/mp/point-orders/${activePointWaitOrderId}/check`, { method: 'POST' });
+      if (res.paid) {
+        stopPaymentAutoPoll();
+        const wasCart = activePointWaitIsCart;
+        closePointWaitModal(false);
+        if (wasCart) {
+          state.billingCart = [];
+          renderBillingCart();
+        }
+        showToast(wasCart ? 'Pagamento do carrinho confirmado!' : 'Pagamento na Point Smart confirmado e baixado!');
+        await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
+        const firstPayment = res.payment || res.paymentResult?.payment || res.paymentResults?.[0]?.payment;
+        if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
+        if (wasCart || !Boolean(document.getElementById('pSplitToggle')?.checked)) finishPaymentAndReturnHome();
+      } else if (statusEl) {
+        statusEl.textContent = `Status atual: ${res.status || 'aguardando na maquininha'}`;
+      }
+    } catch (err) {
+      if (statusEl) statusEl.textContent = err.message;
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('btnPointWaitCancel')?.addEventListener('click', async (e) => {
+  if (!activePointWaitOrderId) {
+    closePointWaitModal(false);
+    return;
+  }
+  await withLoading(e.currentTarget, async () => {
+    try {
+      await api(`/api/gateways/mp/point-orders/${activePointWaitOrderId}/cancel`, { method: 'POST' });
+      stopPaymentAutoPoll();
+      closePointWaitModal(false);
+      showToast('Cobrança cancelada.');
+      await loadPointOrders();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
 document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e) => {
   const memberId = document.getElementById('pMember').value;
   if (!memberId) {
@@ -6512,6 +6754,7 @@ document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e
   const planId = document.getElementById('pPlan').value || null;
   const paymentMethod = document.getElementById('pMethod')?.value || 'credit';
   const btn = e.currentTarget;
+  const memberObj = state.allMembers.find((m) => Number(m.id) === Number(memberId));
 
   await withLoading(btn, async () => {
     try {
@@ -6519,7 +6762,7 @@ document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e
         method: 'POST',
         body: JSON.stringify({ member_id: memberId, plan_id: planId, amount_cents: amountCents, payment_method: paymentMethod }),
       });
-      showToast('Cobrança enviada para a maquininha!');
+      openPointWaitModal(order, memberObj?.name || order.member_name || `Aluno #${memberId}`);
       await loadPointOrders();
       if (order?.id) startPaymentAutoPoll({ type: 'point', id: order.id });
     } catch (err) {

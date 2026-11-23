@@ -859,6 +859,7 @@ export class DatabaseStore {
     this.ensureColumns('point_orders', {
       membership_charge_id: 'INTEGER REFERENCES membership_charges(id)',
       provider: "TEXT NOT NULL DEFAULT 'mercadopago'",
+      batch_items_json: 'TEXT',
     });
     this.ensureColumns('access_logs', {
       edge_event_id: 'TEXT',

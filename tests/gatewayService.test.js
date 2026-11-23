@@ -376,3 +376,67 @@ test('GatewayService.createPointOrder retorna statusCode 400 com mensagem real q
     (err) => err?.statusCode === 400 && /Terminal ocupado/i.test(err.message),
   );
 });
+
+test('Carrinho Point Smart: createPointOrder em lote soma valores e checkPointOrder da baixa em todos os alunos', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    mp_access_token: 'APP_USR_TEST',
+    mp_point_terminal_id: 'NEWLAND_N950__TEST',
+  });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.name === 'Mensal');
+
+  const m1 = await access.createMember({
+    name: 'Filha Um',
+    document: '52998224725',
+    phone: '62999991111',
+    plan_id: plan.id,
+  });
+  const m2 = await access.createMember({
+    name: 'Filha Dois',
+    document: '15350946056',
+    phone: '62999992222',
+    plan_id: plan.id,
+  });
+
+  const expectedTotal = plan.price_cents * 2;
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, init = {}) => {
+      if (url === 'https://api.mercadopago.com/v1/orders' && init.method === 'POST') {
+        const body = JSON.parse(init.body);
+        assert.equal(body.transactions.payments[0].amount, (expectedTotal / 100).toFixed(2));
+        return { ok: true, status: 201, json: async () => ({ id: 'ORD_BATCH_1', status: 'created' }) };
+      }
+      if (url === 'https://api.mercadopago.com/v1/orders/ORD_BATCH_1') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            id: 'ORD_BATCH_1',
+            status: 'processed',
+            transactions: {
+              payments: [{ status: 'processed', amount: (expectedTotal / 100).toFixed(2), payment_method: { type: 'credit_card' } }],
+            },
+          }),
+        };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    },
+  });
+
+  const order = await gw.createPointOrder({
+    items: [
+      { member_id: m1.id, plan_id: plan.id, amount_cents: plan.price_cents },
+      { member_id: m2.id, plan_id: plan.id, amount_cents: plan.price_cents },
+    ],
+    payment_method: 'credit',
+  });
+  assert.equal(order.amount_cents, expectedTotal);
+
+  const check = await gw.checkPointOrder(order.id);
+  assert.equal(check.paid, true);
+  assert.equal(check.paymentResults.length, 2);
+  assert.equal(access.getMember(m1.id).status, 'active');
+  assert.equal(access.getMember(m2.id).status, 'active');
+});

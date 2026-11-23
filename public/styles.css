@@ -3034,3 +3034,47 @@ input.is-cpf-error {
   color: var(--primary, #38bdf8);
   text-decoration-color: currentColor;
 }
+
+.billing-cart-panel {
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  margin-bottom: 16px;
+}
+.billing-cart-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.billing-cart-row {
+  display: grid;
+  grid-template-columns: 1fr 120px auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-alt, rgba(255, 255, 255, 0.04));
+}
+.billing-cart-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+.billing-cart-quick-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.point-wait-spinner {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 4px solid rgba(56, 189, 248, 0.2);
+  border-top-color: var(--cyan, #38bdf8);
+  animation: oxigenioSpin 0.9s linear infinite;
+}
+@keyframes oxigenioSpin {
+  to { transform: rotate(360deg); }
+}
