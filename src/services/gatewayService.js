@@ -1046,14 +1046,42 @@ export class GatewayService {
 
     if (charge?.id) {
       const existingPending = this.store.get(
-        `SELECT id FROM point_orders WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+        `SELECT id, order_id, terminal_id, amount_cents, payment_method FROM point_orders
+         WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' AND provider = 'mercadopago'
+         ORDER BY id DESC LIMIT 1`,
         [member.id, charge.id],
       );
-      if (existingPending) return this.getPointOrderById(existingPending.id);
+      if (existingPending) {
+        let shouldReuse = false;
+        try {
+          const stRes = await this.mpFetchWithRetry(`https://api.mercadopago.com/v1/orders/${encodeURIComponent(existingPending.order_id)}`, {
+            headers,
+            signal: AbortSignal.timeout(8000),
+          });
+          const stData = await this.safeJson(stRes);
+          const mpStatus = String(stData?.status || '').toLowerCase();
+          if (!stRes.ok || ['canceled', 'cancelled', 'expired', 'failed'].includes(mpStatus)) {
+            const norm = mpStatus === 'cancelled' ? 'canceled' : (mpStatus || 'expired');
+            this.store.run(`UPDATE point_orders SET status = ? WHERE id = ? AND status <> 'paid'`, [norm, existingPending.id]);
+          } else if (
+            existingPending.amount_cents === finalAmount &&
+            existingPending.terminal_id === chosenTerminal &&
+            existingPending.payment_method === String(payment_method || 'credit')
+          ) {
+            shouldReuse = true;
+          } else {
+            await this.cancelPointOrder(existingPending.id).catch(() => {});
+          }
+        } catch {
+          // Se falhar a consulta de status, tenta criar nova ordem normalmente
+        }
+        if (shouldReuse) return this.getPointOrderById(existingPending.id);
+      }
     }
 
     const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
-    const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
+    const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Date.now()}`;
+    const mpPayType = payment_method === 'debit' ? 'debit_card' : payment_method === 'credit' ? 'credit_card' : null;
     const res = await this.fetch('https://api.mercadopago.com/v1/orders', {
       method: 'POST',
       headers: {
@@ -1071,6 +1099,7 @@ export class GatewayService {
             terminal_id: chosenTerminal,
             print_on_terminal: 'no_ticket',
           },
+          ...(mpPayType ? { payment_method: { default_type: mpPayType, default_installments: 1 } } : {}),
         },
         transactions: {
           payments: [
