@@ -37,6 +37,24 @@ function formatCpfDigits(digits) {
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
+function normalizeStoredCpfDigits(doc) {
+  const digits = String(doc || '').replace(/\D/g, '');
+  if (digits.length >= 9 && digits.length < 11) return digits.padStart(11, '0');
+  return digits;
+}
+
+function extractCpfDigits(text) {
+  const raw = String(text || '');
+  const match = raw.match(/(?<!\d)(\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2})(?!\d)/);
+  if (match) {
+    return match[1].replace(/\D/g, '');
+  }
+  const allDigits = raw.replace(/\D/g, '');
+  if (allDigits.length === 11) return allDigits;
+  if (allDigits.length === 10 && isValidCpfDigits(`0${allDigits}`)) return `0${allDigits}`;
+  return '';
+}
+
 /**
  * Especialista determinístico de Vendas Online & Financeiro (Mercado Pago + Matrícula Guiada).
  * Fica separado da Hime (atendimento/IA) para nunca depender de LLM em valores, descontos ou baixas.
@@ -116,12 +134,12 @@ export class OnlineSalesBotService {
       .replace(/^(adicionar|incluir|mais|tamb[eé]m|cpf|nome)\s*[:\-]?\s*/i, '')
       .trim();
     if (!cleaned) return [];
-    const digits = cleaned.replace(/\D/g, '');
+    const digits = extractCpfDigits(cleaned);
     const rows = this.store.all("SELECT * FROM members WHERE access_role = 'student'");
 
     let matches = [];
     if (digits.length === 11) {
-      matches = rows.filter((m) => String(m.document || '').replace(/\D/g, '') === digits);
+      matches = rows.filter((m) => normalizeStoredCpfDigits(m.document) === digits);
     }
     // Exige nome completo exato para evitar enumeração de alunos por terceiros
     if (!matches.length) {
@@ -296,8 +314,10 @@ export class OnlineSalesBotService {
     const existing = this._getSession(phone);
     const wantsPayment = PAYMENT_INTENT_REGEX.test(userText);
     const wantsEnroll = ENROLLMENT_INTENT_REGEX.test(userText);
+    const directCpf = !existing ? extractCpfDigits(userText) : '';
+    const hasDirectValidCpf = Boolean(directCpf && isValidCpfDigits(directCpf));
 
-    if (!existing && !wantsPayment && !wantsEnroll) return null;
+    if (!existing && !wantsPayment && !wantsEnroll && !hasDirectValidCpf) return null;
 
     const mpConfigured = Boolean(this.gatewayService && String(settings.mp_access_token || '').trim());
     if (!mpConfigured) {
@@ -406,7 +426,9 @@ export class OnlineSalesBotService {
     }
 
     if (!existing) {
-      const ownItems = this._findBillableMembersByPhone(phone);
+      const directItems = hasDirectValidCpf ? this._findBillableMembersByQuery(directCpf) : [];
+      if (hasDirectValidCpf && !wantsPayment && !directItems.length) return null;
+      const ownItems = directItems.length > 0 ? directItems : this._findBillableMembersByPhone(phone);
       const session = this._setSession(phone, { kind: 'payment', items: ownItems, pendingChargeId: null });
       const reply = ownItems.length > 0
         ? this._buildPaymentMenuReply(ownItems, 'Encontrei seu cadastro para pagamento:')

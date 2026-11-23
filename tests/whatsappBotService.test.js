@@ -329,3 +329,39 @@ test('WhatsappBotService garante privacidade: nao colide DDD, nao vaza terceiros
   const savedQr = bot2.saveQuickReplies([{ label: 'Teste', text: 'Mensagem teste' }]);
   assert.deepEqual(savedQr, [{ label: 'Teste', text: 'Mensagem teste' }]);
 });
+
+test('OnlineSalesBotService reconhece CPF sem pontuacao (02466829142) para aluno salvo com mascara (024.668.291-42)', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'APP_USR_TEST',
+  });
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const gateway = new GatewayService(store, access, { fetchFn: async () => ({ ok: true, json: async () => ({}) }) });
+  const plan = access.listPlans().find((p) => p.duration_days > 1);
+
+  await access.createMember({
+    name: 'Angélica Karla da Silva',
+    document: '024.668.291-42',
+    phone: '62994156152',
+    plan_id: plan.id,
+  });
+
+  const bot = new WhatsappBotService(store, {
+    gatewayService: gateway,
+    accessService: access,
+    geminiApiKey: '',
+  });
+
+  const res = await bot.handleIncomingMessage({
+    phone: '5562988887777',
+    text: '02466829142',
+  });
+
+  assert.ok(res);
+  assert.equal(res.requiresHuman, false);
+  assert.match(res.reply, /Angélica Karla da Silva/);
+  assert.match(res.reply, /Pix Copia e Cola/i);
+});
