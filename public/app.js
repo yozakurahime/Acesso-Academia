@@ -876,7 +876,10 @@ function renderBalcaoRecentLogs(logs = []) {
         .map((l) => {
           const event = Number(l.event_code);
           const tone = [7, 11, 12].includes(event) ? 'badge-active' : [3, 6].includes(event) ? 'badge-blocked' : 'badge-neutral';
-          return `<tr><td><strong>${escapeHtml(l.member_name || '—')}</strong></td><td><span class="badge ${tone}">${escapeHtml(l.event_label)}</span></td><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td></tr>`;
+          const memberCell = l.member_id
+            ? `<button type="button" class="member-jump-link" data-open-member="${Number(l.member_id)}"><strong>${escapeHtml(l.member_name || '—')}</strong></button>`
+            : `<strong>${escapeHtml(l.member_name || '—')}</strong>`;
+          return `<tr><td>${memberCell}</td><td><span class="badge ${tone}">${escapeHtml(l.event_label)}</span></td><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td></tr>`;
         })
         .join('')
     : '<tr><td colspan="3" class="empty-cell">Nenhuma passagem registrada.</td></tr>';
