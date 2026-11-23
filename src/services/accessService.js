@@ -1501,6 +1501,99 @@ export class AccessService {
     );
   }
 
+  async deletePayment(paymentId) {
+    const id = Number(paymentId);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw Object.assign(new Error('Pagamento inválido.'), { statusCode: 400 });
+    }
+    const payment = this.store.get('SELECT * FROM payments WHERE id = ?', [id]);
+    if (!payment) {
+      throw Object.assign(new Error('Pagamento não encontrado.'), { statusCode: 404 });
+    }
+    const member = this.getMember(payment.member_id);
+
+    this.store.transaction(() => {
+      this.store.run('UPDATE membership_charges SET payment_id = NULL WHERE payment_id = ?', [id]);
+      this.store.run('UPDATE payment_receipts SET payment_id = NULL WHERE payment_id = ?', [id]);
+      this.store.run('UPDATE gateway_charges SET payment_id = NULL WHERE payment_id = ?', [id]);
+      this.store.run('UPDATE point_orders SET payment_id = NULL WHERE payment_id = ?', [id]);
+
+      const creditDelta = this.store.get(
+        'SELECT COALESCE(SUM(delta_cents), 0) AS total FROM member_credit_logs WHERE payment_id = ?',
+        [id],
+      )?.total || 0;
+      if (creditDelta !== 0 && member) {
+        const nextCredit = Math.max(0, Number(member.credit_cents || 0) - creditDelta);
+        this.store.run(
+          "UPDATE members SET credit_cents = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+          [nextCredit, member.id],
+        );
+      }
+      this.store.run('DELETE FROM member_credit_logs WHERE payment_id = ?', [id]);
+      this.store.run("DELETE FROM member_debts WHERE origin_payment_id = ? AND status = 'open'", [id]);
+      this.store.run('UPDATE member_debts SET origin_payment_id = NULL WHERE origin_payment_id = ?', [id]);
+      this.store.run("DELETE FROM commissions WHERE source_type = 'payment' AND source_id = ?", [id]);
+
+      if (payment.cash_session_id) {
+        const openSession = this.store.get(
+          "SELECT id FROM cash_sessions WHERE id = ? AND status = 'open'",
+          [payment.cash_session_id],
+        );
+        if (openSession) {
+          this.store.run(
+            `DELETE FROM cash_movements WHERE id IN (
+              SELECT id FROM cash_movements
+              WHERE cash_session_id = ? AND type = 'payment' AND amount_cents = ? AND method = ?
+              ORDER BY id DESC LIMIT 1
+            )`,
+            [payment.cash_session_id, payment.amount_cents, payment.method],
+          );
+        }
+      }
+
+      this.store.run('DELETE FROM payments WHERE id = ?', [id]);
+
+      if (member && member.access_role === 'student') {
+        const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+        const latestRemaining = this.store.get(
+          `SELECT * FROM payments
+           WHERE member_id = ? AND COALESCE(status, 'paid') = 'paid' AND enrollment_ends_on IS NOT NULL
+           ORDER BY enrollment_ends_on DESC, id DESC LIMIT 1`,
+          [member.id],
+        );
+        if (latestRemaining?.enrollment_ends_on) {
+          const nextEndsOn = latestRemaining.enrollment_ends_on;
+          const nextPlanId = latestRemaining.plan_id || member.plan_id;
+          const nextStatus = nextEndsOn >= this.enrollmentCutoff(today) ? 'active' : 'blocked';
+          this.store.run(
+            `UPDATE members SET valid_until = ?, plan_id = COALESCE(?, plan_id), status = ?,
+             updated_at = datetime('now', 'localtime') WHERE id = ?`,
+            [nextEndsOn, nextPlanId, nextStatus, member.id],
+          );
+          if (nextPlanId) {
+            this.store.run(
+              `INSERT INTO plan_enrollments (member_id, plan_id, starts_on, ends_on)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(member_id) DO UPDATE SET plan_id = excluded.plan_id, ends_on = excluded.ends_on`,
+              [member.id, nextPlanId, today, nextEndsOn],
+            );
+          }
+        } else {
+          this.store.run(
+            `UPDATE members SET valid_until = NULL, status = 'pending', manual_access = 0,
+             updated_at = datetime('now', 'localtime') WHERE id = ?`,
+            [member.id],
+          );
+          this.store.run('DELETE FROM plan_enrollments WHERE member_id = ?', [member.id]);
+        }
+      }
+    });
+
+    const updatedMember = member ? this.getMember(member.id) : null;
+    const sync = updatedMember ? await this.trySyncMemberToDevice(updatedMember) : null;
+    return { ok: true, id, member: updatedMember, sync };
+  }
+
   payMemberDebt(debtId, { amount_cents = null, method = 'pix', split_payments = null, notes = null } = {}, { requireOpenCash = true } = {}) {
     const openCash = this.store.get("SELECT id FROM cash_sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1");
     if (requireOpenCash && !openCash) {

@@ -1511,6 +1511,23 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.delete(
+    '/payments/:id',
+    requireReception,
+    handle(async (req, res) => {
+      const result = await accessService.deletePayment(req.params.id);
+      auditService.log({
+        actorUser: req.authUser || 'system',
+        actorRole: req.authRole || 'system',
+        action: 'payment.delete',
+        entity: 'payment',
+        entityId: result.id,
+        details: { member_id: result.member?.id ?? null, valid_until: result.member?.valid_until ?? null },
+      });
+      res.json(result);
+    }),
+  );
+
   router.get('/debts', requireReception, handle((req, res) => {
     const memberId = req.query.member_id ? Number(req.query.member_id) : null;
     const status = req.query.status || 'open';

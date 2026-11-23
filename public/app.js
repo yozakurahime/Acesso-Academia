@@ -3052,7 +3052,10 @@ function renderProfilePayments() {
               ${p.staff_name ? ` · por ${escapeHtml(p.staff_name)}` : ''}
             </span>
           </div>
-          ${isPaid ? `<button type="button" class="btn btn-secondary btn-sm" data-print-prof-payment="${p.id}">Recibo</button>` : ''}
+          <div style="display:flex;gap:6px;align-items:center;">
+            ${isPaid ? `<button type="button" class="btn btn-secondary btn-sm" data-print-prof-payment="${p.id}">Recibo</button>` : ''}
+            <button type="button" class="btn btn-danger btn-sm" data-delete-prof-payment="${p.id}">Excluir</button>
+          </div>
         </li>`,
     });
   }
@@ -8131,11 +8134,33 @@ document.getElementById('paymentsBody').addEventListener('click', (e) => {
   if (pay) openPaymentReceipt(pay);
 });
 
-document.getElementById('profPaymentsList').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-print-prof-payment]');
-  if (!btn) return;
-  const pay = (state.selectedProfilePayments || []).find((p) => Number(p.id) === Number(btn.dataset.printProfPayment));
-  if (pay) openPaymentReceipt(pay, state.selectedProfileMember);
+document.getElementById('profPaymentsList').addEventListener('click', async (e) => {
+  const printBtn = e.target.closest('[data-print-prof-payment]');
+  if (printBtn) {
+    const pay = (state.selectedProfilePayments || []).find((p) => Number(p.id) === Number(printBtn.dataset.printProfPayment));
+    if (pay) openPaymentReceipt(pay, state.selectedProfileMember);
+    return;
+  }
+  const delBtn = e.target.closest('[data-delete-prof-payment]');
+  if (!delBtn) return;
+  const pay = (state.selectedProfilePayments || []).find((p) => Number(p.id) === Number(delBtn.dataset.deleteProfPayment));
+  if (!pay) return;
+  if (!confirm(`Excluir este pagamento de ${fmtMoney(pay.amount_cents)}? A vigência do aluno será recalculada automaticamente.`)) return;
+  await withLoading(delBtn, async () => {
+    try {
+      await api(`/api/payments/${pay.id}`, { method: 'DELETE' });
+      showToast('Pagamento excluído e vigência recalculada!');
+      await Promise.all([
+        state.selectedProfileId ? openProfile(state.selectedProfileId) : null,
+        loadPayments(),
+        loadMembers(),
+        loadDashboard(),
+        loadCurrentCash(),
+      ].filter(Boolean));
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
 });
 
 let paymentsSearchTimer = null;

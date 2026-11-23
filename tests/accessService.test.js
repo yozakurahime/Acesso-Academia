@@ -729,3 +729,42 @@ test('createMember com plano lança primeira cobrança automaticamente, mantém 
   assert.ok(nextCharge, 'Deve gerar a próxima cobrança normalmente antes do vencimento');
   assert.equal(nextCharge.due, paid.member.valid_until);
 });
+
+test('deletePayment exclui pagamento duplicado, recalcula valid_until e reabre cobrança vinculada', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.listPlans().find((p) => p.duration_days === 30);
+  assert.ok(plan);
+
+  const member = await service.createMember({
+    name: 'Victoria Teste Duplicado',
+    document: nextCpf(),
+    phone: '62984731007',
+    plan_id: plan.id,
+  });
+
+  const p1 = await service.recordPayment({
+    member_id: member.id,
+    plan_id: plan.id,
+    amount_cents: plan.price_cents,
+    method: 'pix',
+  });
+  const p2 = await service.recordPayment({
+    member_id: member.id,
+    plan_id: plan.id,
+    amount_cents: plan.price_cents,
+    method: 'pix',
+  });
+
+  assert.notEqual(p2.member.valid_until, p1.member.valid_until);
+
+  const del2 = await service.deletePayment(p2.payment.id);
+  assert.equal(del2.ok, true);
+  assert.equal(del2.member.valid_until, p1.member.valid_until);
+  assert.equal(del2.member.status, 'active');
+
+  const del1 = await service.deletePayment(p1.payment.id);
+  assert.equal(del1.ok, true);
+  assert.equal(del1.member.valid_until, null);
+  assert.equal(del1.member.status, 'pending');
+  assert.ok(store.get('SELECT id FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]));
+});
