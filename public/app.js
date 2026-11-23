@@ -2674,8 +2674,12 @@ window.openProfile = async (id) => {
   try {
     const request = Symbol();
     state.profileRequest = request;
-    const data = await api(`/api/members/${id}/profile`);
-    if (state.profileRequest !== request || !['balcao', 'members', 'staff'].includes(state.activeTab)) return;
+    const [data] = await Promise.all([
+      api(`/api/members/${id}/profile`),
+      state.plans.length ? null : loadPlans().catch(() => {}),
+      state.modalities.length ? null : loadGymStructure().catch(() => {}),
+    ]);
+    if (state.profileRequest !== request) return;
     state.selectedProfileId = id;
     const m = data.member;
     state.selectedProfileName = m.name;
@@ -3266,9 +3270,15 @@ function updateNewEnrDuePreview() {
   dueEl.textContent = dueIso ? `${fmtDate(dueIso)} (${plan.duration_days} dias)` : '—';
 }
 
-function openNewEnrollmentModal() {
+async function openNewEnrollmentModal() {
   const modal = document.getElementById('newEnrollmentModal');
   if (!modal) return;
+  if (!state.plans.length || !state.modalities.length) {
+    await Promise.all([
+      state.plans.length ? null : loadPlans().catch(() => {}),
+      state.modalities.length ? null : loadGymStructure().catch(() => {}),
+    ]);
+  }
   const m = state.selectedProfileMember;
   const enrollment = state.selectedProfileEnrollment;
   const today = billingDateFormat.format(new Date());
@@ -7598,8 +7608,9 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
       updateLogoutButton(true);
       applyRoleUi(role);
       startTurnstileEventsStream();
-      switchTab(getTabFromHash(), { updateHash: !window.location.hash });
-      openInitialMemberFromUrl();
+      if (!(await openInitialMemberFromUrl())) {
+        switchTab(getTabFromHash(), { updateHash: !window.location.hash });
+      }
     } catch (err) {
       errEl.textContent = err.message || 'Usuário ou senha inválidos.';
       errEl.classList.remove('hidden');
@@ -7665,15 +7676,17 @@ document.getElementById('btnLogout')?.addEventListener('click', async () => {
 const receptionDate = document.getElementById('receptionDate');
 receptionDate.textContent = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeZone: 'America/Sao_Paulo' }).format(new Date());
 
-function openInitialMemberFromUrl() {
+async function openInitialMemberFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const memberId = Number(params.get('member'));
-  if (!Number.isInteger(memberId) || memberId <= 0) return;
+  if (!Number.isInteger(memberId) || memberId <= 0) return false;
   params.delete('member');
   const nextQuery = params.toString();
   const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
   window.history.replaceState({}, '', nextUrl);
-  openProfile(memberId).catch(() => {});
+  await switchTab('members').catch(() => {});
+  await openProfile(memberId).catch(() => {});
+  return true;
 }
 
 (async () => {
@@ -7700,8 +7713,9 @@ function openInitialMemberFromUrl() {
     }
   }
   startTurnstileEventsStream();
-  switchTab(getTabFromHash(), { updateHash: !window.location.hash });
-  openInitialMemberFromUrl();
+  if (!(await openInitialMemberFromUrl())) {
+    switchTab(getTabFromHash(), { updateHash: !window.location.hash });
+  }
 })();
 
 if (window.oxigenioDemo) {
