@@ -189,7 +189,7 @@ document.getElementById('partnerRequestNotifications')?.addEventListener('click'
         showToast(res.releaseError
           ? `Liberado para hoje! (Aviso na catraca: ${res.releaseError})`
           : 'Acesso de convênio liberado para hoje e catraca acionada!');
-        await Promise.allSettled([loadDashboard(), loadLogs(), loadBalcaoLogs()]);
+        await Promise.allSettled([loadDashboard(), loadLogs(), loadBalcaoRecentLogs()]);
       } catch (err) {
         showToast(err.message, true);
       }
@@ -218,7 +218,8 @@ function scheduleLiveLogsRefresh() {
   clearTimeout(liveLogsRefreshTimer);
   liveLogsRefreshTimer = setTimeout(() => {
     if (document.hidden) return;
-    if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
+    if (state.activeTab === 'balcao') loadBalcaoRecentLogs().catch(() => {});
+    else if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
     else if (state.activeTab === 'logs') loadLogs().catch(() => {});
   }, 250);
 }
@@ -305,6 +306,15 @@ function startTurnstileEventsStream() {
   });
   loadPendingPartnerRequests();
   turnstileEventSource = es;
+}
+
+if (!window.oxigenioDemo && !window.__liveLogsPollStarted) {
+  window.__liveLogsPollStarted = true;
+  setInterval(() => {
+    if (document.hidden || !state.authReady) return;
+    if (state.activeTab === 'balcao') loadBalcaoRecentLogs().catch(() => {});
+    else if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
+  }, 10000);
 }
 
 function cpfDigits(value) {
