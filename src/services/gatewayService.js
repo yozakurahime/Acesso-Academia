@@ -1282,8 +1282,11 @@ export class GatewayService {
   }
 
   verifyWebhookSignature(payload, headers, settings = this.store.getSettings()) {
-    const secret = String(process.env.MP_WEBHOOK_SECRET || settings?.mp_webhook_secret || '').trim();
-    if (!secret || !headers || typeof headers !== 'object') return;
+    const secrets = [...new Set([
+      String(process.env.MP_WEBHOOK_SECRET || settings?.mp_webhook_secret || '').trim(),
+      String(process.env.MP_POINT_WEBHOOK_SECRET || settings?.mp_point_webhook_secret || '').trim(),
+    ].filter(Boolean))];
+    if (!secrets.length || !headers || typeof headers !== 'object') return;
 
     const getHeader = (name) => {
       for (const [k, v] of Object.entries(headers)) {
@@ -1299,11 +1302,13 @@ export class GatewayService {
     const requestId = String(getHeader('x-request-id') || '').trim();
     const itemId = String(payload?.data?.id || payload?.id || '').trim();
     const manifest = `id:${itemId.toLowerCase()};request-id:${requestId};ts:${timestamp};`;
-    const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
 
     const a = Buffer.from(signature, 'utf8');
-    const b = Buffer.from(expected, 'utf8');
-    const valid = Boolean(timestamp && signature && a.length === b.length && crypto.timingSafeEqual(a, b));
+    const valid = Boolean(timestamp && signature && secrets.some((secret) => {
+      const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+      const b = Buffer.from(expected, 'utf8');
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    }));
     if (!valid) {
       const err = new Error('Assinatura do webhook Mercado Pago inválida.');
       err.statusCode = 401;

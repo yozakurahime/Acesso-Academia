@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v12';
+const CACHE_VERSION = 'v13';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 
@@ -8,7 +8,6 @@ const SHELL_ASSETS = [
   '/aluno.css',
   '/styles.css',
   '/aluno.js',
-  '/exercise-catalog.js',
   '/exercises.js',
   '/oxigenio.jpg',
   '/icons/icon-192.png',
@@ -19,6 +18,12 @@ const SHELL_ASSETS = [
 ];
 
 const SHELL_ASSET_SET = new Set(SHELL_ASSETS);
+const NETWORK_FIRST_SHELL_ASSETS = new Set([
+  '/aluno.css',
+  '/styles.css',
+  '/aluno.js',
+  '/exercises.js',
+]);
 const STUDENT_READ_ENDPOINTS = new Set([
   '/api/student/me',
   '/api/student/me/fitness',
@@ -32,7 +37,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => Promise.all(SHELL_ASSETS.map((url) => cache.add(url))))
+      .then((cache) => Promise.allSettled(SHELL_ASSETS.map((url) => cache.add(url))))
       .then(() => self.skipWaiting())
   );
 });
@@ -76,16 +81,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-const NETWORK_FIRST_SHELL_ASSETS = new Set([
-  '/aluno.css',
-  '/styles.css',
-  '/aluno.js',
-  '/exercise-catalog.js',
-  '/exercises.js',
-]);
-
   if (NETWORK_FIRST_SHELL_ASSETS.has(url.pathname)) {
-    event.respondWith(networkFirstNavigate(request, url));
+    event.respondWith(networkFirstNavigate(request, url, { isNavigate: false }));
     return;
   }
 
@@ -125,7 +122,7 @@ async function matchShellCache(cache, cacheKey, isNavigate) {
   return null;
 }
 
-async function networkFirstNavigate(request, url) {
+async function networkFirstNavigate(request, url, { isNavigate = true } = {}) {
   const cache = await caches.open(SHELL_CACHE);
   const cacheKey = SHELL_ASSET_SET.has(url.pathname) ? url.pathname : request;
 
@@ -135,12 +132,12 @@ async function networkFirstNavigate(request, url) {
       await cache.put(url.pathname, response.clone());
     }
     if (response && response.status >= 500) {
-      const fallback = await matchShellCache(cache, cacheKey, true);
+      const fallback = await matchShellCache(cache, cacheKey, isNavigate);
       if (fallback) return fallback;
     }
     return response;
   } catch (err) {
-    const fallback = await matchShellCache(cache, cacheKey, true);
+    const fallback = await matchShellCache(cache, cacheKey, isNavigate);
     if (fallback) return fallback;
     throw err;
   }

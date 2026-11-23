@@ -1171,13 +1171,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         return res.status(401).json({ error: 'Token de callback Control iD inválido.' });
       }
     } else {
-      const isPrivateOrLocal = rawIp === '127.0.0.1'
+      const hasProxyHeaders = Boolean(req.get('cf-connecting-ip') || req.get('x-forwarded-for'));
+      const isPrivateOrLocal = !hasProxyHeaders && (rawIp === '127.0.0.1'
         || rawIp === '::1'
         || rawIp.startsWith('10.')
         || rawIp.startsWith('192.168.')
-        || /^172\.(1[6-9]|2\d|3[01])\./.test(rawIp);
-      const knownReader = !isPrivateOrLocal && Boolean(
-        store.get('SELECT id FROM devices WHERE ip = ? AND active = 1', [rawIp]),
+        || /^172\.(1[6-9]|2\d|3[01])\./.test(rawIp));
+      const knownReader = !hasProxyHeaders && !isPrivateOrLocal && Boolean(
+        store.get('SELECT id FROM readers WHERE ip = ? AND enabled = 1', [rawIp]),
       );
       if (!isPrivateOrLocal && !knownReader) {
         return res.status(403).json({ error: 'Origem não autorizada para callback Control iD.' });
