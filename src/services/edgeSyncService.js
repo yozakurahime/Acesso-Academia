@@ -504,7 +504,9 @@ export class EdgeSyncClient {
       if (cmd.payload?.memberId && typeof this.accessService?.getMember === 'function') {
         const m = this.accessService.getMember(cmd.payload.memberId);
         if (m) {
-          await this.accessService.trySyncMemberToDevice(m).catch(() => {});
+          await this.accessService.trySyncMemberToDevice(m, {
+            forceIdentityUpdate: Boolean(cmd.payload?.forceIdentityUpdate),
+          }).catch(() => {});
         }
       }
       return;

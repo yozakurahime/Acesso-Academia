@@ -228,7 +228,7 @@ export class ControlIdClient {
    * @param {{ id: number, name: string, document?: string }} member
    * @param {boolean} allowed
    */
-  async syncMember(member, allowed) {
+  async syncMember(member, allowed, options = {}) {
     const cfg = this.getConfig();
     const deviceUserId = member.controlid_user_id || member.id;
 
@@ -236,14 +236,14 @@ export class ControlIdClient {
       return { controlIdUserId: deviceUserId, allowed, mock: true };
     }
 
-    return this._enqueueUserAccess(deviceUserId, () => this._syncMemberOnce(member, deviceUserId, allowed));
+    return this._enqueueUserAccess(deviceUserId, () => this._syncMemberOnce(member, deviceUserId, allowed, options));
   }
 
-  async _syncMemberOnce(member, deviceUserId, allowed) {
+  async _syncMemberOnce(member, deviceUserId, allowed, { forceIdentityUpdate = false } = {}) {
     const existing = await this.getDeviceUser(deviceUserId);
 
     if (existing) {
-      if (!matchesDeviceIdentity(member, existing)) {
+      if (!forceIdentityUpdate && !matchesDeviceIdentity(member, existing)) {
         throw new Error('Nome ou CPF divergente no Control iD. Confira o vínculo facial antes de sincronizar.');
       }
       await this.requestJson('/modify_objects.fcgi', {

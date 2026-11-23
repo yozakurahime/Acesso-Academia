@@ -717,9 +717,12 @@ export class AccessService {
     }
   }
 
-  async trySyncMemberToDevice(member) {
+  async trySyncMemberToDevice(member, options = {}) {
     if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
-      this.edgeCloudHub?.enqueueCommand('sync_needed', { memberId: member?.id || null });
+      this.edgeCloudHub?.enqueueCommand('sync_needed', {
+        memberId: member?.id || null,
+        forceIdentityUpdate: Boolean(options?.forceIdentityUpdate),
+      });
       return { synced: true, deferredToEdge: true };
     }
     const allowed = !this.getAccessDenial(member);
@@ -729,7 +732,7 @@ export class AccessService {
       if (this.store.get('SELECT id FROM members WHERE controlid_user_id = ? AND id <> ?', [deviceId, member.id])) {
         throw new Error('ID facial vinculado a outro cadastro. Confira o vínculo no perfil.');
       }
-      const result = await this.controlId.syncMember(member, allowed);
+      const result = await this.controlId.syncMember(member, allowed, options);
       const syncedDeviceId = result?.controlIdUserId ?? deviceId;
       this.store.run(
         "UPDATE members SET controlid_user_id = COALESCE(controlid_user_id, ?), last_sync_error = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?",
@@ -738,7 +741,7 @@ export class AccessService {
       const secondaryMember = { ...member, controlid_user_id: syncedDeviceId };
       for (const { client } of this._getSecondaryControlIdClients()) {
         try {
-          await client.syncMember(secondaryMember, allowed);
+          await client.syncMember(secondaryMember, allowed, options);
         } catch {
           // Leitores secundários são sincronizados em regime best-effort
         }
