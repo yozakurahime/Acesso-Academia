@@ -674,6 +674,17 @@ export class AccessService {
       const id = res.lastInsertRowid;
       if (classId !== null) this.store.run('INSERT INTO class_enrollments (class_id, member_id) VALUES (?, ?)', [classId, id]);
       this.store.run('UPDATE members SET controlid_user_id = ? WHERE id = ?', [id, id]);
+      const chosenPlanId = partner.partner_provider ? null : (plan_id ? Number(plan_id) : null);
+      if (access_role === 'student' && !partner.partner_provider && chosenPlanId) {
+        const plan = this.store.get('SELECT id, price_cents FROM plans WHERE id = ?', [chosenPlanId]);
+        if (plan && Number(plan.price_cents) > 0) {
+          const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+          this.store.run(
+            "INSERT OR IGNORE INTO membership_charges (member_id, due, amount, source) VALUES (?, ?, ?, 'enrollment')",
+            [id, today, plan.price_cents],
+          );
+        }
+      }
       return id;
     });
 
@@ -1237,7 +1248,9 @@ export class AccessService {
     );
     const matchesOpen = reconcileOpenCharge && !exactCharge && charge && charge_id == null &&
       Number(amount_cents) === charge.amount && (!plan_id || Number(plan_id) === member.plan_id);
-    if ((charge || charge_id) && Number(charge_id) !== charge?.id && !matchesOpen) {
+    const matchesEnrollment = !exactCharge && charge && charge_id == null &&
+      charge.source === 'enrollment' && (!plan_id || Number(plan_id) === member.plan_id);
+    if ((charge || charge_id) && Number(charge_id) !== charge?.id && !matchesOpen && !matchesEnrollment) {
       const err = new Error('Selecione a primeira mensalidade em aberto e atualize a tela se necessário.');
       err.statusCode = 409;
       throw err;

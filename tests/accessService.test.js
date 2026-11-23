@@ -516,22 +516,26 @@ test('syncMembershipCharges gera cobranca 10 dias antes, remove 2 dias apos venc
   // Aluno 1: vence daqui a 10 dias -> deve gerar cobrança automática
   const mSoon = await service.createMember({ name: 'Vence Em 10 Dias', document: nextCpf(), plan_id: plan.id });
   const dueSoon = store.get("SELECT date('now', 'localtime', '+10 days') AS d").d;
+  store.run('DELETE FROM membership_charges WHERE member_id = ?', [mSoon.id]);
   store.run("UPDATE members SET status = 'active', valid_until = ? WHERE id = ?", [dueSoon, mSoon.id]);
 
   // Aluno 2: vence daqui a 15 dias -> NÃO deve gerar cobrança ainda
   const mLater = await service.createMember({ name: 'Vence Em 15 Dias', document: nextCpf(), plan_id: plan.id });
   const dueLater = store.get("SELECT date('now', 'localtime', '+15 days') AS d").d;
+  store.run('DELETE FROM membership_charges WHERE member_id = ?', [mLater.id]);
   store.run("UPDATE members SET status = 'active', valid_until = ? WHERE id = ?", [dueLater, mLater.id]);
 
   // Aluno 3: venceu há 2 dias -> cobrança ainda permanece para pagamento
   const mGrace = await service.createMember({ name: 'Vencido Ha 2 Dias', document: nextCpf(), plan_id: plan.id });
   const dueTwoDaysAgo = store.get("SELECT date('now', 'localtime', '-2 days') AS d").d;
+  store.run('DELETE FROM membership_charges WHERE member_id = ?', [mGrace.id]);
   store.run("UPDATE members SET status = 'active', valid_until = ? WHERE id = ?", [dueTwoDaysAgo, mGrace.id]);
   service.createMembershipCharge(mGrace.id, { due: dueTwoDaysAgo, amount: plan.price_cents });
 
   // Aluno 4: venceu há 3 dias (> 2 dias após o vencimento) -> cobrança não paga deve sumir
   const mStale = await service.createMember({ name: 'Vencido Ha 3 Dias', document: nextCpf(), plan_id: plan.id });
   const dueThreeDaysAgo = store.get("SELECT date('now', 'localtime', '-3 days') AS d").d;
+  store.run('DELETE FROM membership_charges WHERE member_id = ?', [mStale.id]);
   store.run("UPDATE members SET status = 'active', valid_until = ? WHERE id = ?", [dueThreeDaysAgo, mStale.id]);
   service.createMembershipCharge(mStale.id, { due: dueThreeDaysAgo, amount: plan.price_cents });
 
@@ -676,4 +680,52 @@ test('deleteMember remove aluno com partner_access_requests e gateway_charges vi
   assert.equal(store.get('SELECT id FROM partner_access_requests WHERE member_id = ?', [member.id]), null);
   assert.equal(store.get('SELECT id FROM gateway_charges WHERE member_id = ?', [member.id]), null);
   assert.equal(store.get('SELECT id FROM membership_charges WHERE member_id = ?', [member.id]), null);
+});
+
+test('createMember com plano lança primeira cobrança automaticamente, mantém bloqueado até pagar e segue renovações depois', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.listPlans().find((p) => p.duration_days > 1);
+  assert.ok(plan);
+
+  const member = await service.createMember({
+    name: 'Aluno Nova Matricula',
+    document: nextCpf(),
+    phone: '62999998888',
+    plan_id: plan.id,
+  });
+
+  const today = store.get("SELECT date('now', 'localtime') AS today").today;
+  const openCharge = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  assert.ok(openCharge, 'Deve lançar a primeira cobrança automaticamente na matrícula');
+  assert.equal(openCharge.due, today);
+  assert.equal(openCharge.amount, plan.price_cents);
+  assert.equal(openCharge.source, 'enrollment');
+
+  // Permanece bloqueado até pagar a primeira cobrança
+  assert.equal(member.status, 'pending');
+  assert.ok(service.getAccessDenial(member));
+
+  // Mesmo após > 2 dias sem pagar, a cobrança inicial de matrícula não é removida pelo sync automático
+  const fiveDaysLater = store.get("SELECT date('now', 'localtime', '+5 days') AS d").d;
+  service.syncMembershipCharges(fiveDaysLater);
+  assert.ok(store.get('SELECT id FROM membership_charges WHERE id = ? AND payment_id IS NULL', [openCharge.id]));
+
+  // Ao pagar a primeira cobrança, quita a cobrança, libera o acesso e cria a vigência
+  const paid = await service.recordPayment({
+    member_id: member.id,
+    plan_id: plan.id,
+    charge_id: openCharge.id,
+    amount_cents: plan.price_cents,
+    method: 'pix',
+  });
+  assert.equal(paid.member.status, 'active');
+  assert.equal(service.getAccessDenial(paid.member), null);
+  assert.equal(store.get('SELECT payment_id FROM membership_charges WHERE id = ?', [openCharge.id]).payment_id, paid.payment.id);
+
+  // Depois segue normalmente gerando a próxima cobrança 10 dias antes do vencimento
+  const tenDaysBeforeEnd = store.get("SELECT date(?, '-10 days') AS d", [paid.member.valid_until]).d;
+  service.syncMembershipCharges(tenDaysBeforeEnd);
+  const nextCharge = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  assert.ok(nextCharge, 'Deve gerar a próxima cobrança normalmente antes do vencimento');
+  assert.equal(nextCharge.due, paid.member.valid_until);
 });
