@@ -236,9 +236,11 @@ export class EdgeSyncClient {
     this.token = String(token || '').trim();
     this.fetchFn = fetchFn;
     this.syncIntervalMs = syncIntervalMs;
+    this.logSyncIntervalMs = 5000;
     this.reconnectDelayMs = reconnectDelayMs;
     this._stopped = false;
     this._syncTimer = null;
+    this._logSyncTimer = null;
     this._reconnectTimer = null;
     this._abortController = null;
     this._syncing = false;
@@ -442,12 +444,26 @@ export class EdgeSyncClient {
     return { pushed: photos.length };
   }
 
+  async syncLogsOnly() {
+    if (this._syncing) return;
+    try {
+      const syncLogsFn = this.accessService?.syncAccessLogs || this.accessService?.syncLogsFromControlId;
+      if (typeof syncLogsFn === 'function') {
+        await syncLogsFn.call(this.accessService).catch(() => {});
+      }
+      await this.pushPendingLogs().catch(() => {});
+    } catch {
+      // ignore transient log sync errors
+    }
+  }
+
   async syncOnce() {
     if (this._syncing) return;
     this._syncing = true;
     try {
-      if (typeof this.accessService?.syncLogsFromControlId === 'function') {
-        await this.accessService.syncLogsFromControlId().catch(() => {});
+      const syncLogsFn = this.accessService?.syncAccessLogs || this.accessService?.syncLogsFromControlId;
+      if (typeof syncLogsFn === 'function') {
+        await syncLogsFn.call(this.accessService).catch(() => {});
       }
       await this.pushPendingLogs();
       await this.pullSnapshot();
@@ -592,6 +608,10 @@ export class EdgeSyncClient {
       this.syncOnce();
     }, this.syncIntervalMs);
     this._syncTimer.unref?.();
+    this._logSyncTimer = setInterval(() => {
+      this.syncLogsOnly();
+    }, this.logSyncIntervalMs);
+    this._logSyncTimer.unref?.();
     this._connectCommandStream();
   }
 
@@ -600,6 +620,10 @@ export class EdgeSyncClient {
     if (this._syncTimer) {
       clearInterval(this._syncTimer);
       this._syncTimer = null;
+    }
+    if (this._logSyncTimer) {
+      clearInterval(this._logSyncTimer);
+      this._logSyncTimer = null;
     }
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);

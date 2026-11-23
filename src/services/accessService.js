@@ -1935,6 +1935,17 @@ export class AccessService {
           ? toLocalDateTime(new Date(Number(log.time) * 1000))
           : toLocalDateTime(new Date());
 
+        if (log.user_id) {
+          const dupRecent = this.store.get(
+            `SELECT id FROM access_logs
+             WHERE controlid_user_id = ?
+               AND ABS(strftime('%s', occurred_at) - strftime('%s', ?)) <= 10
+             LIMIT 1`,
+            [log.user_id, occurredAt],
+          );
+          if (dupRecent) continue;
+        }
+
         this.store.run(
           `INSERT INTO access_logs (controlid_log_id, controlid_user_id, member_id, member_name, event_code, event_label, occurred_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
