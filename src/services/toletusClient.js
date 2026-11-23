@@ -10,6 +10,8 @@ export class ToletusClient {
   constructor(getSettingsFn) {
     this.getSettings = getSettingsFn;
     this._queues = new Map();
+    this.lastSuccessAt = 0;
+    this.lastError = null;
   }
 
   getConfig(override = null) {
@@ -124,8 +126,14 @@ export class ToletusClient {
           ackTimer = null;
         }
         socket.destroy();
-        if (err) reject(err);
-        else resolve(data);
+        if (err) {
+          this.lastError = err.message || 'Erro TCP Toletus';
+          reject(err);
+        } else {
+          this.lastSuccessAt = Date.now();
+          this.lastError = null;
+          resolve(data);
+        }
       };
 
       socket.setTimeout(4000);
@@ -186,8 +194,14 @@ export class ToletusClient {
         if (settled) return;
         settled = true;
         socket.destroy();
-        if (err) reject(err);
-        else resolve(res);
+        if (err) {
+          this.lastError = err.message || 'Erro TCP Toletus';
+          reject(err);
+        } else {
+          this.lastSuccessAt = Date.now();
+          this.lastError = null;
+          resolve(res);
+        }
       };
 
       socket.setTimeout(3000);

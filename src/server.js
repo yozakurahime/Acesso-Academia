@@ -348,13 +348,20 @@ async function start() {
             watchdogState.turnstileConnected = true;
             watchdogState.turnstileError = null;
           } else if (cfg.toletus_ip) {
-            try {
-              await toletus.testConnection(cfg);
-              watchdogState.turnstileConnected = true;
-              watchdogState.turnstileError = null;
-            } catch (err) {
-              watchdogState.turnstileConnected = false;
-              watchdogState.turnstileError = err.message;
+            const recentToletusOk =
+              watchdogState.turnstileConnected &&
+              !toletus.lastError &&
+              toletus.lastSuccessAt &&
+              Date.now() - toletus.lastSuccessAt < 5 * 60 * 1000;
+            if (!recentToletusOk) {
+              try {
+                await toletus.testConnection(cfg);
+                watchdogState.turnstileConnected = true;
+                watchdogState.turnstileError = null;
+              } catch (err) {
+                watchdogState.turnstileConnected = false;
+                watchdogState.turnstileError = err.message;
+              }
             }
           }
           watchdogState.checkedAt = new Date().toISOString();
