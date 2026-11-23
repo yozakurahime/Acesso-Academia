@@ -1037,7 +1037,7 @@ async function loadDashboard() {
             const event = Number(l.event_code);
             const tone = [7, 11, 12].includes(event) ? 'badge-active' : [3, 6].includes(event) ? 'badge-blocked' : 'badge-neutral';
             const memberCell = l.member_id
-              ? `<button type="button" class="member-jump-link" data-dash-open-member="${Number(l.member_id)}"><strong>${escapeHtml(l.member_name || '—')}</strong></button>`
+              ? `<button type="button" class="member-jump-link" data-open-member="${Number(l.member_id)}"><strong>${escapeHtml(l.member_name || '—')}</strong></button>`
               : `<strong>${escapeHtml(l.member_name || '—')}</strong>`;
             return `<tr><td>${memberCell}</td><td><span class="badge ${tone}">${escapeHtml(l.event_label)}</span></td><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td></tr>`;
           },
@@ -1046,10 +1046,10 @@ async function loadDashboard() {
     : '<tr><td colspan="3" class="empty-cell">Nenhuma passagem registrada.</td></tr>';
 }
 
-document.getElementById('dashLogsBody')?.addEventListener('click', (event) => {
-  const btn = event.target.closest('[data-dash-open-member]');
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-open-member]');
   if (!btn) return;
-  const memberId = Number(btn.dataset.dashOpenMember);
+  const memberId = Number(btn.dataset.openMember);
   if (memberId > 0) openProfile(memberId);
 });
 
@@ -3897,6 +3897,18 @@ const CASH_MOVEMENT_TYPE_META = {
   sale: { label: 'Venda', cls: 'badge-neutral', sign: '+' },
 };
 
+function resolveCashMovementMember(m) {
+  if (!m) return null;
+  if (Number(m.member_id) > 0) {
+    return state.allMembers.find((entry) => entry.id === Number(m.member_id)) || { id: Number(m.member_id) };
+  }
+  const desc = String(m.description || '').trim();
+  const match = desc.match(/^[^:]+:\s*([^(\[—]+?)(?:\s*\(|\s*\[|\s+—|$)/);
+  const candidate = match ? match[1].trim().toLowerCase() : '';
+  if (!candidate || !Array.isArray(state.allMembers) || !state.allMembers.length) return null;
+  return state.allMembers.find((entry) => String(entry.name || '').trim().toLowerCase() === candidate) || null;
+}
+
 function renderCashMovementRows(movements, emptyText) {
   if (!movements.length) {
     return `<tr><td colspan="5" class="muted">${escapeHtml(emptyText)}</td></tr>`;
@@ -3904,12 +3916,16 @@ function renderCashMovementRows(movements, emptyText) {
   return movements
     .map((m) => {
       const meta = CASH_MOVEMENT_TYPE_META[m.type] || { label: m.type, cls: 'badge-neutral', sign: '' };
+      const member = resolveCashMovementMember(m);
+      const descCell = member
+        ? `<button type="button" class="member-jump-link" data-open-member="${Number(member.id)}">${escapeHtml(m.description)}</button>`
+        : escapeHtml(m.description);
       return `
         <tr>
           <td>${escapeHtml(fmtDateTime(m.created_at))}</td>
           <td><span class="badge ${meta.cls}">${escapeHtml(meta.label)}</span></td>
           <td>${escapeHtml(methodName(m.method))}</td>
-          <td>${escapeHtml(m.description)}</td>
+          <td>${descCell}</td>
           <td class="${m.type === 'out' ? 'text-danger' : ''}">${meta.sign}${fmtMoney(m.amount_cents)}</td>
         </tr>`;
     })
@@ -4136,6 +4152,7 @@ document.getElementById('btnPrintCashDetail')?.addEventListener('click', () => {
 });
 
 async function loadCash() {
+  if (!state.allMembers.length) await loadMembers().catch(() => {});
   await Promise.all([loadCurrentCash(), loadOnlineCash(), loadCashHistory()]);
 }
 
