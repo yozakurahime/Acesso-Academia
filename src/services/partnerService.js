@@ -119,6 +119,15 @@ export class PartnerService {
         [Number(memberId), provider, today],
       );
       if (existing) return existing;
+    } else if (identifier) {
+      const cleanId = String(identifier).trim().toLowerCase();
+      const existingUnmatched = this.store.get(
+        `SELECT * FROM partner_checkins
+         WHERE member_id IS NULL AND provider = ? AND lower(trim(identifier)) = ? AND checkin_date = ? AND status = 'validated'
+         ORDER BY id DESC LIMIT 1`,
+        [provider, cleanId, today],
+      );
+      if (existingUnmatched) return existingUnmatched;
     }
 
     const res = this.store.run(

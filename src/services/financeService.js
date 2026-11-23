@@ -338,9 +338,10 @@ export class FinanceService {
     }
 
     const todayIso = localDateIso(0, now);
-    const minOverdueIso = localDateIso(-5, now);
+    const minOverdueIso = localDateIso(-15, now);
     const maxDueSoonIso = localDateIso(3, now);
     const gymName = this.store.getSettings().gym_name || 'Academia Oxigênio';
+    const todayMs = new Date(`${todayIso}T00:00:00`).getTime();
 
     const candidates = this.store.all(
       `SELECT m.id, m.name, m.phone, m.status, m.valid_until,
@@ -349,6 +350,7 @@ export class FinanceService {
        LEFT JOIN plans p ON p.id = m.plan_id
        WHERE m.status IN ('active', 'overdue', 'blocked')
          AND COALESCE(m.is_visitor, 0) = 0
+         AND (m.partner_provider IS NULL OR m.partner_provider NOT IN ('wellhub', 'totalpass'))
          AND m.phone IS NOT NULL
          AND TRIM(m.phone) != ''
          AND m.valid_until IS NOT NULL
@@ -363,11 +365,14 @@ export class FinanceService {
 
     this.store.transaction(() => {
       for (const member of candidates) {
+        const dueMs = new Date(`${String(member.valid_until).slice(0, 10)}T00:00:00`).getTime();
+        const diffDays = Math.round((dueMs - todayMs) / 86400000);
+        const stage = diffDays >= 0 ? 'due_soon' : diffDays >= -5 ? 'overdue_1_5' : 'overdue_6_15';
         const firstName = String(member.name || 'Aluno').trim().split(/\s+/)[0];
         const dueBr = formatDateBr(member.valid_until);
         const planLabel = member.plan_name ? ` (${member.plan_name})` : '';
         const priceLabel = member.plan_price_cents ? ` no valor de ${formatMoneyBr(member.plan_price_cents)}` : '';
-        const isOverdue = String(member.valid_until) < todayIso;
+        const isOverdue = diffDays < 0;
 
         const message = isOverdue
           ? `Olá ${firstName}! Notamos que sua mensalidade${planLabel}${priceLabel} na ${gymName} venceu em ${dueBr}. Regularize seu pagamento para manter seu acesso liberado.`
@@ -376,9 +381,13 @@ export class FinanceService {
         const row = whatsappService.enqueueMessage({
           memberId: member.id,
           phone: member.phone,
-          kind: 'auto_collection',
-          refKey: `auto_collection:${todayIso}`,
+          kind: isOverdue ? 'overdue_reminder' : 'due_reminder',
+          refKey: `auto_collection:${member.valid_until}:${stage}`,
           message,
+          templateName: isOverdue ? 'cobranca_vencida' : 'academia_lembrete_vencimento',
+          templateParams: isOverdue
+            ? [firstName, member.plan_name || 'Mensalidade', dueBr]
+            : [firstName, member.plan_name || 'Mensalidade', dueBr, formatMoneyBr(member.plan_price_cents || 0)],
         });
 
         if (row) {

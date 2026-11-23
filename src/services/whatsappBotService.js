@@ -452,7 +452,10 @@ export class WhatsappBotService {
 
     try {
       const classes = this.store.all(
-        `SELECT c.name, c.schedule, c.capacity, m.name AS modality_name
+        `SELECT c.name, c.schedule, c.capacity, m.name AS modality_name,
+                COALESCE(c.allow_new_enrollments, 1) AS allow_new_enrollments,
+                COALESCE(c.online_enrollment_mode, 'auto') AS online_enrollment_mode,
+                (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
          FROM classes c
          LEFT JOIN modalities m ON m.id = c.modality_id
          WHERE c.active = 1 ORDER BY c.name ASC`,
@@ -460,7 +463,17 @@ export class WhatsappBotService {
       if (classes.length > 0) {
         const classLines = classes.map((c) => {
           const mod = c.modality_name ? `${c.modality_name} — ` : '';
-          return `- ${mod}${c.name}: ${c.schedule} (capacidade ${c.capacity} alunos)`;
+          const cap = Number(c.capacity || 0);
+          const enrolled = Number(c.enrolled_count || 0);
+          const spots = Math.max(0, cap - enrolled);
+          const status = Number(c.allow_new_enrollments) === 0
+            ? 'fechada para novas matrículas'
+            : c.online_enrollment_mode === 'reception_only'
+              ? 'vaga confirmada pela recepção'
+              : spots === 0
+                ? 'lotada'
+                : `${spots} vaga(s) aberta(s) de ${cap}`;
+          return `- ${mod}${c.name}: ${c.schedule} (${status})`;
         });
         sections.push(`Turmas e horários ativos:\n${classLines.join('\n')}`);
       }
