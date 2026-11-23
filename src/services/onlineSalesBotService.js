@@ -22,6 +22,51 @@ function stripAccents(value) {
     .trim();
 }
 
+const NAME_STOPWORDS = new Set(['da', 'de', 'do', 'dos', 'das', 'e']);
+
+function nameTokens(value) {
+  return stripAccents(value)
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && !NAME_STOPWORDS.has(t));
+}
+
+function editDistanceAtMostOne(a, b) {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1 || Math.min(la, lb) < 4) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+    } else {
+      edits += 1;
+      if (edits > 1) return false;
+      if (la > lb) i += 1;
+      else if (lb > la) j += 1;
+      else {
+        i += 1;
+        j += 1;
+      }
+    }
+  }
+  if (i < la || j < lb) edits += 1;
+  return edits <= 1;
+}
+
+function isFlexibleNameMatch(candidateName, queryTokens) {
+  if (queryTokens.length < 2) return false;
+  const targetTokens = nameTokens(candidateName);
+  if (targetTokens.length < queryTokens.length) return false;
+  return queryTokens.every((qt) =>
+    targetTokens.some((tt) => tt === qt || editDistanceAtMostOne(qt, tt)),
+  );
+}
+
 function isValidCpfDigits(digits) {
   if (!/^\d{11}$/.test(digits) || /^(\d)\1{10}$/.test(digits)) return false;
   const calc = (len) => {
@@ -66,7 +111,7 @@ export class OnlineSalesBotService {
     recordChatMessage = () => {},
     pauseContact = () => {},
     humanPauseMs = 4 * 60 * 60 * 1000,
-    sessionTtlMs = 30 * 60 * 1000,
+    sessionTtlMs = 2 * 60 * 60 * 1000,
   } = {}) {
     this.store = store;
     this.gatewayService = gatewayService;
@@ -129,7 +174,7 @@ export class OnlineSalesBotService {
     return this._resolveBillableList(matches);
   }
 
-  _findBillableMembersByQuery(rawQuery) {
+  _findMembersByQuery(rawQuery) {
     const cleaned = String(rawQuery || '')
       .replace(/^(adicionar|incluir|mais|tamb[eé]m|cpf|nome)\s*[:\-]?\s*/i, '')
       .trim();
@@ -141,14 +186,24 @@ export class OnlineSalesBotService {
     if (digits.length === 11) {
       matches = rows.filter((m) => normalizeStoredCpfDigits(m.document) === digits);
     }
-    // Exige nome completo exato para evitar enumeração de alunos por terceiros
+    // Exige ao menos 2 palavras relevantes para evitar enumeração por primeiro nome
     if (!matches.length) {
       const needle = stripAccents(cleaned);
       if (needle.includes(' ') && needle.length >= 6) {
         matches = rows.filter((m) => stripAccents(m.name) === needle);
+        if (!matches.length) {
+          const tokens = nameTokens(cleaned);
+          if (tokens.length >= 2) {
+            matches = rows.filter((m) => isFlexibleNameMatch(m.name, tokens));
+          }
+        }
       }
     }
-    return this._resolveBillableList(matches);
+    return matches;
+  }
+
+  _findBillableMembersByQuery(rawQuery) {
+    return this._resolveBillableList(this._findMembersByQuery(rawQuery));
   }
 
   _formatPaymentSummary(items) {
@@ -437,8 +492,15 @@ export class OnlineSalesBotService {
       return { reply, requiresHuman: false, session };
     }
 
-    const found = this._findBillableMembersByQuery(userText);
+    const matchedMembers = this._findMembersByQuery(userText);
+    const found = this._resolveBillableList(matchedMembers);
     if (!found.length) {
+      if (matchedMembers.length === 1) {
+        const firstName = String(matchedMembers[0].name || 'Aluno').trim().split(/\s+/)[0];
+        const reply = `Encontrei o cadastro de *${firstName}*, mas ainda não há um plano vinculado para gerar a cobrança automática.\n\nResponda *atendente* para nossa equipe vincular seu plano por aqui!`;
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
       const reply = existing.items.length > 0
         ? this._buildPaymentMenuReply(existing.items, 'Não encontrei outro aluno ativo/com plano por esse nome ou CPF.')
         : 'Não encontrei nenhum aluno com plano vinculado por esse nome ou CPF. Confira e envie o *CPF (11 dígitos)* ou *nome completo*, ou responda *cancelar*.';

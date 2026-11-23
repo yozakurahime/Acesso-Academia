@@ -365,3 +365,52 @@ test('OnlineSalesBotService reconhece CPF sem pontuacao (02466829142) para aluno
   assert.match(res.reply, /Angélica Karla da Silva/);
   assert.match(res.reply, /Pix Copia e Cola/i);
 });
+
+test('OnlineSalesBotService aceita variação leve no nome (sem conector ou erro de 1 letra) e informa quando falta plano', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'APP_USR_TEST',
+  });
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const gateway = new GatewayService(store, access, { fetchFn: async () => ({ ok: true, json: async () => ({}) }) });
+  const plan = access.listPlans().find((p) => p.duration_days > 1);
+
+  await access.createMember({
+    name: 'Angélica Karla da Silva',
+    document: '024.668.291-42',
+    phone: '62994156152',
+    plan_id: plan.id,
+  });
+  await access.createMember({
+    name: 'Carlos Eduardo Pereira',
+    document: '153.509.460-56',
+    phone: '62991112222',
+  });
+
+  const bot = new WhatsappBotService(store, {
+    gatewayService: gateway,
+    accessService: access,
+    geminiApiKey: '',
+  });
+
+  await bot.handleIncomingMessage({ phone: '5562977776666', text: 'quero pagar' });
+  const fuzzyRes = await bot.handleIncomingMessage({
+    phone: '5562977776666',
+    text: 'Angelica Carla Silva',
+  });
+  assert.ok(fuzzyRes);
+  assert.match(fuzzyRes.reply, /Angélica Karla da Silva/);
+  assert.match(fuzzyRes.reply, /Pix Copia e Cola/i);
+
+  await bot.handleIncomingMessage({ phone: '5562966665555', text: 'quero pagar' });
+  const noPlanRes = await bot.handleIncomingMessage({
+    phone: '5562966665555',
+    text: 'Carlos Eduardo Pereira',
+  });
+  assert.ok(noPlanRes);
+  assert.match(noPlanRes.reply, /Encontrei o cadastro de \*Carlos\*/);
+  assert.match(noPlanRes.reply, /não há um plano vinculado/i);
+});
