@@ -1081,7 +1081,11 @@ export class GatewayService {
 
     const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
     const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Date.now()}`;
-    const mpPayType = payment_method === 'debit' ? 'debit_card' : payment_method === 'credit' ? 'credit_card' : null;
+    const mpPayConfig = payment_method === 'debit'
+      ? { default_type: 'debit_card' }
+      : payment_method === 'credit'
+        ? { default_type: 'credit_card', default_installments: 1 }
+        : null;
     const res = await this.fetch('https://api.mercadopago.com/v1/orders', {
       method: 'POST',
       headers: {
@@ -1099,7 +1103,7 @@ export class GatewayService {
             terminal_id: chosenTerminal,
             print_on_terminal: 'no_ticket',
           },
-          ...(mpPayType ? { payment_method: { default_type: mpPayType, default_installments: 1 } } : {}),
+          ...(mpPayConfig ? { payment_method: mpPayConfig } : {}),
         },
         transactions: {
           payments: [
