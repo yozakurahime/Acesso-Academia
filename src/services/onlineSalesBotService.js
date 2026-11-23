@@ -232,7 +232,10 @@ export class OnlineSalesBotService {
     const rows = this.store.all(
       `SELECT id, name, duration_days, price_cents
        FROM plans
-       WHERE COALESCE(active, 1) = 1 AND price_cents > 0 AND duration_days > 1
+       WHERE COALESCE(active, 1) = 1
+         AND COALESCE(online_available, 1) = 1
+         AND price_cents > 0
+         AND duration_days > 1
        ORDER BY price_cents ASC, id ASC`,
     );
     return rows
@@ -243,7 +246,74 @@ export class OnlineSalesBotService {
       .slice(0, 6);
   }
 
-  async _handleEnrollmentFlow({ phone, userText, session }) {
+  _planRequiresClass(plan) {
+    const label = stripAccents(plan?.name || '');
+    return label.includes('nata') || label.includes('hidro') || label.includes('pilates');
+  }
+
+  _listOnlineClassesForPlan(plan) {
+    const planLabel = stripAccents(plan?.name || '');
+    const keyword = planLabel.includes('nata')
+      ? 'nata'
+      : planLabel.includes('hidro')
+        ? 'hidro'
+        : planLabel.includes('pilates')
+          ? 'pilates'
+          : '';
+    const rows = this.store.all(
+      `SELECT c.id, c.name, c.schedule, c.capacity,
+              COALESCE(c.allow_new_enrollments, 1) AS allow_new_enrollments,
+              COALESCE(c.online_enrollment_mode, 'auto') AS online_enrollment_mode,
+              m.name AS modality_name,
+              (SELECT COUNT(*) FROM class_enrollments ce WHERE ce.class_id = c.id) AS enrolled_count
+       FROM classes c
+       LEFT JOIN modalities m ON m.id = c.modality_id
+       WHERE COALESCE(c.active, 1) = 1
+       ORDER BY c.name ASC, c.id ASC`,
+    );
+    return rows.filter((c) => {
+      if (Number(c.allow_new_enrollments ?? 1) === 0) return false;
+      if (c.online_enrollment_mode === 'reception_only') return false;
+      const fullLabel = stripAccents(`${c.modality_name || ''} ${c.name || ''}`);
+      if (KIDS_SWIM_REGEX.test(fullLabel)) return false;
+      if (keyword && !fullLabel.includes(keyword)) return false;
+      const cap = Number(c.capacity || 0);
+      const enrolled = Number(c.enrolled_count || 0);
+      if (cap > 0 && enrolled >= cap) return false;
+      return true;
+    });
+  }
+
+  _finalizeExistingMemberEnrollment({ phone, member, plan, chosenClass = null }) {
+    this.store.run(
+      "UPDATE members SET plan_id = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+      [plan.id, member.id],
+    );
+    if (chosenClass?.id) {
+      this.store.run(
+        'INSERT OR IGNORE INTO class_enrollments (class_id, member_id) VALUES (?, ?)',
+        [chosenClass.id, member.id],
+      );
+    }
+    const updated = this.store.get('SELECT * FROM members WHERE id = ?', [member.id]);
+    const items = this._resolveBillableList(updated ? [updated] : []);
+    if (!items.length) {
+      this._sessions.delete(phone);
+      const reply = 'Cadastro localizado! Para finalizar a matrícula, fale com nossa recepção.';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+    this._setSession(phone, { kind: 'payment', items, pendingChargeId: null });
+    const classNote = chosenClass ? ` na turma *${chosenClass.name}*` : '';
+    const reply = this._buildPaymentMenuReply(
+      items,
+      `Matrícula adicionada para *${updated.name}* (*${plan.name}*${classNote})!`,
+    );
+    this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+    return { reply, requiresHuman: false };
+  }
+
+  async _handleEnrollmentFlow({ phone, userText, session, existingMember = null }) {
     if (KIDS_SWIM_REGEX.test(userText)) {
       this._sessions.delete(phone);
       this.pauseContact(phone, this.humanPauseMs);
@@ -271,11 +341,18 @@ export class OnlineSalesBotService {
         step: 'choose_plan',
         plans,
         chosenPlan: null,
-        fullName: null,
+        chosenClass: null,
+        availableClasses: [],
+        existingMember: existingMember || null,
+        fullName: existingMember?.name || null,
       });
       const planLines = plans.map((p, idx) => `*${idx + 1}.* ${p.name} — *${formatBrl(p.price_cents)}*`).join('\n');
+      const firstName = existingMember ? String(existingMember.name || 'Aluno').trim().split(/\s+/)[0] : '';
+      const intro = existingMember
+        ? `Encontrei o cadastro de *${firstName}*, mas ainda não há um plano vinculado. Escolha o número do plano para adicionar sua matrícula e pagar por aqui:`
+        : 'Ótimo! Posso fazer sua matrícula por aqui agora mesmo pelo Mercado Pago (ou se preferir preencher com foto do FaceID, acesse https://sistema.academiaoxigenio.com/matricula.html).';
       const reply = [
-        'Ótimo! Posso fazer sua matrícula por aqui agora mesmo pelo Mercado Pago (ou se preferir preencher com foto do FaceID, acesse https://sistema.academiaoxigenio.com/matricula.html).',
+        intro,
         '\nEscolha o número do plano desejado:',
         planLines,
         '\n_(Responda o número do plano ou *cancelar* para sair.)_',
@@ -293,9 +370,82 @@ export class OnlineSalesBotService {
         return { reply, requiresHuman: false };
       }
       session.chosenPlan = chosen;
+
+      if (this._planRequiresClass(chosen)) {
+        const availableClasses = this._listOnlineClassesForPlan(chosen);
+        if (!availableClasses.length) {
+          this._sessions.delete(phone);
+          this.pauseContact(phone, this.humanPauseMs);
+          const reply = `As turmas de *${chosen.name}* estão sem vagas ou fechadas para matrícula online automática no momento.\n\nVou chamar nossa recepção para verificar disponibilidade com você por aqui!`;
+          this.recordChatMessage({
+            phone,
+            direction: 'out',
+            senderType: 'bot',
+            body: reply,
+            needsHuman: true,
+            handoffSummary: `Turma indisponível online para ${chosen.name}`,
+          });
+          return { reply, requiresHuman: true, reason: 'class_unavailable_online' };
+        }
+        session.availableClasses = availableClasses;
+        session.step = 'choose_class';
+        this._setSession(phone, session);
+        const classLines = availableClasses
+          .map((c, cIdx) => {
+            const cap = Number(c.capacity || 0);
+            const spots = cap > 0 ? ` — ${Math.max(0, cap - Number(c.enrolled_count || 0))} vaga(s)` : '';
+            const sched = c.schedule ? ` (${c.schedule})` : '';
+            return `*${cIdx + 1}.* ${c.name}${sched}${spots}`;
+          })
+          .join('\n');
+        const reply = [
+          `Plano escolhido: *${chosen.name}* (*${formatBrl(chosen.price_cents)}*).`,
+          '\nEscolha o número da turma / horário:',
+          classLines,
+          '\n_(Responda o número da turma ou *cancelar* para sair.)_',
+        ].join('\n');
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
+      if (session.existingMember) {
+        return this._finalizeExistingMemberEnrollment({
+          phone,
+          member: session.existingMember,
+          plan: chosen,
+        });
+      }
+
       session.step = 'ask_name';
       this._setSession(phone, session);
       const reply = `Plano escolhido: *${chosen.name}* (*${formatBrl(chosen.price_cents)}*).\n\nAgora me informe seu *nome completo*:`;
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    if (session.step === 'choose_class') {
+      const idx = Number(String(userText).trim()) - 1;
+      const chosenClass =
+        Number.isInteger(idx) && idx >= 0 && idx < (session.availableClasses || []).length
+          ? session.availableClasses[idx]
+          : null;
+      if (!chosenClass) {
+        const reply = `Responda apenas o número de *1 a ${session.availableClasses.length}* para escolher a turma, ou *cancelar* para sair.`;
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+      session.chosenClass = chosenClass;
+      if (session.existingMember) {
+        return this._finalizeExistingMemberEnrollment({
+          phone,
+          member: session.existingMember,
+          plan: session.chosenPlan,
+          chosenClass,
+        });
+      }
+      session.step = 'ask_name';
+      this._setSession(phone, session);
+      const reply = `Turma escolhida: *${chosenClass.name}*.\n\nAgora me informe seu *nome completo*:`;
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
     }
@@ -335,6 +485,7 @@ export class OnlineSalesBotService {
             document: formattedCpf,
             phone,
             plan_id: session.chosenPlan.id,
+            class_id: session.chosenClass?.id || null,
           });
         } else {
           const ins = this.store.run(
@@ -342,7 +493,20 @@ export class OnlineSalesBotService {
             [session.fullName, formattedCpf, phone, session.chosenPlan.id],
           );
           member = this.store.get('SELECT * FROM members WHERE id = ?', [ins.lastInsertRowid]);
+          if (session.chosenClass?.id && member?.id) {
+            this.store.run(
+              'INSERT OR IGNORE INTO class_enrollments (class_id, member_id) VALUES (?, ?)',
+              [session.chosenClass.id, member.id],
+            );
+          }
         }
+      } else if (!this._resolveBillableList([member]).length) {
+        return this._finalizeExistingMemberEnrollment({
+          phone,
+          member,
+          plan: session.chosenPlan,
+          chosenClass: session.chosenClass,
+        });
       }
 
       const items = this._resolveBillableList([member]);
@@ -484,6 +648,14 @@ export class OnlineSalesBotService {
       const directItems = hasDirectValidCpf ? this._findBillableMembersByQuery(directCpf) : [];
       if (hasDirectValidCpf && !wantsPayment && !directItems.length) return null;
       const ownItems = directItems.length > 0 ? directItems : this._findBillableMembersByPhone(phone);
+      if (ownItems.length === 0) {
+        const phoneMembers = this.store
+          .all("SELECT * FROM members WHERE access_role = 'student'")
+          .filter((m) => normalizeBrPhone(m.phone) === phone);
+        if (phoneMembers.length === 1) {
+          return this._handleEnrollmentFlow({ phone, userText: '', session: null, existingMember: phoneMembers[0] });
+        }
+      }
       const session = this._setSession(phone, { kind: 'payment', items: ownItems, pendingChargeId: null });
       const reply = ownItems.length > 0
         ? this._buildPaymentMenuReply(ownItems, 'Encontrei seu cadastro para pagamento:')
@@ -496,10 +668,7 @@ export class OnlineSalesBotService {
     const found = this._resolveBillableList(matchedMembers);
     if (!found.length) {
       if (matchedMembers.length === 1) {
-        const firstName = String(matchedMembers[0].name || 'Aluno').trim().split(/\s+/)[0];
-        const reply = `Encontrei o cadastro de *${firstName}*, mas ainda não há um plano vinculado para gerar a cobrança automática.\n\nResponda *atendente* para nossa equipe vincular seu plano por aqui!`;
-        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
-        return { reply, requiresHuman: false };
+        return this._handleEnrollmentFlow({ phone, userText: '', session: null, existingMember: matchedMembers[0] });
       }
       const reply = existing.items.length > 0
         ? this._buildPaymentMenuReply(existing.items, 'Não encontrei outro aluno ativo/com plano por esse nome ou CPF.')

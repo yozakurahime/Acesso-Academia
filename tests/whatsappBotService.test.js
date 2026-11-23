@@ -413,4 +413,44 @@ test('OnlineSalesBotService aceita variação leve no nome (sem conector ou erro
   assert.ok(noPlanRes);
   assert.match(noPlanRes.reply, /Encontrei o cadastro de \*Carlos\*/);
   assert.match(noPlanRes.reply, /não há um plano vinculado/i);
+
+  // Escolhe o plano 1 (Mensal) para o aluno ja cadastrado sem matricula e exibe menu de pagamento
+  const pickPlan = await bot.handleIncomingMessage({ phone: '5562966665555', text: '1' });
+  assert.ok(pickPlan);
+  assert.match(pickPlan.reply, /Matrícula adicionada/i);
+  assert.match(pickPlan.reply, /Pix Copia e Cola/i);
+});
+
+test('OnlineSalesBotService respeita online_available e regras de turmas fechadas/lotadas', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'APP_USR_TEST',
+  });
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const gateway = new GatewayService(store, access, { fetchFn: async () => ({ ok: true, json: async () => ({}) }) });
+  const bot = new WhatsappBotService(store, { accessService: access, gatewayService: gateway });
+
+  store.run("INSERT INTO plans (name, duration_days, price_cents, active, online_available) VALUES ('VIP Oculto', 30, 30000, 1, 0)");
+  store.run("INSERT INTO plans (name, duration_days, price_cents, active, online_available) VALUES ('Hidroginástica 2x', 30, 16000, 1, 1)");
+  store.run("INSERT INTO modalities (name, active) VALUES ('Hidroginástica', 1)");
+  const hidroMod = store.get("SELECT id FROM modalities WHERE name = 'Hidroginástica'");
+  store.run(
+    "INSERT INTO classes (modality_id, name, schedule, capacity, active, allow_new_enrollments, online_enrollment_mode) VALUES (?, 'Hidro 07h', 'Seg/Qua 07:00', 10, 1, 0, 'auto')",
+    [hidroMod.id],
+  );
+
+  const step1 = await bot.handleIncomingMessage({ phone: '5562955554444', text: 'quero me matricular' });
+  assert.ok(step1);
+  assert.doesNotMatch(step1.reply, /VIP Oculto/);
+  assert.match(step1.reply, /Hidroginástica 2x/);
+
+  const hidroIdx = step1.reply.split('\n').find((line) => line.includes('Hidroginástica 2x'))?.match(/\*(\d+)\.\*/)?.[1];
+  assert.ok(hidroIdx);
+  const step2 = await bot.handleIncomingMessage({ phone: '5562955554444', text: hidroIdx });
+  assert.ok(step2);
+  assert.equal(step2.requiresHuman, true);
+  assert.equal(step2.reason, 'class_unavailable_online');
 });

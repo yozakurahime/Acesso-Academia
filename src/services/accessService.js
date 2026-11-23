@@ -1717,11 +1717,33 @@ export class AccessService {
   syncMembershipCharges(refToday = null) {
     const today = refToday || this.store.get("SELECT date('now', 'localtime') AS today").today;
     const expireBefore = addDays(today, -2);
+    const staleBefore = addDays(today, -90);
     const generateUntil = addDays(today, 10);
 
     const expiredResult = this.store.run(
       "DELETE FROM membership_charges WHERE payment_id IS NULL AND COALESCE(source, 'auto') = 'auto' AND due < ?",
       [expireBefore],
+    );
+    const staleChargesResult = this.store.run(
+      'DELETE FROM membership_charges WHERE payment_id IS NULL AND due < ?',
+      [staleBefore],
+    );
+    this.store.run(
+      `DELETE FROM plan_enrollments
+       WHERE ends_on IS NOT NULL
+         AND ends_on < ?
+         AND member_id IN (SELECT id FROM members WHERE access_role = 'student' AND partner_provider IS NULL)`,
+      [staleBefore],
+    );
+    this.store.run(
+      `UPDATE members
+       SET valid_until = NULL,
+           updated_at = datetime('now', 'localtime')
+       WHERE access_role = 'student'
+         AND partner_provider IS NULL
+         AND valid_until IS NOT NULL
+         AND valid_until < ?`,
+      [staleBefore],
     );
 
     const candidates = this.store.all(
@@ -1757,7 +1779,7 @@ export class AccessService {
 
     return {
       today,
-      deleted: expiredResult?.changes || 0,
+      deleted: (expiredResult?.changes || 0) + (staleChargesResult?.changes || 0),
       generated,
     };
   }
