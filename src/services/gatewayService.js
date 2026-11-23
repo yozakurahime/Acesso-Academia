@@ -113,11 +113,11 @@ export class GatewayService {
       if (!testToken) throw new Error('Informe MP_POINT_TEST_ACCESS_TOKEN para testar a Point.');
       return this.getMpAuth({ mp_access_token: testToken });
     }
-    return this.getMpAuth({ mp_access_token: process.env.MP_POINT_ACCESS_TOKEN || settings.mp_point_access_token || settings.mp_access_token });
+    return this.getMpAuth({ mp_access_token: settings.mp_point_access_token || settings.mp_access_token || process.env.MP_POINT_ACCESS_TOKEN });
   }
 
   getPointTerminalId(terminalId, settings = this.store.getSettings()) {
-    return String(terminalId || process.env.MP_POINT_TERMINAL_ID || settings.mp_point_terminal_id || '').trim();
+    return String(terminalId || settings.mp_point_terminal_id || process.env.MP_POINT_TERMINAL_ID || '').trim();
   }
 
   listCharges(limit = 20) {

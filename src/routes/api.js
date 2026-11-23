@@ -127,8 +127,8 @@ function maskSettings(settings) {
   }
   if (process.env.MP_WEBHOOK_SECRET) safe.mp_webhook_secret = '******';
   if (process.env.MP_POINT_WEBHOOK_SECRET) safe.mp_point_webhook_secret = '******';
-  if (process.env.MP_POINT_ACCESS_TOKEN) safe.mp_point_access_token = '******';
-  if (process.env.MP_POINT_TERMINAL_ID) safe.mp_point_terminal_id = process.env.MP_POINT_TERMINAL_ID;
+  if (process.env.MP_POINT_ACCESS_TOKEN && !settings.mp_point_access_token && !settings.mp_access_token) safe.mp_point_access_token = '******';
+  if (process.env.MP_POINT_TERMINAL_ID && !settings.mp_point_terminal_id) safe.mp_point_terminal_id = process.env.MP_POINT_TERMINAL_ID;
   if (process.env.STONE_API_KEY) safe.stone_api_key = '******';
   if (process.env.STONE_WEBHOOK_SECRET) safe.stone_webhook_secret = '******';
   if (process.env.STONE_TERMINAL_SERIAL) safe.stone_terminal_serial = process.env.STONE_TERMINAL_SERIAL;
