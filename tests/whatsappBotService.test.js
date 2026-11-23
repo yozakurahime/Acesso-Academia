@@ -208,22 +208,23 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
   const bot = new WhatsappBotService(store, { gatewayService, accessService });
 
   const s1 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Quero me matricular' });
-  assert.match(s1.reply, /Escolha o número do plano/);
-  assert.doesNotMatch(s1.reply, /Infantil|Baby/i);
+  assert.match(s1.reply, /nome completo/i);
 
   const kids = await bot.handleIncomingMessage({ phone: '5562991234599', text: 'Quero fazer matrícula na Natação Infantil' });
   assert.equal(kids.requiresHuman, true);
   assert.equal(kids.reason, 'kids_swim_reception_only');
   assert.match(kids.reply, /Natação Baby.*Natação Infantil/i);
 
-  const s2 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
-  assert.match(s2.reply, /nome completo/i);
+  const s2 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Mariana Souza Lima' });
+  assert.match(s2.reply, /CPF/i);
 
-  const s3 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Mariana Souza Lima' });
-  assert.match(s3.reply, /CPF/i);
+  const s3 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '52998224725' });
+  assert.match(s3.reply, /Cadastro pronto para \*Mariana Souza Lima\*/);
+  assert.match(s3.reply, /Escolha o número do plano/);
+  assert.doesNotMatch(s3.reply, /Infantil|Baby/i);
 
-  const s4 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '52998224725' });
-  assert.match(s4.reply, /Cadastro pronto para \*Mariana Souza Lima\*/);
+  const s4 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
+  assert.match(s4.reply, /Matrícula adicionada para \*Mariana Souza Lima\*/);
 
   const s5 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
   assert.match(s5.reply, /000201010212PIX_NOVA_MATRICULA/);
@@ -444,13 +445,21 @@ test('OnlineSalesBotService respeita online_available e regras de turmas fechada
 
   const step1 = await bot.handleIncomingMessage({ phone: '5562955554444', text: 'quero me matricular' });
   assert.ok(step1);
-  assert.doesNotMatch(step1.reply, /VIP Oculto/);
-  assert.match(step1.reply, /Hidroginástica 2x/);
+  assert.match(step1.reply, /nome completo/i);
+  await bot.handleIncomingMessage({ phone: '5562955554444', text: 'Aluno Teste Turma' });
+  const stepPlans = await bot.handleIncomingMessage({ phone: '5562955554444', text: '52998224725' });
+  assert.ok(stepPlans);
+  assert.doesNotMatch(stepPlans.reply, /VIP Oculto/);
+  assert.match(stepPlans.reply, /Hidroginástica 2x/);
 
-  const hidroIdx = step1.reply.split('\n').find((line) => line.includes('Hidroginástica 2x'))?.match(/\*(\d+)\.\*/)?.[1];
+  const hidroIdx = stepPlans.reply.split('\n').find((line) => line.includes('Hidroginástica 2x'))?.match(/\*(\d+)\.\*/)?.[1];
   assert.ok(hidroIdx);
   const step2 = await bot.handleIncomingMessage({ phone: '5562955554444', text: hidroIdx });
   assert.ok(step2);
   assert.equal(step2.requiresHuman, true);
   assert.equal(step2.reason, 'class_unavailable_online');
+  // Mesmo com a turma fechada online, o cadastro ja foi salvo!
+  const savedMember = store.get("SELECT id, name, status FROM members WHERE document = '529.982.247-25'");
+  assert.equal(savedMember.name, 'Aluno Teste Turma');
+  assert.equal(savedMember.status, 'pending');
 });

@@ -330,6 +330,22 @@ export class OnlineSalesBotService {
     }
 
     if (!session) {
+      if (!existingMember) {
+        this._setSession(phone, {
+          kind: 'enroll',
+          step: 'ask_name',
+          plans: [],
+          chosenPlan: null,
+          chosenClass: null,
+          availableClasses: [],
+          existingMember: null,
+          fullName: null,
+        });
+        const reply = 'Ótimo! Vou fazer seu cadastro por aqui agora mesmo.\n\nPrimeiro, me informe seu *nome completo*:';
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
       const plans = this._listOnlinePlans();
       if (!plans.length) {
         const reply = 'Para fazer sua matrícula online agora (com cadastro, foto do FaceID e Pix), acesse: https://sistema.academiaoxigenio.com/matricula.html';
@@ -343,16 +359,13 @@ export class OnlineSalesBotService {
         chosenPlan: null,
         chosenClass: null,
         availableClasses: [],
-        existingMember: existingMember || null,
-        fullName: existingMember?.name || null,
+        existingMember,
+        fullName: existingMember.name || null,
       });
       const planLines = plans.map((p, idx) => `*${idx + 1}.* ${p.name} — *${formatBrl(p.price_cents)}*`).join('\n');
-      const firstName = existingMember ? String(existingMember.name || 'Aluno').trim().split(/\s+/)[0] : '';
-      const intro = existingMember
-        ? `Encontrei o cadastro de *${firstName}*, mas ainda não há um plano vinculado. Escolha o número do plano para adicionar sua matrícula e pagar por aqui:`
-        : 'Ótimo! Posso fazer sua matrícula por aqui agora mesmo pelo Mercado Pago (ou se preferir preencher com foto do FaceID, acesse https://sistema.academiaoxigenio.com/matricula.html).';
+      const firstName = String(existingMember.name || 'Aluno').trim().split(/\s+/)[0];
       const reply = [
-        intro,
+        `Encontrei o cadastro de *${firstName}*, mas ainda não há um plano vinculado. Escolha o número do plano para adicionar sua matrícula e pagar por aqui:`,
         '\nEscolha o número do plano desejado:',
         planLines,
         '\n_(Responda o número do plano ou *cancelar* para sair.)_',
@@ -484,44 +497,52 @@ export class OnlineSalesBotService {
             name: session.fullName,
             document: formattedCpf,
             phone,
-            plan_id: session.chosenPlan.id,
-            class_id: session.chosenClass?.id || null,
           });
         } else {
           const ins = this.store.run(
-            "INSERT INTO members (name, document, phone, plan_id, status, access_role) VALUES (?, ?, ?, ?, 'pending', 'student')",
-            [session.fullName, formattedCpf, phone, session.chosenPlan.id],
+            "INSERT INTO members (name, document, phone, status, access_role) VALUES (?, ?, ?, 'pending', 'student')",
+            [session.fullName, formattedCpf, phone],
           );
           member = this.store.get('SELECT * FROM members WHERE id = ?', [ins.lastInsertRowid]);
-          if (session.chosenClass?.id && member?.id) {
-            this.store.run(
-              'INSERT OR IGNORE INTO class_enrollments (class_id, member_id) VALUES (?, ?)',
-              [session.chosenClass.id, member.id],
-            );
-          }
         }
-      } else if (!this._resolveBillableList([member]).length) {
-        return this._finalizeExistingMemberEnrollment({
-          phone,
-          member,
-          plan: session.chosenPlan,
-          chosenClass: session.chosenClass,
-        });
       }
 
       const items = this._resolveBillableList([member]);
-      if (!items.length) {
-        this._sessions.delete(phone);
-        const reply = 'Cadastro localizado! Para finalizar a matrícula, acesse https://sistema.academiaoxigenio.com/matricula.html ou fale com nossa recepção.';
+      if (items.length > 0) {
+        this._setSession(phone, { kind: 'payment', items, pendingChargeId: null });
+        const reply = this._buildPaymentMenuReply(
+          items,
+          `Cadastro localizado para *${member.name}*!`,
+        );
         this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
         return { reply, requiresHuman: false };
       }
 
-      this._setSession(phone, { kind: 'payment', items, pendingChargeId: null });
-      const reply = this._buildPaymentMenuReply(
-        items,
-        `Cadastro pronto para *${member.name}*! Após o pagamento, você pode enviar sua foto do FaceID em https://sistema.academiaoxigenio.com/matricula.html ou na recepção:`,
-      );
+      const plans = this._listOnlinePlans();
+      if (!plans.length) {
+        this._sessions.delete(phone);
+        const reply = `Cadastro pronto para *${member.name}*! Nossa recepção pode vincular sua modalidade/plano por aqui.`;
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
+      this._setSession(phone, {
+        kind: 'enroll',
+        step: 'choose_plan',
+        plans,
+        chosenPlan: null,
+        chosenClass: null,
+        availableClasses: [],
+        existingMember: member,
+        fullName: member.name,
+      });
+      const planLines = plans.map((p, idx) => `*${idx + 1}.* ${p.name} — *${formatBrl(p.price_cents)}*`).join('\n');
+      const reply = [
+        `Cadastro pronto para *${member.name}*! Agora escolha o número da modalidade/plano que deseja adicionar (seguindo as regras de vagas):`,
+        '\nEscolha o número do plano desejado:',
+        planLines,
+        '\n_(Responda o número do plano ou *cancelar* se quiser apenas manter o cadastro.)_',
+      ].join('\n');
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
     }
