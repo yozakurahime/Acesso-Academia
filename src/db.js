@@ -119,6 +119,7 @@ export class DatabaseStore {
     if (this.filePath && !this.inTransaction) return this.transaction(() => this.run(sql, params));
     const stmt = this.db.prepare(sql);
     try { stmt.run(params); } finally { stmt.free(); }
+    if (/\bsettings\b/i.test(sql)) this._settingsCache = null;
     const lastIdRow = this.get('SELECT last_insert_rowid() AS id');
     const changesRow = this.get('SELECT changes() AS changes');
     return {
@@ -876,6 +877,15 @@ export class DatabaseStore {
       media_url: 'TEXT',
     });
     this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_logs_edge_event_id ON access_logs(edge_event_id)');
+    this.db.run(`
+      CREATE INDEX IF NOT EXISTS idx_access_logs_event_occurred ON access_logs(event_code, occurred_at);
+      CREATE INDEX IF NOT EXISTS idx_gateway_charges_checkout_ref ON gateway_charges(checkout_ref);
+      CREATE INDEX IF NOT EXISTS idx_gateway_charges_membership_charge ON gateway_charges(membership_charge_id);
+      CREATE INDEX IF NOT EXISTS idx_mp_subscriptions_external_ref ON mp_subscriptions(external_ref);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_status_id ON whatsapp_logs(status, id);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_status_sent_at ON whatsapp_logs(status, sent_at);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_logs_phone_ref ON whatsapp_logs(phone, ref_key);
+    `);
 
     // Mantém os importadores e chamadas legadas de plano em compatibilidade.
     this.db.run(`
@@ -1071,8 +1081,11 @@ export class DatabaseStore {
   }
 
   getSettings() {
-    const rows = this.all('SELECT key, value FROM settings');
-    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    if (!this._settingsCache) {
+      const rows = this.all('SELECT key, value FROM settings');
+      this._settingsCache = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    }
+    return { ...this._settingsCache };
   }
 
   updateSettings(entries) {
@@ -1084,6 +1097,7 @@ export class DatabaseStore {
           [key, String(value)],
         );
       }
+      this._settingsCache = null;
       return this.getSettings();
     });
   }

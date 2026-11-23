@@ -383,7 +383,7 @@ export class WhatsappService {
     return (
       this.store.get(
         `SELECT COUNT(*) AS c FROM whatsapp_logs
-         WHERE status = 'sent' AND date(sent_at) = date('now', 'localtime')`,
+         WHERE status = 'sent' AND sent_at >= date('now', 'localtime')`,
       )?.c ?? 0
     );
   }

@@ -204,11 +204,11 @@ export class AccessService {
       `SELECT l.member_id, m.name, COUNT(*) AS passes
        FROM access_logs l
        JOIN members m ON m.id = l.member_id
-       WHERE l.event_code = 7 AND l.member_id IS NOT NULL AND substr(l.occurred_at, 1, 10) = ?
+       WHERE l.event_code = 7 AND l.member_id IS NOT NULL AND l.occurred_at >= ? AND l.occurred_at <= ?
        GROUP BY l.member_id
        HAVING (COUNT(*) % 2) = 1
        ORDER BY m.name ASC`,
-      [today],
+      [`${today} 00:00:00`, `${today} 23:59:59`],
     );
     const maxCap = Number(this.store.getSettings()?.max_capacity || 0) || 0;
     return {
