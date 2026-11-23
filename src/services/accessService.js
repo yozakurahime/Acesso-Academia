@@ -1092,7 +1092,7 @@ export class AccessService {
     return { member: updated, sync: await this.trySyncMemberToDevice(updated) };
   }
 
-  async savePlanEnrollment(memberId, { plan_id, starts_on }) {
+  async savePlanEnrollment(memberId, { plan_id, starts_on, ends_on = null }) {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Aluno não encontrado.');
     if (member.access_role !== 'student') throw new Error('A equipe tem acesso permanente sem matrícula.');
@@ -1115,7 +1115,18 @@ export class AccessService {
     if (!start || !Number.isFinite(+start) || start.toISOString().slice(0, 10) !== starts_on) throw new Error('Informe a data de início da matrícula.');
     const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
     if (starts_on > today) throw new Error('Informe uma data de início até hoje.');
-    const endsOn = addDays(starts_on, plan.duration_days - 1);
+    let endsOn = addDays(starts_on, plan.duration_days - 1);
+    if (ends_on != null && String(ends_on).trim() !== '') {
+      const endStr = String(ends_on).trim();
+      const endDate = /^\d{4}-\d{2}-\d{2}$/.test(endStr) ? new Date(endStr + 'T12:00:00Z') : null;
+      if (!endDate || !Number.isFinite(+endDate) || endDate.toISOString().slice(0, 10) !== endStr) {
+        throw new Error('Informe uma data de vencimento válida.');
+      }
+      if (endStr < starts_on) {
+        throw new Error('A data de vencimento não pode ser anterior à data da matrícula.');
+      }
+      endsOn = endStr;
+    }
     const chargeDue = starts_on >= addDays(today, -2) ? starts_on : today;
     let createdCharge = null;
     this.store.transaction(() => {

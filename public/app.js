@@ -3281,6 +3281,12 @@ function updateNewEnrStep2(planId) {
     if (!startInput.value) startInput.value = today;
   }
   updateNewEnrDuePreview();
+  const endInput = document.getElementById('newEnrEndDate');
+  const currentPlanId = Number(state.selectedProfileEnrollment?.plan_id || state.selectedProfileMember?.plan_id || 0);
+  const currentEndsOn = state.selectedProfileEnrollment?.ends_on || state.selectedProfileMember?.valid_until || '';
+  if (endInput && Number(planId) === currentPlanId && currentEndsOn) {
+    endInput.value = currentEndsOn;
+  }
 
   const rulesEl = document.getElementById('newEnrAccessPreview');
   if (rulesEl) {
@@ -3320,10 +3326,10 @@ function updateNewEnrStep2(planId) {
 function updateNewEnrDuePreview() {
   const plan = state.plans.find((p) => Number(p.id) === Number(state.newEnrSelectedPlanId));
   const startVal = document.getElementById('newEnrStartDate')?.value || billingDateFormat.format(new Date());
-  const dueEl = document.getElementById('newEnrDuePreview');
-  if (!dueEl || !plan) return;
-  const dueIso = addDaysIso(startVal, plan.duration_days);
-  dueEl.textContent = dueIso ? `${fmtDate(dueIso)} (${plan.duration_days} dias)` : '—';
+  const endInput = document.getElementById('newEnrEndDate');
+  if (!endInput || !plan) return;
+  const dueIso = addDaysIso(startVal, Math.max(0, Number(plan.duration_days || 1) - 1));
+  endInput.value = dueIso || '';
 }
 
 async function openNewEnrollmentModal() {
@@ -3362,7 +3368,7 @@ function closeNewEnrollmentModal(restoreFocus = true) {
   hideModal('newEnrollmentModal', restoreFocus);
 }
 
-async function submitNewEnrollment(planId, startsOn) {
+async function submitNewEnrollment(planId, startsOn, endsOn = null) {
   const id = state.selectedProfileId;
   if (!id) return;
   try {
@@ -3371,6 +3377,7 @@ async function submitNewEnrollment(planId, startsOn) {
       body: JSON.stringify({
         plan_id: planId ? Number(planId) : null,
         starts_on: startsOn || null,
+        ends_on: endsOn || null,
       }),
     });
     closeNewEnrollmentModal();
@@ -3420,7 +3427,8 @@ document.getElementById('btnCloseNewEnrollment')?.addEventListener('click', () =
 document.getElementById('btnCancelNewEnrollment')?.addEventListener('click', () => closeNewEnrollmentModal());
 document.getElementById('btnConfirmNewEnrollment')?.addEventListener('click', async () => {
   const startsOn = document.getElementById('newEnrStartDate')?.value || null;
-  await submitNewEnrollment(state.newEnrSelectedPlanId, startsOn);
+  const endsOn = document.getElementById('newEnrEndDate')?.value || null;
+  await submitNewEnrollment(state.newEnrSelectedPlanId, startsOn, endsOn);
 });
 document.getElementById('btnRemoveNewEnrollment')?.addEventListener('click', async () => {
   if (!window.confirm('Remover o plano atual e bloquear o acesso na catraca?')) return;
