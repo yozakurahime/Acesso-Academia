@@ -3017,3 +3017,20 @@ input.is-cpf-error {
   word-break: break-word;
   min-width: 200px;
 }
+
+.member-jump-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.25);
+  text-underline-offset: 3px;
+}
+.member-jump-link:hover {
+  color: var(--primary, #38bdf8);
+  text-decoration-color: currentColor;
+}

@@ -158,8 +158,22 @@ function Show-DesktopToast {
     [string]$Title,
     [string]$Body,
     [int]$TimeoutMs = 6000,
-    [string]$Level = 'info'
+    [string]$Level = 'info',
+    [int]$MemberId = 0
   )
+
+  $clickHandler = if ($MemberId -gt 0) {
+    $memberIdCopy = $MemberId
+    {
+      try {
+        $base = if ($PanelUrl -and $PanelUrl.Trim()) { $PanelUrl.Trim().TrimEnd('/') } else { "http://127.0.0.1:$Port" }
+        Start-Process "$base/?member=$memberIdCopy" | Out-Null
+      } catch {
+      }
+    }.GetNewClosure()
+  } else {
+    $openSystem
+  }
 
   while ($activePopups.Count -ge 4) {
     $oldest = $activePopups[0]
@@ -188,7 +202,7 @@ function Show-DesktopToast {
     $pic.Size = New-Object System.Drawing.Size(44, 44)
     $pic.Location = New-Object System.Drawing.Point(16, 22)
     $pic.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $pic.add_Click($openSystem)
+    $pic.add_Click($clickHandler)
     $popup.Controls.Add($pic)
     $textLeft = 72
   }
@@ -205,7 +219,7 @@ function Show-DesktopToast {
   $lblTitle.Size = New-Object System.Drawing.Size((330 - $textLeft), 16)
   $lblTitle.AutoEllipsis = $true
   $lblTitle.Cursor = [System.Windows.Forms.Cursors]::Hand
-  $lblTitle.add_Click($openSystem)
+  $lblTitle.add_Click($clickHandler)
   $popup.Controls.Add($lblTitle)
 
   $lblName = New-Object System.Windows.Forms.Label
@@ -216,7 +230,7 @@ function Show-DesktopToast {
   $lblName.Size = New-Object System.Drawing.Size((342 - $textLeft), 24)
   $lblName.AutoEllipsis = $true
   $lblName.Cursor = [System.Windows.Forms.Cursors]::Hand
-  $lblName.add_Click($openSystem)
+  $lblName.add_Click($clickHandler)
   $popup.Controls.Add($lblName)
 
   $lblMeta = New-Object System.Windows.Forms.Label
@@ -227,7 +241,7 @@ function Show-DesktopToast {
   $lblMeta.Size = New-Object System.Drawing.Size((342 - $textLeft), 18)
   $lblMeta.AutoEllipsis = $true
   $lblMeta.Cursor = [System.Windows.Forms.Cursors]::Hand
-  $lblMeta.add_Click($openSystem)
+  $lblMeta.add_Click($clickHandler)
   $popup.Controls.Add($lblMeta)
 
   $btnClose = New-Object System.Windows.Forms.Label
@@ -256,7 +270,7 @@ function Show-DesktopToast {
 
   $btnClose.add_Click($closePopup)
   $closeTimer.add_Tick($closePopup)
-  $popup.add_Click($openSystem)
+  $popup.add_Click($clickHandler)
 
   $activePopups.Add($popup)
   Reposition-Popups
@@ -295,7 +309,8 @@ $timer.add_Tick({
       if (-not $body) { $body = 'Evento registrado.' }
       $timeoutMs = if ($payload.timeoutMs) { [int]$payload.timeoutMs } else { 6000 }
       $level = if ($payload.level) { [string]$payload.level } else { 'info' }
-      Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs -Level $level
+      $memberId = if ($payload.memberId) { [int]$payload.memberId } else { 0 }
+      Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs -Level $level -MemberId $memberId
     } catch {
       [Console]::Error.WriteLine($_.Exception.Message)
     }

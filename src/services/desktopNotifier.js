@@ -19,6 +19,7 @@ export function formatTurnstileReleaseNotification(event = {}) {
     body: `${name}\n${source}${birthdayTag}`,
     level: 'info',
     timeoutMs: 6000,
+    memberId: Number(event?.memberId) > 0 ? Number(event.memberId) : null,
   };
 }
 
@@ -38,6 +39,7 @@ export function formatTurnstileDeniedNotification(event = {}) {
     body: `${name}\n${reason}`,
     level: 'error',
     timeoutMs: 7000,
+    memberId: Number(event?.memberId) > 0 ? Number(event.memberId) : null,
   };
 }
 

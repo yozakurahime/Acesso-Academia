@@ -1036,12 +1036,22 @@ async function loadDashboard() {
           (l) => {
             const event = Number(l.event_code);
             const tone = [7, 11, 12].includes(event) ? 'badge-active' : [3, 6].includes(event) ? 'badge-blocked' : 'badge-neutral';
-            return `<tr><td><strong>${escapeHtml(l.member_name || '—')}</strong></td><td><span class="badge ${tone}">${escapeHtml(l.event_label)}</span></td><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td></tr>`;
+            const memberCell = l.member_id
+              ? `<button type="button" class="member-jump-link" data-dash-open-member="${Number(l.member_id)}"><strong>${escapeHtml(l.member_name || '—')}</strong></button>`
+              : `<strong>${escapeHtml(l.member_name || '—')}</strong>`;
+            return `<tr><td>${memberCell}</td><td><span class="badge ${tone}">${escapeHtml(l.event_label)}</span></td><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td></tr>`;
           },
         )
         .join('')
     : '<tr><td colspan="3" class="empty-cell">Nenhuma passagem registrada.</td></tr>';
 }
+
+document.getElementById('dashLogsBody')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-dash-open-member]');
+  if (!btn) return;
+  const memberId = Number(btn.dataset.dashOpenMember);
+  if (memberId > 0) openProfile(memberId);
+});
 
 document.getElementById('btnRefreshDashboard').addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
   try {
@@ -7572,6 +7582,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
       applyRoleUi(role);
       startTurnstileEventsStream();
       switchTab(getTabFromHash(), { updateHash: !window.location.hash });
+      openInitialMemberFromUrl();
     } catch (err) {
       errEl.textContent = err.message || 'Usuário ou senha inválidos.';
       errEl.classList.remove('hidden');
@@ -7637,6 +7648,17 @@ document.getElementById('btnLogout')?.addEventListener('click', async () => {
 const receptionDate = document.getElementById('receptionDate');
 receptionDate.textContent = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeZone: 'America/Sao_Paulo' }).format(new Date());
 
+function openInitialMemberFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const memberId = Number(params.get('member'));
+  if (!Number.isInteger(memberId) || memberId <= 0) return;
+  params.delete('member');
+  const nextQuery = params.toString();
+  const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+  window.history.replaceState({}, '', nextUrl);
+  openProfile(memberId).catch(() => {});
+}
+
 (async () => {
   if (!window.oxigenioDemo) {
     try {
@@ -7662,6 +7684,7 @@ receptionDate.textContent = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full'
   }
   startTurnstileEventsStream();
   switchTab(getTabFromHash(), { updateHash: !window.location.hash });
+  openInitialMemberFromUrl();
 })();
 
 if (window.oxigenioDemo) {
