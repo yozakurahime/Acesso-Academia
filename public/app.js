@@ -213,6 +213,16 @@ document.getElementById('partnerRequestNotifications')?.addEventListener('click'
   }
 });
 
+let liveLogsRefreshTimer = null;
+function scheduleLiveLogsRefresh() {
+  clearTimeout(liveLogsRefreshTimer);
+  liveLogsRefreshTimer = setTimeout(() => {
+    if (document.hidden) return;
+    if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
+    else if (state.activeTab === 'logs') loadLogs().catch(() => {});
+  }, 250);
+}
+
 function handleTurnstileReleaseEvent(ev) {
   if (!ev) return;
 
@@ -227,6 +237,7 @@ function handleTurnstileReleaseEvent(ev) {
     liveSub.textContent = `Último: ${shortName} · ${timeText.slice(0, 5)}`;
   }
   api('/api/occupancy').then((occ) => updateSidebarLiveOccupancy(occ)).catch(() => {});
+  scheduleLiveLogsRefresh();
 }
 
 function stopTurnstileEventsStream() {
@@ -246,6 +257,29 @@ function startTurnstileEventsStream() {
     } catch {
       // Ignora payload malformado.
     }
+  });
+  es.addEventListener('denied', () => {
+    scheduleLiveLogsRefresh();
+  });
+  es.addEventListener('access_log', (msg) => {
+    try {
+      const data = JSON.parse(msg.data);
+      const latest = data?.latest;
+      if (latest?.member_name) {
+        const liveSub = document.getElementById('sidebarLiveSubtitle');
+        if (liveSub) {
+          const shortName = String(latest.member_name).trim().split(/\s+/).slice(0, 2).join(' ');
+          const timeText = latest.occurred_at
+            ? new Date(latest.occurred_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            : '';
+          liveSub.textContent = timeText ? `Último: ${shortName} · ${timeText}` : `Último: ${shortName}`;
+        }
+      }
+      api('/api/occupancy').then((occ) => updateSidebarLiveOccupancy(occ)).catch(() => {});
+    } catch {
+      // Ignora payload malformado.
+    }
+    scheduleLiveLogsRefresh();
   });
   es.addEventListener('partner_request', (msg) => {
     try {

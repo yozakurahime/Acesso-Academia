@@ -13,9 +13,14 @@ const EDGE_SAFE_SETTINGS = [
 export class EdgeCloudHub {
   constructor(store) {
     this.store = store;
+    this.accessService = null;
     this._listeners = new Set();
     this._pendingCommands = [];
     this._lastEdgeSeenAt = null;
+  }
+
+  setAccessService(accessService) {
+    this.accessService = accessService || null;
   }
 
   getStatus() {
@@ -70,6 +75,7 @@ export class EdgeCloudHub {
     this.markEdgeSeen();
     if (!Array.isArray(logs) || logs.length === 0) return { inserted: 0 };
     let inserted = 0;
+    let latestItem = null;
     this.store.transaction(() => {
       for (const item of logs) {
         const edgeEventId = String(item?.edge_event_id || '').trim();
@@ -102,9 +108,21 @@ export class EdgeCloudHub {
             edgeEventId,
           ],
         );
-        if (ins.changes > 0) inserted += 1;
+        if (ins.changes > 0) {
+          inserted += 1;
+          latestItem = {
+            member_id: item.member_id != null ? Number(item.member_id) : null,
+            member_name: item.member_name || null,
+            event_code: item.event_code != null ? Number(item.event_code) : null,
+            event_label: String(item.event_label || 'Acesso'),
+            occurred_at: String(item.occurred_at || new Date().toISOString()),
+          };
+        }
       }
     });
+    if (inserted > 0) {
+      this.accessService?.emitAccessLog?.({ inserted, latest: latestItem });
+    }
     return { inserted };
   }
 

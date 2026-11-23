@@ -44,6 +44,7 @@ export class AccessService {
     this.faceMirrorState = null;
     this._turnstileListeners = new Set();
     this._turnstileDeniedListeners = new Set();
+    this._accessLogListeners = new Set();
     this._partnerRequestListeners = new Set();
     this._faceInFlight = new Map();
     this._verifiedDeviceUsers = new Map();
@@ -228,6 +229,22 @@ export class AccessService {
     if (typeof listener !== 'function') return () => {};
     this._turnstileDeniedListeners.add(listener);
     return () => this._turnstileDeniedListeners.delete(listener);
+  }
+
+  onAccessLog(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this._accessLogListeners.add(listener);
+    return () => this._accessLogListeners.delete(listener);
+  }
+
+  emitAccessLog(payload = {}) {
+    for (const listener of this._accessLogListeners) {
+      try {
+        listener(payload);
+      } catch {
+        // Ignora falha de cliente SSE desconectado.
+      }
+    }
   }
 
   onPartnerRequest(listener) {
@@ -695,6 +712,9 @@ export class AccessService {
 
   setEdgeCloudHub(hub) {
     this.edgeCloudHub = hub || null;
+    if (hub && typeof hub.setAccessService === 'function') {
+      hub.setAccessService(this);
+    }
   }
 
   async trySyncMemberToDevice(member) {

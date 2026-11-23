@@ -718,6 +718,18 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         })
       : () => {};
 
+    const unsubscribeDenied = typeof accessService.onTurnstileDenied === 'function'
+      ? accessService.onTurnstileDenied((event) => {
+          res.write(`event: denied\ndata: ${JSON.stringify(event)}\n\n`);
+        })
+      : () => {};
+
+    const unsubscribeAccessLog = typeof accessService.onAccessLog === 'function'
+      ? accessService.onAccessLog((event) => {
+          res.write(`event: access_log\ndata: ${JSON.stringify(event)}\n\n`);
+        })
+      : () => {};
+
     const unsubscribePartner = typeof accessService.onPartnerRequest === 'function'
       ? accessService.onPartnerRequest((type, payload) => {
           res.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
@@ -732,6 +744,8 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     req.on('close', () => {
       clearInterval(keepAlive);
       unsubscribe();
+      unsubscribeDenied();
+      unsubscribeAccessLog();
       unsubscribePartner();
     });
   });
