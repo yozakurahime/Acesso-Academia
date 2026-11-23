@@ -1040,7 +1040,6 @@ export class AccessService {
       const settings = this.store.getSettings();
       if (member.partner_provider === 'wellhub') {
         if (settings.wellhub_enabled === 'false') return 'Wellhub desativado';
-        if (!member.wellhub_id?.trim()) return 'ID Wellhub não informado';
         if (settings.wellhub_require_checkin === '1' && !new PartnerService(this.store).hasCheckinToday(member.id, 'wellhub')) {
           return 'Aguarde a liberação na recepção (Wellhub)';
         }

@@ -3537,11 +3537,6 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   const id = state.selectedProfileId;
   const partnerVal = document.getElementById('profPartnerProvider')?.value || '';
   const wellhubVal = document.getElementById('profWellhubId')?.value.trim() || '';
-  if (partnerVal === 'wellhub' && !wellhubVal) {
-    showToast('Informe o ID Wellhub (Gympass) para salvar.', true);
-    document.getElementById('profWellhubId')?.focus();
-    return;
-  }
   const cpfCheck = await validateCpfField('profDoc', 'profDocFeedback', {
     excludeId: id,
     remoteCheck: true,
@@ -5140,11 +5135,6 @@ document.getElementById('memberForm').addEventListener('submit', async (e) => {
   if (memberWizardStep !== 2) return;
   const partnerProvider = document.getElementById('mPartnerProvider')?.value || null;
   const wellhubId = document.getElementById('mWellhubId')?.value.trim() || null;
-  if (partnerProvider === 'wellhub' && !wellhubId) {
-    showToast('Informe o ID do Wellhub (Gympass) para continuar.', true);
-    document.getElementById('mWellhubId')?.focus();
-    return;
-  }
   const selectedPlanId = document.getElementById('mPlan').value || null;
   if (!partnerProvider && !selectedPlanId) {
     const proceedWithoutPlan = confirm('Nenhum plano selecionado. O aluno será cadastrado bloqueado para entrar na catraca. Deseja continuar sem plano?');

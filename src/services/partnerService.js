@@ -46,12 +46,7 @@ export function normalizePartnerInput({ partner_provider, wellhub_id } = {}) {
     throw err;
   }
   if (provider === 'wellhub') {
-    const cleanId = String(wellhub_id || '').trim();
-    if (!cleanId) {
-      const err = new Error('Informe o ID do Wellhub (Gympass) do aluno.');
-      err.statusCode = 400;
-      throw err;
-    }
+    const cleanId = String(wellhub_id || '').trim() || null;
     return { partner_provider: 'wellhub', wellhub_id: cleanId };
   }
   return { partner_provider: 'totalpass', wellhub_id: null };

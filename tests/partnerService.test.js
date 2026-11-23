@@ -21,14 +21,16 @@ test('Wellhub e TotalPass liberam catraca sem matrícula ativa e validam ID Well
   const { store, accessService, gymService } = await createEnv();
   store.updateSettings({ wellhub_require_checkin: '0', totalpass_require_checkin: '0' });
 
-  await assert.rejects(
-    accessService.createMember({
-      name: 'Sem Wellhub ID',
-      document: '52998224725',
-      partner_provider: 'wellhub',
-    }),
-    { statusCode: 400, message: /ID do Wellhub/ },
-  );
+  const wellhubWithoutId = await accessService.createMember({
+    name: 'Sem Wellhub ID',
+    document: '12345678909',
+    partner_provider: 'wellhub',
+  });
+  assert.equal(wellhubWithoutId.status, 'active');
+  assert.equal(wellhubWithoutId.partner_provider, 'wellhub');
+  assert.equal(wellhubWithoutId.wellhub_id, null);
+  const noIdAccess = await accessService.handleFaceIdentified(wellhubWithoutId.controlid_user_id);
+  assert.equal(noIdAccess.allowed, true);
 
   const wellhubMember = await accessService.createMember({
     name: 'Carlos Wellhub',
