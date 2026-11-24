@@ -221,3 +221,28 @@ test('POST /api/payments/batch processa multiplos alunos sem somar latencia do C
     await env.close();
   }
 });
+
+test('PUT /api/members/:id permite editar dados pessoais sem CPF quando o aluno nao tem CPF cadastrado', async () => {
+  const env = await createSlowControlIdTestServer({ syncDelayMs: 0 });
+  try {
+    const legacyId = env.store.run(
+      "INSERT INTO members (name, document, phone, status, access_role) VALUES ('Aluno Sem CPF', NULL, '62990001111', 'active', 'student')",
+    ).lastInsertRowid;
+
+    const updated = await env.request(`/members/${legacyId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: 'Aluno Sem CPF Atualizado',
+        document: '',
+        phone: '62998887777',
+      }),
+    });
+    assert.equal(updated.status, 200);
+    const saved = env.store.get('SELECT name, phone, document FROM members WHERE id = ?', [legacyId]);
+    assert.equal(saved.name, 'Aluno Sem CPF Atualizado');
+    assert.equal(saved.phone, '62998887777');
+    assert.equal(saved.document, null);
+  } finally {
+    await env.close();
+  }
+});

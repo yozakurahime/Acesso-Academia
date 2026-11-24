@@ -113,12 +113,11 @@ export class GymService {
     if (nextPartner.partner_provider === 'wellhub') {
       this.assertUniqueWellhubId(nextPartner.wellhub_id, id);
     }
-    const allowEmptyWellhubCpf =
-      nextPartner.partner_provider === 'wellhub' &&
+    const allowEmptyLegacyCpf =
       !normalizeCpf(data.document) &&
       !normalizeCpf(existing.document);
     const nextDocument = Object.hasOwn(data, 'document')
-      ? (allowEmptyWellhubCpf ? (existing.document || null) : this.assertValidAndUniqueCpf(data.document, id))
+      ? (allowEmptyLegacyCpf ? (existing.document || null) : this.assertValidAndUniqueCpf(data.document, id))
       : existing.document;
     const nextStatus =
       existing.access_role === 'student' && nextPartner.partner_provider && existing.status !== 'active'

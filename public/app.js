@@ -3717,11 +3717,13 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   const id = state.selectedProfileId;
   const partnerVal = document.getElementById('profPartnerProvider')?.value || '';
   const wellhubVal = document.getElementById('profWellhubId')?.value.trim() || '';
+  const hadCpfBefore = Boolean(cpfDigits(state.selectedProfileMember?.document));
+  const allowEmptyCpf = partnerVal === 'wellhub' || !hadCpfBefore;
   const cpfCheck = await validateCpfField('profDoc', 'profDocFeedback', {
     excludeId: id,
     remoteCheck: true,
-    showEmptyError: partnerVal !== 'wellhub',
-    allowEmpty: partnerVal === 'wellhub',
+    showEmptyError: !allowEmptyCpf,
+    allowEmpty: allowEmptyCpf,
   });
   if (!cpfCheck.valid) {
     showToast(cpfCheck.message, true);
