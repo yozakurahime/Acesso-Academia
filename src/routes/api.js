@@ -1321,7 +1321,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/members',
     requireReception,
     handle(async (req, res) => {
-      const member = await accessService.createMember(req.body);
+      const member = await accessService.createMember(req.body, { backgroundSync: true });
       if (whatsappService && (!member.access_role || member.access_role === 'student') && member.phone) {
         whatsappService.enqueueWelcomeMessage({ member }).catch(() => {});
       }
@@ -1346,7 +1346,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         member_id: req.params.id,
         reason: req.body?.reason,
         notes: req.body?.notes,
-      });
+      }, { backgroundSync: true });
       res.status(201).json(result);
     }),
   );
@@ -1374,13 +1374,13 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/members/:id/status',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.setMemberStatus(req.params.id, req.body.status);
+      const result = await accessService.setMemberStatus(req.params.id, req.body.status, { backgroundSync: true });
       res.json(result);
     }),
   );
 
   router.post('/members/:id/freeze', requireReception, handle(async (req, res) => {
-    const result = await accessService.freezeMember(req.params.id, req.body || {});
+    const result = await accessService.freezeMember(req.params.id, req.body || {}, { backgroundSync: true });
     auditService.log({
       actorUser: req.authUser,
       actorRole: req.authRole,
@@ -1393,7 +1393,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   }));
 
   router.post('/members/:id/unfreeze', requireReception, handle(async (req, res) => {
-    const result = await accessService.unfreezeMember(req.params.id);
+    const result = await accessService.unfreezeMember(req.params.id, { backgroundSync: true });
     auditService.log({
       actorUser: req.authUser,
       actorRole: req.authRole,
@@ -1409,11 +1409,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   }));
 
   router.post('/visitors', requireReception, handle(async (req, res) => {
-    res.status(201).json(await accessService.createVisitor(req.body || {}));
+    res.status(201).json(await accessService.createVisitor(req.body || {}, { backgroundSync: true }));
   }));
 
   router.post('/members/:id/convert-visitor', requireReception, handle(async (req, res) => {
-    res.json(await accessService.convertVisitorToMember(req.params.id, req.body || {}));
+    res.json(await accessService.convertVisitorToMember(req.params.id, req.body || {}, { backgroundSync: true }));
   }));
 
   router.get('/members/:id/assessments', requireInstructor, handle(async (req, res) => {
@@ -1525,7 +1525,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/payments',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.recordPayment(req.body, { requireOpenCash: true });
+      const result = await accessService.recordPayment(req.body, { requireOpenCash: true, backgroundSync: true });
       auditService.log({
         actorUser: req.authUser,
         actorRole: req.authRole,
@@ -1561,7 +1561,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
             method,
             notes: item.notes || `Recebimento em lote (${i + 1}/${items.length})`,
           },
-          { requireOpenCash: true },
+          { requireOpenCash: true, backgroundSync: true },
         );
         auditService.log({
           actorUser: req.authUser,
@@ -1584,7 +1584,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/payments/:id',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.deletePayment(req.params.id);
+      const result = await accessService.deletePayment(req.params.id, { backgroundSync: true });
       auditService.log({
         actorUser: req.authUser || 'system',
         actorRole: req.authRole || 'system',
@@ -1689,9 +1689,9 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     handle(async (req, res) => {
       const updated = gymService.updateMember(req.params.id, req.body);
       if (updated?.member) {
-        await accessService.trySyncMemberToDevice(updated.member, {
+        accessService.scheduleMemberSync(updated.member, {
           forceIdentityUpdate: Boolean(updated.member.controlid_user_id),
-        }).catch(() => {});
+        });
       }
       res.json(updated);
     }),
@@ -1701,7 +1701,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/members/:id',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.deleteMember(req.params.id);
+      const result = await accessService.deleteMember(req.params.id, { backgroundSync: true });
       auditService.log({
         actorUser: req.authUser || 'system',
         actorRole: req.authRole || 'system',
@@ -1736,11 +1736,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   }));
 
   router.put('/members/:id/plan-enrollment', requireReception, handle(async (req, res) => {
-    res.json(await accessService.savePlanEnrollment(req.params.id, req.body));
+    res.json(await accessService.savePlanEnrollment(req.params.id, req.body, { backgroundSync: true }));
   }));
 
   router.put('/members/:id/access-role', requireAdmin, handle(async (req, res) => {
-    const result = await accessService.setAccessRole(req.params.id, req.body.access_role);
+    const result = await accessService.setAccessRole(req.params.id, req.body.access_role, { backgroundSync: true });
     auditService?.log({
       actorUser: req.authUser,
       actorRole: req.authRole,

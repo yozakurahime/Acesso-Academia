@@ -788,7 +788,8 @@ export class WhatsappService {
       if (exists) return null;
     }
 
-    const res = this.store.run(
+    const runFn = typeof this.store.runDeferred === 'function' ? this.store.runDeferred.bind(this.store) : this.store.run.bind(this.store);
+    const res = runFn(
       `INSERT INTO whatsapp_logs (member_id, phone, kind, ref_key, message, template_name, template_params, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'queued')`,
       [memberId, normalizedPhone, kind, refKey, message.trim(), templateName || null, Array.isArray(templateParams) ? JSON.stringify(templateParams) : null],

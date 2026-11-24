@@ -27,6 +27,7 @@ const state = {
   logsTimer: null,
   activeTab: 'balcao',
   authRole: 'admin',
+  dirtyTabs: { members: false, billing: false, staff: false },
 };
 
 const ROLE_RESTRICTED_ADMIN_SELECTORS = [
@@ -472,6 +473,7 @@ async function api(url, options = {}) {
 // Carrega os dados de cada área na primeira visita e permite repetir falhas.
 const tabRequests = new Map();
 const sharedLoads = new Map();
+const loadedTabs = new Set();
 
 function loadOnce(loader) {
   if (!sharedLoads.has(loader)) {
@@ -518,35 +520,39 @@ const tabLoaders = {
 function loadTab(tabName) {
   if (tabRequests.has(tabName)) return tabRequests.get(tabName);
   const panel = document.getElementById(`tab-${tabName}`);
+  const isWarm = loadedTabs.has(tabName);
   let status = panel.querySelector('.tab-load-status');
-  if (!status) {
+  if (!status && !isWarm) {
     status = document.createElement('div');
     status.className = 'tab-load-status';
     status.setAttribute('role', 'status');
     panel.querySelector('.page-title').after(status);
   }
-  const forms = tabName === 'dashboard' ? [] : [...panel.querySelectorAll('form')];
+  const forms = tabName === 'dashboard' || isWarm ? [] : [...panel.querySelectorAll('form')];
   forms.forEach((form) => { form.inert = true; });
-  status.textContent = 'Carregando…';
+  if (status && !isWarm) status.textContent = 'Carregando…';
   const request = tabLoaders[tabName]().then(() => {
-    status.textContent = '';
+    loadedTabs.add(tabName);
+    if (status) status.textContent = '';
     forms.forEach((form) => { form.inert = false; });
     return true;
   }).catch((err) => {
     console.error(`[tab:${tabName}]`, err);
     tabRequests.delete(tabName);
     forms.forEach((form) => { form.inert = false; });
-    status.textContent = `Não foi possível carregar esta área${err?.message ? `: ${err.message}` : '.'}`;
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'btn btn-secondary btn-sm';
-    retry.textContent = 'Tentar novamente';
-    retry.addEventListener('click', () => loadTab(tabName));
-    status.append(retry);
-    return false;
+    if (!isWarm && status) {
+      status.textContent = `Não foi possível carregar esta área${err?.message ? `: ${err.message}` : '.'}`;
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn btn-secondary btn-sm';
+      retry.textContent = 'Tentar novamente';
+      retry.addEventListener('click', () => loadTab(tabName));
+      status.append(retry);
+    }
+    return isWarm;
   });
   tabRequests.set(tabName, request);
-  return request;
+  return isWarm ? Promise.resolve(true) : request;
 }
 
 const VOLATILE_TABS = new Set(['dashboard', 'balcao', 'billing', 'cash', 'logs', 'reports', 'settings']);
@@ -576,6 +582,17 @@ function switchTab(tabName, { updateHash = true } = {}) {
     setWorkspaceMenu(false);
   }
   window.scrollTo(0, 0);
+  if (target === 'members' && state.dirtyTabs?.members) {
+    state.dirtyTabs.members = false;
+    updateMemberFilterChips();
+    renderMembersTable();
+  } else if (target === 'billing' && state.dirtyTabs?.billing) {
+    state.dirtyTabs.billing = false;
+    renderBillingQueue();
+  } else if (target === 'staff' && state.dirtyTabs?.staff) {
+    state.dirtyTabs.staff = false;
+    renderTeam();
+  }
   return loadTab(target);
 }
 
@@ -923,13 +940,18 @@ async function renderBalcaoQuickResults(rawQuery = '') {
   }
   const q = normalizeSearch(cleanQuery);
   const digits = numericSearch(q);
-  const matches = state.memberSearchIndex
-    .filter((entry) =>
+  const idQuery = q.replace(/^#/, '');
+  const matches = [];
+  for (const entry of state.memberSearchIndex) {
+    if (
       entry.name.includes(q) ||
       (digits && (entry.documentDigits.includes(digits) || entry.phoneDigits.includes(digits))) ||
-      String(entry.member.id) === q.replace(/^#/, ''),
-    )
-    .slice(0, 8);
+      String(entry.member.id) === idQuery
+    ) {
+      matches.push(entry);
+      if (matches.length >= 8) break;
+    }
+  }
 
   box.classList.remove('hidden');
   if (!matches.length) {
@@ -2536,41 +2558,139 @@ function renderMembersTable() {
     .classList.toggle('hidden', visible.length >= state.filteredMembers.length);
 }
 
-function rebuildMemberSearchIndex() {
+function buildMemberSearchEntry(member) {
+  const name = normalizeSearch(member.name);
+  const document = normalizeSearch(member.document);
+  const phone = normalizeSearch(member.phone);
+  const idText = String(member.id || '');
+  const wellhubId = normalizeSearch(member.wellhub_id);
+  const partner = normalizeSearch(member.partner_provider);
+  const plan = normalizeSearch(member.plan_name);
+  const modality = normalizeSearch(member.modality_name);
+  const searchBlob = `${name} ${document} ${phone} #${idText} ${idText} ${wellhubId} ${partner} ${plan} ${modality}`.trim();
+  return { member, name, document, phone, idText, searchBlob, documentDigits: numericSearch(document), phoneDigits: numericSearch(phone) };
+}
+
+function recomputeMemberCounts() {
   const todayIso = billingDateFormat.format(new Date());
-  memberCounts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, noface: 0 };
-  state.memberSearchIndex = state.allMembers.map((member) => {
+  const counts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, noface: 0 };
+  for (const member of state.allMembers) {
     const status = member.access_status || member.status;
-    if (['active', 'blocked', 'pending'].includes(status)) memberCounts[status]++;
-    if (!member.face_registered) memberCounts.noface++;
-    if (member.partner_provider) memberCounts.partner++;
-    if (!member.partner_provider && member.valid_until && member.valid_until < todayIso) memberCounts.expired++;
-    const name = normalizeSearch(member.name);
-    const document = normalizeSearch(member.document);
-    const phone = normalizeSearch(member.phone);
-    const idText = String(member.id || '');
-    const wellhubId = normalizeSearch(member.wellhub_id);
-    const partner = normalizeSearch(member.partner_provider);
-    const plan = normalizeSearch(member.plan_name);
-    const modality = normalizeSearch(member.modality_name);
-    const searchBlob = `${name} ${document} ${phone} #${idText} ${idText} ${wellhubId} ${partner} ${plan} ${modality}`.trim();
-    return { member, name, document, phone, idText, searchBlob, documentDigits: numericSearch(document), phoneDigits: numericSearch(phone) };
-  });
+    if (status === 'active' || status === 'blocked' || status === 'pending') counts[status]++;
+    if (!member.face_registered) counts.noface++;
+    if (member.partner_provider) counts.partner++;
+    if (!member.partner_provider && member.valid_until && member.valid_until < todayIso) counts.expired++;
+  }
+  memberCounts = counts;
+}
+
+function rebuildMemberSearchIndex() {
+  recomputeMemberCounts();
+  state.memberSearchIndex = state.allMembers.map(buildMemberSearchEntry);
+}
+
+function renderMemberDependentViews() {
+  if (state.activeTab === 'members') {
+    state.dirtyTabs.members = false;
+    updateMemberFilterChips();
+    renderMembersTable();
+  } else {
+    state.dirtyTabs.members = true;
+  }
+  if (state.activeTab === 'billing') {
+    state.dirtyTabs.billing = false;
+    renderBillingQueue();
+  } else {
+    state.dirtyTabs.billing = true;
+  }
+  if (state.activeTab === 'staff') {
+    state.dirtyTabs.staff = false;
+    renderTeam();
+  } else {
+    state.dirtyTabs.staff = true;
+  }
+}
+
+function deriveMemberAccessStatus(member) {
+  const role = member.access_role || 'student';
+  if (role !== 'student') return { access_status: 'active', in_grace: 0 };
+  if (member.partner_provider === 'wellhub' || member.partner_provider === 'totalpass') {
+    return { access_status: member.status === 'blocked' ? 'blocked' : 'active', in_grace: 0 };
+  }
+  const todayIso = billingDateFormat.format(new Date());
+  if (member.status === 'blocked') return { access_status: 'blocked', in_grace: 0 };
+  if (!member.plan_id || !member.valid_until) return { access_status: 'pending', in_grace: 0 };
+  if (member.valid_until >= todayIso) return { access_status: member.status || 'active', in_grace: 0 };
+  const tolerance = Number(state.settings?.tolerance_days ?? 0);
+  if (tolerance > 0) {
+    const cutoffDate = new Date(`${todayIso}T12:00:00Z`);
+    cutoffDate.setUTCDate(cutoffDate.getUTCDate() - tolerance);
+    const cutoffIso = cutoffDate.toISOString().slice(0, 10);
+    if (member.valid_until >= cutoffIso) {
+      return { access_status: member.status || 'active', in_grace: member.status === 'active' ? 1 : 0 };
+    }
+  }
+  return { access_status: 'blocked', in_grace: 0 };
 }
 
 function patchMemberInState(updated) {
   if (!updated || updated.id == null) return false;
-  const idx = state.allMembers.findIndex((m) => Number(m.id) === Number(updated.id));
-  if (idx === -1) return false;
-  state.allMembers[idx] = { ...state.allMembers[idx], ...updated };
-  if (state.selectedProfileMember && Number(state.selectedProfileMember.id) === Number(updated.id)) {
-    state.selectedProfileMember = { ...state.selectedProfileMember, ...updated };
+  const idNum = Number(updated.id);
+  if (updated.access_role && updated.access_role !== 'student') {
+    const prevIdx = state.allMembers.findIndex((m) => Number(m.id) === idNum);
+    if (prevIdx !== -1) {
+      state.allMembers.splice(prevIdx, 1);
+      state.memberSearchIndex = state.memberSearchIndex.filter((e) => Number(e.member.id) !== idNum);
+      recomputeMemberCounts();
+    }
+    const tIdx = state.teamMembers.findIndex((m) => Number(m.id) === idNum);
+    if (tIdx === -1) state.teamMembers.unshift(updated);
+    else state.teamMembers[tIdx] = { ...state.teamMembers[tIdx], ...updated };
+    if (state.selectedProfileMember && Number(state.selectedProfileMember.id) === idNum) {
+      state.selectedProfileMember = { ...state.selectedProfileMember, ...updated };
+    }
+    renderMemberDependentViews();
+    return true;
   }
-  rebuildMemberSearchIndex();
-  updateMemberFilterChips();
-  renderMembersTable();
-  renderBillingQueue();
+  const tPrevIdx = state.teamMembers.findIndex((m) => Number(m.id) === idNum);
+  if (tPrevIdx !== -1) state.teamMembers.splice(tPrevIdx, 1);
+  const idx = state.allMembers.findIndex((m) => Number(m.id) === idNum);
+  let merged;
+  if (idx === -1) {
+    merged = { ...updated };
+    if (updated.access_status === undefined) {
+      Object.assign(merged, deriveMemberAccessStatus(merged));
+    }
+    state.allMembers.unshift(merged);
+    state.memberSearchIndex.unshift(buildMemberSearchEntry(merged));
+  } else {
+    merged = { ...state.allMembers[idx], ...updated };
+    if (updated.access_status === undefined) {
+      Object.assign(merged, deriveMemberAccessStatus(merged));
+    }
+    state.allMembers[idx] = merged;
+    const sIdx = state.memberSearchIndex.findIndex((e) => Number(e.member.id) === idNum);
+    if (sIdx !== -1) state.memberSearchIndex[sIdx] = buildMemberSearchEntry(merged);
+    else state.memberSearchIndex.unshift(buildMemberSearchEntry(merged));
+  }
+  if (state.selectedProfileMember && Number(state.selectedProfileMember.id) === idNum) {
+    state.selectedProfileMember = { ...state.selectedProfileMember, ...merged };
+  }
+  recomputeMemberCounts();
+  renderMemberDependentViews();
   return true;
+}
+
+function removeMemberFromState(id) {
+  const idNum = Number(id);
+  const prevLen = state.allMembers.length;
+  state.allMembers = state.allMembers.filter((m) => Number(m.id) !== idNum);
+  state.teamMembers = state.teamMembers.filter((m) => Number(m.id) !== idNum);
+  if (state.allMembers.length !== prevLen) {
+    state.memberSearchIndex = state.memberSearchIndex.filter((e) => Number(e.member.id) !== idNum);
+    recomputeMemberCounts();
+  }
+  renderMemberDependentViews();
 }
 
 async function loadMembers() {
@@ -2578,10 +2698,7 @@ async function loadMembers() {
   state.allMembers = members.filter((member) => !member.access_role || member.access_role === 'student');
   state.teamMembers = members.filter((member) => member.access_role && member.access_role !== 'student');
   rebuildMemberSearchIndex();
-  updateMemberFilterChips();
-  renderMembersTable();
-  renderBillingQueue();
-  renderTeam();
+  renderMemberDependentViews();
 }
 
 function renderTeam() {
@@ -3375,7 +3492,7 @@ async function submitNewEnrollment(planId, startsOn, endsOn = null) {
   const id = state.selectedProfileId;
   if (!id) return;
   try {
-    const { charge, sync } = await api(`/api/members/${id}/plan-enrollment`, {
+    const res = await api(`/api/members/${id}/plan-enrollment`, {
       method: 'PUT',
       body: JSON.stringify({
         plan_id: planId ? Number(planId) : null,
@@ -3383,6 +3500,7 @@ async function submitNewEnrollment(planId, startsOn, endsOn = null) {
         ends_on: endsOn || null,
       }),
     });
+    const { charge, sync } = res;
     closeNewEnrollmentModal();
     showToast(
       sync.synced
@@ -3392,10 +3510,12 @@ async function submitNewEnrollment(planId, startsOn, endsOn = null) {
         : `Alteração salva. Aviso da catraca: ${sync.error}`,
       !sync.synced,
     );
-    await loadMembers();
+    if (res.member) patchMemberInState(res.member);
+    else loadMembers().catch(() => {});
     if (state.selectedProfileId === id && !document.getElementById('profileModal').classList.contains('hidden')) {
       await openProfile(id);
     }
+    loadDashboard().catch(() => {});
   } catch (err) {
     showToast(err.message, true);
   }
@@ -3502,7 +3622,8 @@ document.getElementById('btnProfDelete')?.addEventListener('click', async (e) =>
       await api(`/api/members/${m.id}`, { method: 'DELETE' });
       showToast(`Cadastro de ${m.name} excluído.`);
       closeProfileModal(false);
-      await Promise.all([loadMembers(), loadDashboard()]).catch(() => {});
+      removeMemberFromState(m.id);
+      loadDashboard().catch(() => {});
     } catch (err) {
       showToast(err.message, true);
     }
@@ -3573,7 +3694,7 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   }
   await withLoading(e.target, async () => {
     try {
-      await api(`/api/members/${id}`, {
+      const updatedProfile = await api(`/api/members/${id}`, {
         method: 'PUT',
         body: JSON.stringify({
           name: document.getElementById('profName').value,
@@ -3590,7 +3711,8 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
         }),
       });
       showToast('Perfil atualizado!');
-      await loadMembers();
+      if (updatedProfile?.member) patchMemberInState(updatedProfile.member);
+      else loadMembers().catch(() => {});
       if (!document.getElementById('profileModal').classList.contains('hidden') && state.selectedProfileId === id) await openProfile(id);
     } catch (err) {
       showToast(err.message, true);
@@ -3612,7 +3734,7 @@ document.getElementById('faceLinkForm').addEventListener('submit', async (event)
         method: 'PUT', body: JSON.stringify({ device_id: reader.id, expected_name: reader.name, previous_ids: reader.linked.map((entry) => entry.id) }),
       });
       showToast('Vínculo corrigido. A foto do leitor foi preservada.');
-      await loadMembers();
+      patchMemberInState({ id: member.id, face_registered: 1, controlid_user_id: reader.id, last_sync_error: null });
       if (state.selectedProfileId === member.id && !document.getElementById('profileModal').classList.contains('hidden')) await openProfile(member.id);
     } catch (err) {
       showToast(err.message, true);
@@ -3626,11 +3748,14 @@ async function saveMemberAccessRole(id, role, { currentRole = null, label = null
       !window.confirm(`Confirmar acesso permanente ao FaceID${label ? ` para ${label}` : ''} como ${accessRoles[role]}?`)) {
     return false;
   }
-  const { sync } = await api(`/api/members/${id}/access-role`, {
+  const { member, sync } = await api(`/api/members/${id}/access-role`, {
     method: 'PUT', body: JSON.stringify({ access_role: role }),
   });
   showToast(sync.synced ? 'Tipo de acesso sincronizado com o FaceID.' : `Tipo de acesso salvo. Aviso da catraca: ${sync.error}`, !sync.synced);
-  await Promise.all([loadMembers(), loadDashboard()]);
+  if (!patchMemberInState(member)) {
+    loadMembers().catch(() => {});
+  }
+  loadDashboard().catch(() => {});
   if (reloadProfile && state.selectedProfileId === id && !document.getElementById('profileModal').classList.contains('hidden')) {
     const tab = role === 'student' ? 'members' : 'staff';
     if (state.activeTab !== tab) {
@@ -3752,18 +3877,33 @@ document.getElementById('planEnrollmentForm')?.addEventListener('submit', async 
   await withLoading(event.currentTarget, async () => {
     try {
       const rawPlanId = document.getElementById('profPlan').value;
-      const { sync } = await api(`/api/members/${id}/plan-enrollment`, {
+      const res = await api(`/api/members/${id}/plan-enrollment`, {
         method: 'PUT',
         body: JSON.stringify({
           plan_id: rawPlanId ? Number(rawPlanId) : null,
           starts_on: document.getElementById('profPlanStart').value || null,
         }),
       });
+      const { sync } = res;
       showToast(sync.synced
         ? (rawPlanId ? 'Matrícula salva com sucesso.' : 'Plano removido — aluno bloqueado para entrar.')
         : `Alteração salva. Aviso da catraca: ${sync.error}`, !sync.synced);
-      await loadMembers();
-      if (state.selectedProfileId === id && !document.getElementById('profileModal').classList.contains('hidden')) await openProfile(id);
+      if (res.member) patchMemberInState(res.member);
+      if (state.selectedProfileId === id && !document.getElementById('profileModal').classList.contains('hidden')) {
+        await openProfile(id);
+      }
+      if (!res.member) {
+        if (state.selectedProfileMember && Number(state.selectedProfileMember.id) === Number(id)) {
+          patchMemberInState({
+            ...state.selectedProfileMember,
+            plan_id: rawPlanId ? Number(rawPlanId) : null,
+            plan_name: state.plans.find((p) => Number(p.id) === Number(rawPlanId))?.name || null,
+            valid_until: state.selectedProfileEnrollment?.ends_on || null,
+          });
+        } else {
+          loadMembers().catch(() => {});
+        }
+      }
     } catch (err) {
       showToast(err.message, true);
     }
@@ -3804,8 +3944,9 @@ async function refreshEnrollmentProfile(data) {
     renderProfileEnrollments(data);
     renderProfileEnrollmentTable(data);
   }
-  await Promise.all([loadMembers(), loadGymStructure()]).catch(() => {
-    showToast('Matrícula gravada. Recarregue a página para atualizar a lista e a lotação.', true);
+  patchMemberInState(data.member);
+  loadGymStructure().catch(() => {
+    showToast('Matrícula gravada. Recarregue a página para atualizar a lotação.', true);
   });
 }
 
@@ -5184,7 +5325,8 @@ async function submitMemberWizard({ addToCart = false, triggerEl = null } = {}) 
         }),
       });
       resetMemberWizard();
-      await Promise.all([loadMembers(), loadDashboard(), loadGymStructure()]);
+      patchMemberInState(created);
+      Promise.allSettled([loadDashboard(), loadGymStructure()]).catch(() => {});
       if (addToCart) {
         addMemberItemToBillingCart({ member: created, planId: created.plan_id });
         showToast(`Aluno #${created.id} adicionado ao carrinho! Cadastre o próximo ou finalize em Mensalidades.`);
@@ -5399,7 +5541,8 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
       }
       const shouldOpenFaceAfterPayment = state.pendingFaceAfterPaymentId === memberId;
       state.pendingFaceAfterPaymentId = null;
-      const updatedMember = state.allMembers.find((entry) => entry.id === memberId) || member;
+      if (res.member) patchMemberInState({ ...res.member, next_charge: null });
+      const updatedMember = res.member || state.allMembers.find((entry) => entry.id === memberId) || member;
       finishPaymentAndReturnHome();
       if (shouldOpenFaceAfterPayment && updatedMember && !updatedMember.face_enrolled) {
         openFaceModal(updatedMember.id, updatedMember.name);
@@ -5407,7 +5550,6 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
       Promise.allSettled([
         loadPayments(),
         loadOpenDebts(),
-        loadMembers(),
         loadDashboard(),
         tabRequests.has('cash') ? loadCash() : loadCurrentCash(),
       ]).catch(() => {});
@@ -6665,7 +6807,8 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
         state.billingCart = [];
         renderBillingCart();
         showToast(`Recebimento (${methodName(method)}) confirmado para ${res.count} aluno(s)!`);
-        await Promise.all([loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
+        (res.results || []).forEach((r) => { if (r?.member) patchMemberInState(r.member); });
+        Promise.allSettled([loadPayments(), loadCurrentCash(), loadDashboard()]).catch(() => {});
         const firstPayment = res.results?.[0]?.payment;
         if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
       } catch (err) {
@@ -7249,9 +7392,9 @@ window.toggleMemberStatus = async (id, status, name = 'este aluno') => {
       !res.sync.synced,
     );
     if (!patchMemberInState(res.member || { id, status, access_status: status })) {
-      await loadMembers();
+      loadMembers().catch(() => {});
     }
-    await loadDashboard();
+    loadDashboard().catch(() => {});
   } catch (err) {
     showToast(err.message, true);
   }
@@ -8419,15 +8562,15 @@ document.getElementById('profPaymentsList').addEventListener('click', async (e) 
   if (!confirm(`Excluir este pagamento de ${fmtMoney(pay.amount_cents)}? A vigência do aluno será recalculada automaticamente.`)) return;
   await withLoading(delBtn, async () => {
     try {
-      await api(`/api/payments/${pay.id}`, { method: 'DELETE' });
+      const res = await api(`/api/payments/${pay.id}`, { method: 'DELETE' });
       showToast('Pagamento excluído e vigência recalculada!');
-      await Promise.all([
-        state.selectedProfileId ? openProfile(state.selectedProfileId) : null,
+      if (res?.member) patchMemberInState(res.member);
+      if (state.selectedProfileId) await openProfile(state.selectedProfileId);
+      Promise.allSettled([
         loadPayments(),
-        loadMembers(),
         loadDashboard(),
         loadCurrentCash(),
-      ].filter(Boolean));
+      ]).catch(() => {});
     } catch (err) {
       showToast(err.message, true);
     }
@@ -8495,7 +8638,7 @@ document.getElementById('creditForm').addEventListener('submit', async (e) => {
       e.target.reset();
       renderMemberCredit(data);
       showToast(`Crédito atualizado! Saldo: ${fmtMoney(data.credit_cents)}`);
-      await loadMembers();
+      patchMemberInState({ id: state.selectedProfileId, credit_cents: data.credit_cents });
       if (Number(document.getElementById('pMember').value) === Number(state.selectedProfileId)) {
         renderBillingSummary();
       }
@@ -8528,7 +8671,9 @@ document.getElementById('visitorForm')?.addEventListener('submit', async (e) => 
       showToast(res.sync?.synced === false
         ? `Visitante #${id} criado. Aviso catraca: ${res.sync.error}`
         : `Visitante #${id} liberado!`);
-      await Promise.all([loadDashboard(), loadMembers()]);
+      if (res.visitor) patchMemberInState(res.visitor);
+      else loadMembers().catch(() => {});
+      loadDashboard().catch(() => {});
     } catch (err) {
       showToast(err.message, true);
     }
@@ -9192,9 +9337,10 @@ document.getElementById('openDebtsQueue')?.addEventListener('click', async (e) =
     if (!window.confirm('Cancelar este saldo pendente (fiado) em aberto?')) return;
     await withLoading(cancelBtn, async () => {
       try {
-        await api(`/api/debts/${id}/cancel`, { method: 'POST', body: JSON.stringify({}) });
+        const res = await api(`/api/debts/${id}/cancel`, { method: 'POST', body: JSON.stringify({}) });
         showToast('Saldo pendente cancelado.');
-        await Promise.all([loadOpenDebts(), loadMembers()]);
+        if (res?.member) patchMemberInState(res.member);
+        loadOpenDebts().catch(() => {});
       } catch (err) {
         showToast(err.message, true);
       }
@@ -9211,7 +9357,7 @@ document.getElementById('debtPayForm')?.addEventListener('submit', async (e) => 
   const id = Number(document.getElementById('debtPayId').value);
   await withLoading(e.target, async () => {
     try {
-      await api(`/api/debts/${id}/pay`, {
+      const res = await api(`/api/debts/${id}/pay`, {
         method: 'POST',
         body: JSON.stringify({
           amount_cents: toCents(document.getElementById('debtPayAmount').value),
@@ -9221,7 +9367,8 @@ document.getElementById('debtPayForm')?.addEventListener('submit', async (e) => 
       });
       document.getElementById('debtPayModal')?.close();
       showToast('Saldo pendente recebido com sucesso!');
-      await Promise.all([loadOpenDebts(), loadPayments(), loadMembers(), loadDashboard(), tabRequests.has('cash') ? loadCash() : loadCurrentCash()]);
+      if (res?.member) patchMemberInState(res.member);
+      Promise.allSettled([loadOpenDebts(), loadPayments(), loadDashboard(), tabRequests.has('cash') ? loadCash() : loadCurrentCash()]).catch(() => {});
       if (state.selectedProfileId && !document.getElementById('profileModal')?.classList.contains('hidden')) {
         await loadMemberOpenDebts(state.selectedProfileId);
       }
@@ -9568,8 +9715,14 @@ document.getElementById('profOpenDebtsList')?.addEventListener('click', async (e
       try {
         await api(`/api/membership-charges/${id}`, { method: 'DELETE' });
         showToast('Cobrança removida.');
-        if (state.selectedProfileId) await openProfile(state.selectedProfileId);
-        await Promise.all([loadMembers(), loadDashboard()]).catch(() => {});
+        if (state.selectedProfileId) {
+          await openProfile(state.selectedProfileId);
+          patchMemberInState({
+            id: state.selectedProfileId,
+            next_charge: state.selectedProfileOpenCharges?.[0] || null,
+          });
+        }
+        loadDashboard().catch(() => {});
       } catch (err) {
         showToast(err.message, true);
       }
@@ -9582,10 +9735,11 @@ document.getElementById('profOpenDebtsList')?.addEventListener('click', async (e
     if (!window.confirm('Cancelar este saldo pendente (fiado) em aberto?')) return;
     await withLoading(cancelDebtBtn, async () => {
       try {
-        await api(`/api/debts/${id}/cancel`, { method: 'POST', body: JSON.stringify({}) });
+        const res = await api(`/api/debts/${id}/cancel`, { method: 'POST', body: JSON.stringify({}) });
         showToast('Saldo pendente cancelado.');
+        if (res?.member) patchMemberInState(res.member);
         if (state.selectedProfileId) await loadMemberOpenDebts(state.selectedProfileId);
-        await Promise.all([loadOpenDebts(), loadMembers(), loadDashboard()]).catch(() => {});
+        Promise.allSettled([loadOpenDebts(), loadDashboard()]).catch(() => {});
       } catch (err) {
         showToast(err.message, true);
       }
@@ -9763,10 +9917,10 @@ async function openChat(phone) {
     `;
     document.getElementById('btnChatMemberBilling')?.addEventListener('click', async () => {
       try {
-        if (!Array.isArray(state.members) || !state.members.length) {
+        if (!Array.isArray(state.allMembers) || !state.allMembers.length) {
           await loadMembers();
         }
-        const member = (state.members || []).find((m) => Number(m.id) === Number(chat.member_id));
+        const member = (state.allMembers || []).find((m) => Number(m.id) === Number(chat.member_id));
         if (!member) {
           showToast('Cadastro do aluno não encontrado.', true);
           return;

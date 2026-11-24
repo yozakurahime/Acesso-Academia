@@ -15,7 +15,8 @@ export class AuditService {
           ? details
           : JSON.stringify(details);
 
-    const res = this.store.run(
+    const runFn = typeof this.store.runDeferred === 'function' ? this.store.runDeferred.bind(this.store) : this.store.run.bind(this.store);
+    const res = runFn(
       `INSERT INTO audit_logs (actor_user, actor_role, action, entity, entity_id, details)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [

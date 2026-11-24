@@ -121,7 +121,7 @@ export class ControlIdClient {
       method,
       headers,
       body,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(2500),
     });
 
     if (response.status === 401 && retryAuth && endpoint !== '/login.fcgi') {
@@ -360,7 +360,7 @@ export class ControlIdClient {
     const usedSession = await this.ensureSession();
     const url = `${cfg.baseUrl}/user_get_image.fcgi?session=${encodeURIComponent(usedSession)}&user_id=${encodeURIComponent(deviceUserId)}`;
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
       if (res.status === 401 && retryAuth) {
         if (this.session === usedSession) {
           this.session = null;

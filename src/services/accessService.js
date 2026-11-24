@@ -593,7 +593,8 @@ export class AccessService {
   }
 
   listMembers(search = '', { summary = false } = {}) {
-    const q = `%${search.trim()}%`;
+    const trimmed = search.trim();
+    const q = `%${trimmed}%`;
     const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
     const fields = summary
       ? `m.id, m.name, m.document, m.phone, m.access_role, m.partner_provider, m.wellhub_id,
@@ -608,15 +609,22 @@ export class AccessService {
              AND e.ends_on BETWEEN ? AND date(?, '-1 day') THEN 1 ELSE 0 END AS in_grace,
         m.face_registered, m.last_sync_error, mod.name AS modality_name, p.name AS plan_name`
       : 'm.*, p.name AS plan_name, p.price_cents AS plan_price_cents, p.duration_days AS plan_duration_days';
+    const whereClause = trimmed
+      ? `WHERE m.name LIKE ? OR COALESCE(m.document, '') LIKE ? OR COALESCE(m.phone, '') LIKE ? OR COALESCE(m.wellhub_id, '') LIKE ?`
+      : '';
+    const params = [
+      ...(summary ? [this.enrollmentCutoff(today), this.enrollmentCutoff(today), today] : []),
+      ...(trimmed ? [q, q, q, q] : []),
+    ];
     const members = this.store.all(
       `SELECT ${fields}
        FROM members m
        ${summary
          ? 'LEFT JOIN plan_enrollments e ON e.member_id = m.id LEFT JOIN plans p ON p.id = e.plan_id LEFT JOIN modalities mod ON mod.id = m.modality_id'
          : 'LEFT JOIN plans p ON p.id = m.plan_id'}
-       WHERE m.name LIKE ? OR COALESCE(m.document, '') LIKE ? OR COALESCE(m.phone, '') LIKE ? OR COALESCE(m.wellhub_id, '') LIKE ?
+       ${whereClause}
        ORDER BY m.id DESC`,
-      summary ? [this.enrollmentCutoff(today), this.enrollmentCutoff(today), today, q, q, q, q] : [q, q, q, q],
+      params,
     );
     if (!summary) return members.map(withoutPortalCredentials);
     const nextCharges = new Map();
@@ -646,7 +654,40 @@ export class AccessService {
     ));
   }
 
-  async createMember({ name, document, phone, email, plan_id, modality_id, class_id, birth_date, sex, address, emergency_contact, notes, access_role = 'student', partner_provider = null, wellhub_id = null }) {
+  getMemberSummary(id) {
+    const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+    const cutoff = this.enrollmentCutoff(today);
+    const member = this.store.get(
+      `SELECT m.*,
+              CASE WHEN m.access_role = 'student' THEN e.plan_id ELSE m.plan_id END AS plan_id,
+              CASE WHEN m.access_role = 'student' THEN e.ends_on ELSE m.valid_until END AS valid_until,
+              CASE WHEN m.access_role <> 'student' THEN 'active'
+                   WHEN m.partner_provider IN ('wellhub', 'totalpass') THEN CASE WHEN m.status = 'blocked' THEN 'blocked' ELSE 'active' END
+                   WHEN m.status = 'blocked' OR e.ends_on < ? THEN 'blocked'
+                   WHEN p.id IS NULL OR e.ends_on IS NULL THEN 'pending'
+                   ELSE m.status END AS access_status,
+              CASE WHEN m.access_role = 'student' AND m.status = 'active' AND p.id IS NOT NULL
+                   AND e.ends_on BETWEEN ? AND date(?, '-1 day') THEN 1 ELSE 0 END AS in_grace,
+              mod.name AS modality_name,
+              p.name AS plan_name, p.price_cents AS plan_price_cents, p.duration_days AS plan_duration_days,
+              COALESCE((SELECT SUM(amount_cents - paid_cents) FROM member_debts WHERE member_id = m.id AND status = 'open'), 0) AS open_debt_cents
+       FROM members m
+       LEFT JOIN plan_enrollments e ON e.member_id = m.id
+       LEFT JOIN plans p ON p.id = COALESCE(e.plan_id, m.plan_id)
+       LEFT JOIN modalities mod ON mod.id = m.modality_id
+       WHERE m.id = ?`,
+      [cutoff, cutoff, today, Number(id)],
+    );
+    if (!member) return null;
+    const nextCharge = this.store.get(
+      'SELECT id, member_id, due, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due, id LIMIT 1',
+      [member.id],
+    );
+    member.next_charge = nextCharge || null;
+    return withoutPortalCredentials(member);
+  }
+
+  async createMember({ name, document, phone, email, plan_id, modality_id, class_id, birth_date, sex, address, emergency_contact, notes, access_role = 'student', partner_provider = null, wellhub_id = null }, { backgroundSync = false } = {}) {
     if (!name?.trim()) {
       throw new Error('Nome do aluno e obrigatorio.');
     }
@@ -706,8 +747,28 @@ export class AccessService {
     });
 
     const member = this.getMember(memberId);
-    await this.trySyncMemberToDevice(member);
-    return this.getMember(memberId);
+    if (backgroundSync) {
+      this.scheduleMemberSync(member);
+    } else {
+      await this.trySyncMemberToDevice(member);
+    }
+    return this.getMemberSummary(memberId);
+  }
+
+  scheduleMemberSync(member, options = {}) {
+    if (!member?.id) return { synced: true, queued: false };
+    if (String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud') {
+      this.edgeCloudHub?.enqueueCommand('sync_needed', {
+        memberId: member?.id || null,
+        forceIdentityUpdate: Boolean(options?.forceIdentityUpdate),
+      });
+      return { synced: true, deferredToEdge: true };
+    }
+    const snapshot = { ...member };
+    Promise.resolve()
+      .then(() => this.trySyncMemberToDevice(snapshot, options))
+      .catch(() => {});
+    return { synced: true, queued: true };
   }
 
   setEdgeCloudHub(hub) {
@@ -734,21 +795,21 @@ export class AccessService {
       }
       const result = await this.controlId.syncMember(member, allowed, options);
       const syncedDeviceId = result?.controlIdUserId ?? deviceId;
-      this.store.run(
+      const runFn = typeof this.store.runDeferred === 'function' ? this.store.runDeferred.bind(this.store) : this.store.run.bind(this.store);
+      runFn(
         "UPDATE members SET controlid_user_id = COALESCE(controlid_user_id, ?), last_sync_error = NULL, updated_at = datetime('now', 'localtime') WHERE id = ?",
         [syncedDeviceId, member.id],
       );
-      const secondaryMember = { ...member, controlid_user_id: syncedDeviceId };
-      for (const { client } of this._getSecondaryControlIdClients()) {
-        try {
-          await client.syncMember(secondaryMember, allowed, options);
-        } catch {
-          // Leitores secundários são sincronizados em regime best-effort
-        }
+      const secondaryClients = this._getSecondaryControlIdClients();
+      if (secondaryClients.length) {
+        const secondaryMember = { ...member, controlid_user_id: syncedDeviceId };
+        // Leitores secundários são sincronizados em regime best-effort em segundo plano
+        Promise.allSettled(secondaryClients.map(({ client }) => client.syncMember(secondaryMember, allowed, options))).catch(() => {});
       }
       return { synced: true };
     } catch (err) {
-      this.store.run(
+      const runFn = typeof this.store.runDeferred === 'function' ? this.store.runDeferred.bind(this.store) : this.store.run.bind(this.store);
+      runFn(
         "UPDATE members SET last_sync_error = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
         [err.message, member.id],
       );
@@ -848,7 +909,7 @@ export class AccessService {
     return this.getMember(member.id);
   }
 
-  async deleteMember(memberId) {
+  async deleteMember(memberId, { backgroundSync = false } = {}) {
     const id = Number(memberId);
     if (!Number.isInteger(id) || id <= 0) {
       throw new Error('ID de cadastro inválido.');
@@ -914,10 +975,16 @@ export class AccessService {
         [member.controlid_user_id],
       );
       if (!stillUsed) {
-        try {
-          await this.controlId.deleteUser(member.controlid_user_id);
-        } catch {
-          // Best-effort quando o leitor não está acessível diretamente (ex.: modo cloud).
+        if (backgroundSync) {
+          Promise.resolve()
+            .then(() => this.controlId.deleteUser(member.controlid_user_id))
+            .catch(() => {});
+        } else {
+          try {
+            await this.controlId.deleteUser(member.controlid_user_id);
+          } catch {
+            // Best-effort quando o leitor não está acessível diretamente (ex.: modo cloud).
+          }
         }
       }
     }
@@ -1079,7 +1146,7 @@ export class AccessService {
     return null;
   }
 
-  async setAccessRole(memberId, role) {
+  async setAccessRole(memberId, role, { backgroundSync = false } = {}) {
     if (!ACCESS_ROLES.includes(role)) throw new Error('Tipo de acesso inválido.');
     const member = this.getMember(memberId);
     if (!member) throw new Error('Aluno não encontrado.');
@@ -1089,10 +1156,11 @@ export class AccessService {
       this.store.run('UPDATE members SET access_role = ?, status = ?, manual_access = 0 WHERE id = ?', [role, status, member.id]);
     }
     const updated = this.getMember(member.id);
-    return { member: updated, sync: await this.trySyncMemberToDevice(updated) };
+    const sync = backgroundSync ? this.scheduleMemberSync(updated) : await this.trySyncMemberToDevice(updated);
+    return { member: this.getMemberSummary(member.id), sync };
   }
 
-  async savePlanEnrollment(memberId, { plan_id, starts_on, ends_on = null }) {
+  async savePlanEnrollment(memberId, { plan_id, starts_on, ends_on = null }, { backgroundSync = false } = {}) {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Aluno não encontrado.');
     if (member.access_role !== 'student') throw new Error('A equipe tem acesso permanente sem matrícula.');
@@ -1106,8 +1174,9 @@ export class AccessService {
         this.store.run('DELETE FROM plan_enrollments WHERE member_id = ?', [member.id]);
         this.store.run('DELETE FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
       });
-      const sync = await this.trySyncMemberToDevice(this.getMember(member.id));
-      return { enrollment: null, charge: null, sync };
+      const updatedMember = this.getMember(member.id);
+      const sync = backgroundSync ? this.scheduleMemberSync(updatedMember) : await this.trySyncMemberToDevice(updatedMember);
+      return { enrollment: null, charge: null, sync, member: this.getMemberSummary(member.id) };
     }
     const plan = this.store.get('SELECT id, duration_days, price_cents FROM plans WHERE id = ?', [Number(plan_id)]);
     if (!plan || !Number.isInteger(plan.duration_days) || plan.duration_days <= 0) throw new Error('Selecione um plano válido.');
@@ -1150,8 +1219,9 @@ export class AccessService {
         }
       }
     });
-    const sync = await this.trySyncMemberToDevice(this.getMember(member.id));
-    return { enrollment: this.getPlanEnrollment(member.id), charge: createdCharge, sync };
+    const updatedMember = this.getMember(member.id);
+    const sync = backgroundSync ? this.scheduleMemberSync(updatedMember) : await this.trySyncMemberToDevice(updatedMember);
+    return { enrollment: this.getPlanEnrollment(member.id), charge: createdCharge, sync, member: this.getMemberSummary(member.id) };
   }
 
   deleteMembershipCharge(chargeId) {
@@ -1170,7 +1240,7 @@ export class AccessService {
     return { ok: true, id, member_id: charge.member_id, due: charge.due, amount: charge.amount };
   }
 
-  async setMemberStatus(memberId, status) {
+  async setMemberStatus(memberId, status, { backgroundSync = false } = {}) {
     if (!['active', 'blocked', 'pending'].includes(status)) {
       throw new Error('Status invalido.');
     }
@@ -1190,8 +1260,8 @@ export class AccessService {
     );
 
     const updated = this.getMember(member.id);
-    const sync = await this.trySyncMemberToDevice(updated);
-    return { member: this.getMember(member.id), sync };
+    const sync = backgroundSync ? this.scheduleMemberSync(updated) : await this.trySyncMemberToDevice(updated);
+    return { member: this.getMemberSummary(member.id), sync };
   }
 
   listPayments(options = 100) {
@@ -1252,7 +1322,7 @@ export class AccessService {
   }
 
   async recordPayment({ member_id, plan_id, amount_cents, method = 'pix', external_id = null, notes = null, charge_id = null, use_credit = false, credit_excess_cents = 0, staff_id = null, commission_cents = 0, split_payments = null, debt_cents = 0, debt_due_date = null, debt_notes = null },
-    { requireOpenCash = false, reconcileOpenCharge = false, exactCharge = false, onRecorded = null, separateOnlineCash = false } = {}) {
+    { requireOpenCash = false, reconcileOpenCharge = false, exactCharge = false, onRecorded = null, separateOnlineCash = false, backgroundSync = false } = {}) {
     const existing = external_id && this.store.get('SELECT * FROM payments WHERE external_id = ?', [external_id]);
     if (existing) {
       const creditUsed = this.store.get(
@@ -1476,7 +1546,7 @@ export class AccessService {
     });
 
     const updatedMember = this.getMember(member.id);
-    const sync = await this.trySyncMemberToDevice(updatedMember);
+    const sync = backgroundSync ? this.scheduleMemberSync(updatedMember) : await this.trySyncMemberToDevice(updatedMember);
     const payments = txResult.insertedPaymentIds.map((pid) => this.store.get('SELECT * FROM payments WHERE id = ?', [pid]));
     const debt = txResult.createdDebtId ? this.store.get('SELECT * FROM member_debts WHERE id = ?', [txResult.createdDebtId]) : null;
 
@@ -1484,7 +1554,7 @@ export class AccessService {
       payment: payments[0] || null,
       payments,
       debt,
-      member: this.getMember(member.id),
+      member: this.getMemberSummary(member.id),
       sync,
       credit_used_cents: creditUsedCents,
     };
@@ -1514,7 +1584,7 @@ export class AccessService {
     );
   }
 
-  async deletePayment(paymentId) {
+  async deletePayment(paymentId, { backgroundSync = false } = {}) {
     const id = Number(paymentId);
     if (!Number.isInteger(id) || id <= 0) {
       throw Object.assign(new Error('Pagamento inválido.'), { statusCode: 400 });
@@ -1622,8 +1692,10 @@ export class AccessService {
     });
 
     const updatedMember = member ? this.getMember(member.id) : null;
-    const sync = updatedMember ? await this.trySyncMemberToDevice(updatedMember) : null;
-    return { ok: true, id, member: updatedMember, sync };
+    const sync = updatedMember
+      ? (backgroundSync ? this.scheduleMemberSync(updatedMember) : await this.trySyncMemberToDevice(updatedMember))
+      : null;
+    return { ok: true, id, member: updatedMember ? this.getMemberSummary(updatedMember.id) : null, sync };
   }
 
   payMemberDebt(debtId, { amount_cents = null, method = 'pix', split_payments = null, notes = null } = {}, { requireOpenCash = true } = {}) {
@@ -1688,7 +1760,7 @@ export class AccessService {
     return {
       debt: this.store.get('SELECT *, (amount_cents - paid_cents) AS remaining_cents FROM member_debts WHERE id = ?', [debt.id]),
       payments: tx.map((pid) => this.store.get('SELECT * FROM payments WHERE id = ?', [pid])),
-      member: this.getMember(debt.member_id),
+      member: this.getMemberSummary(debt.member_id),
     };
   }
 
@@ -1703,7 +1775,7 @@ export class AccessService {
     );
     return {
       debt: this.store.get('SELECT * FROM member_debts WHERE id = ?', [debt.id]),
-      member: this.getMember(debt.member_id),
+      member: this.getMemberSummary(debt.member_id),
     };
   }
 
@@ -2246,7 +2318,7 @@ export class AccessService {
     return executeEntry();
   }
 
-  async recordCancellation({ member_id, reason, notes = null }) {
+  async recordCancellation({ member_id, reason, notes = null }, { backgroundSync = false } = {}) {
     const member = this.getMember(member_id);
     if (!member) throw new Error('Aluno não encontrado.');
     if (member.access_role !== 'student') throw new Error('Cancelamento exige um cadastro de aluno.');
@@ -2260,7 +2332,11 @@ export class AccessService {
         [member.id, member.plan_id || null, cleanReason, notes ? String(notes).trim() : null],
       );
     });
-    if (member.status !== 'blocked') await this.trySyncMemberToDevice(this.getMember(member.id));
+    if (member.status !== 'blocked') {
+      const updatedMember = this.getMember(member.id);
+      if (backgroundSync) this.scheduleMemberSync(updatedMember);
+      else await this.trySyncMemberToDevice(updatedMember);
+    }
 
     return this.store.get(
       `SELECT ec.*, m.name AS member_name, p.name AS plan_name
@@ -2605,7 +2681,7 @@ export class AccessService {
     };
   }
 
-  async freezeMember(memberId, { days = null, until = null, reason = null } = {}) {
+  async freezeMember(memberId, { days = null, until = null, reason = null } = {}, { backgroundSync = false } = {}) {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Aluno não encontrado.');
     if (member.access_role !== 'student') throw new Error('Trancamento disponível apenas para alunos.');
@@ -2650,11 +2726,11 @@ export class AccessService {
     });
 
     const updated = this.getMember(member.id);
-    const sync = await this.trySyncMemberToDevice(updated);
-    return { member: this.getMember(member.id), sync };
+    const sync = backgroundSync ? this.scheduleMemberSync(updated) : await this.trySyncMemberToDevice(updated);
+    return { member: this.getMemberSummary(member.id), sync };
   }
 
-  async unfreezeMember(memberId) {
+  async unfreezeMember(memberId, { backgroundSync = false } = {}) {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Aluno não encontrado.');
     if (!member.frozen_until) throw new Error('Matrícula não está trancada.');
@@ -2695,11 +2771,11 @@ export class AccessService {
     });
 
     const updated = this.getMember(member.id);
-    const sync = await this.trySyncMemberToDevice(updated);
-    return { member: this.getMember(member.id), extendedDays: extendDays, sync };
+    const sync = backgroundSync ? this.scheduleMemberSync(updated) : await this.trySyncMemberToDevice(updated);
+    return { member: this.getMemberSummary(member.id), extendedDays: extendDays, sync };
   }
 
-  async createVisitor({ name, document = null, phone = null, valid_until = null } = {}) {
+  async createVisitor({ name, document = null, phone = null, valid_until = null } = {}, { backgroundSync = false } = {}) {
     if (!name?.trim()) throw new Error('Nome do visitante é obrigatório.');
     const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
     const expiresAt = valid_until && /^\d{4}-\d{2}-\d{2}$/.test(String(valid_until).trim())
@@ -2719,11 +2795,11 @@ export class AccessService {
     });
 
     const visitor = this.getMember(visitorId);
-    const sync = await this.trySyncMemberToDevice(visitor);
+    const sync = backgroundSync ? this.scheduleMemberSync(visitor) : await this.trySyncMemberToDevice(visitor);
     return { visitor: this.getMember(visitorId), sync };
   }
 
-  async convertVisitorToMember(memberId, { document, plan_id = null, phone = null, email = null } = {}) {
+  async convertVisitorToMember(memberId, { document, plan_id = null, phone = null, email = null } = {}, { backgroundSync = false } = {}) {
     const member = this.getMember(memberId);
     if (!member) throw new Error('Visitante não encontrado.');
     if (!member.is_visitor) throw new Error('Este cadastro já é um aluno regular.');
@@ -2763,8 +2839,8 @@ export class AccessService {
     });
 
     const updated = this.getMember(member.id);
-    const sync = await this.trySyncMemberToDevice(updated);
-    return { member: this.getMember(member.id), sync };
+    const sync = backgroundSync ? this.scheduleMemberSync(updated) : await this.trySyncMemberToDevice(updated);
+    return { member: this.getMemberSummary(member.id), sync };
   }
 
   signMemberContract(memberId, { signature } = {}) {

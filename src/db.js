@@ -13,6 +13,9 @@ export class DatabaseStore {
     this.filePath = filePath;
     this.inTransaction = false;
     this._savepointSeq = 0;
+    this._writeSeq = 0;
+    this._saveSeq = 0;
+    this._asyncSaveQueue = Promise.resolve();
   }
 
   static async create(filePath = null) {
@@ -76,22 +79,55 @@ export class DatabaseStore {
       this._saveTimer = null;
     }
     if (!this.filePath) return;
+    this._saveSeq = ++this._writeSeq;
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     const data = this.db.export();
     const temporaryPath = `${this.filePath}.tmp`;
-    fs.writeFileSync(temporaryPath, Buffer.from(data), { flush: true });
+    fs.writeFileSync(temporaryPath, Buffer.from(data));
     fs.renameSync(temporaryPath, this.filePath);
+  }
+
+  saveAsync() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    if (!this.filePath) return Promise.resolve();
+    const seq = ++this._writeSeq;
+    const data = Buffer.from(this.db.export());
+    const filePath = this.filePath;
+    const temporaryPath = `${filePath}.async.tmp`;
+    this._asyncSaveQueue = this._asyncSaveQueue
+      .catch(() => {})
+      .then(async () => {
+        if (this._saveSeq > seq) return;
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(temporaryPath, data);
+        if (this._saveSeq > seq) {
+          await fs.promises.unlink(temporaryPath).catch(() => {});
+          return;
+        }
+        await fs.promises.rename(temporaryPath, filePath);
+        this._saveSeq = Math.max(this._saveSeq, seq);
+      });
+    return this._asyncSaveQueue;
+  }
+
+  flush() {
+    if (this._saveTimer) {
+      this.save();
+      return true;
+    }
+    return false;
   }
 
   scheduleSave(delayMs = 300) {
     if (!this.filePath || this._saveTimer) return;
     this._saveTimer = setTimeout(() => {
       this._saveTimer = null;
-      try {
-        this.save();
-      } catch (err) {
+      this.saveAsync().catch((err) => {
         console.warn('[DB] Falha ao salvar em background:', err.message);
-      }
+      });
     }, Math.max(10, Number(delayMs) || 300));
     this._saveTimer.unref?.();
   }
@@ -117,8 +153,21 @@ export class DatabaseStore {
 
   run(sql, params = []) {
     if (this.filePath && !this.inTransaction) return this.transaction(() => this.run(sql, params));
+    return this._execRun(sql, params);
+  }
+
+  runDeferred(sql, params = [], delayMs = 300) {
+    const res = this._execRun(sql, params);
+    if (this.filePath && !this.inTransaction) {
+      this.scheduleSave(delayMs);
+    }
+    return res;
+  }
+
+  _execRun(sql, params = []) {
     const stmt = this.db.prepare(sql);
     try { stmt.run(params); } finally { stmt.free(); }
+    this._writeSeq += 1;
     if (/\bsettings\b/i.test(sql)) this._settingsCache = null;
     const lastIdRow = this.get('SELECT last_insert_rowid() AS id');
     const changesRow = this.get('SELECT changes() AS changes');
@@ -716,6 +765,7 @@ export class DatabaseStore {
         paid_at TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_member_debts_member_status ON member_debts(member_id, status);
+      CREATE INDEX IF NOT EXISTS idx_member_debts_status_member ON member_debts(status, member_id);
       CREATE INDEX IF NOT EXISTS idx_sales_sold_at ON sales(sold_at);
 
       CREATE TABLE IF NOT EXISTS partner_access_requests (
