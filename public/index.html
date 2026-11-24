@@ -284,6 +284,7 @@
                 <div class="dashboard-metric-link" data-go="billing" role="button" tabindex="0"><dt>Cobranças vencidas em aberto</dt><dd id="statOverdue">—</dd></div>
                 <div class="dashboard-metric-link" data-go="products" role="button" tabindex="0"><dt>Produtos com até 5 unidades</dt><dd id="statLowStock">—</dd></div>
                 <div class="dashboard-metric-link" data-go="cash" role="button" tabindex="0"><dt>Caixa Online (Mercado Pago)</dt><dd id="statOnlineToday">—</dd></div>
+                <div class="dashboard-metric-link" data-go="settings" data-expand="settings-backups" role="button" tabindex="0"><dt>Saúde do Backup</dt><dd id="statBackupHealth">—</dd></div>
               </dl>
             </section>
             <section class="panel">
@@ -401,6 +402,7 @@
             <button type="button" class="chip" data-filter="pending">Pendentes</button>
             <button type="button" class="chip" data-filter="expired">Vencidos</button>
             <button type="button" class="chip" data-filter="partner">Convênios</button>
+            <button type="button" class="chip" data-filter="active_noface">Ativos sem FaceID</button>
             <button type="button" class="chip" data-filter="noface">Sem FaceID</button>
           </div>
           <div class="table-wrap">
@@ -471,6 +473,7 @@
               <div class="card"><span class="card-label">Entradas em todas as formas</span><strong id="cashInVal" class="card-value">R$ 0,00</strong></div>
               <div class="card"><span class="card-label">Saídas / Sangrias</span><strong id="cashOutVal" class="card-value">R$ 0,00</strong></div>
               <div class="card"><span class="card-label">Dinheiro esperado na gaveta</span><strong id="cashExpectedVal" class="card-value">R$ 0,00</strong></div>
+              <div class="card card-accent-amber"><span class="card-label">Reserva 5% (sugerida)</span><strong id="cashReserveVal" class="card-value">R$ 0,00</strong></div>
             </div>
             <div id="cashMethodsSummary" class="cash-methods-grid"></div>
             <div class="grid-2 cash-operation-forms">
@@ -567,6 +570,7 @@
                 <small id="cashDetailMeta" class="muted"></small>
               </div>
               <div class="inline-actions">
+                <button type="button" id="btnCopyCashSummary" class="btn btn-primary btn-sm">Copiar resumo (WhatsApp)</button>
                 <button type="button" id="btnPrintCashDetail" class="btn btn-secondary btn-sm">Imprimir resumo</button>
                 <button type="button" id="btnExportCashDetailCsv" class="btn btn-secondary btn-sm">Exportar CSV</button>
                 <button type="button" id="btnCloseCashDetail" class="btn btn-secondary btn-sm">Fechar</button>
@@ -2118,10 +2122,10 @@
     </main>
     </div>
     <nav id="quickSideDock" class="quick-side-dock" aria-label="Atalhos rápidos">
-      <button type="button" id="btnQuickDockRegister" class="quick-side-btn quick-side-btn--register" aria-label="Cadastrar aluno" title="Cadastrar aluno" data-tooltip="Cadastrar aluno">
+      <button type="button" id="btnQuickDockRegister" class="quick-side-btn quick-side-btn--register" aria-label="Cadastrar aluno (F2)" title="Cadastrar aluno (F2)" data-tooltip="Cadastrar aluno (F2)">
         <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>
       </button>
-      <button type="button" id="btnQuickDockPay" class="quick-side-btn quick-side-btn--pay" aria-label="Receber pagamento" title="Receber pagamento" data-tooltip="Receber pagamento">
+      <button type="button" id="btnQuickDockPay" class="quick-side-btn quick-side-btn--pay" aria-label="Receber pagamento (F4)" title="Receber pagamento (F4)" data-tooltip="Receber pagamento (F4)">
         <svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg>
       </button>
     </nav>

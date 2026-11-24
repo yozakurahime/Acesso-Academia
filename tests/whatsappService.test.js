@@ -343,3 +343,44 @@ test('fila pausada não dispara mensagens e modo Meta envia apenas com modelo ap
   assert.equal(sends[0].template.name, 'confirmacao_pagamento');
   assert.equal(sends[0].template.components[0].parameters.length, 4);
 });
+
+test('WhatsappService enfileira recuperacao de pendentes e anexa link MP em lembretes de cobranca', async () => {
+  const store = await DatabaseStore.create();
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_notify_due: '1',
+    mp_access_token: 'TEST-MP',
+  });
+  const planId = store.get('SELECT id FROM plans LIMIT 1')?.id
+    || store.run("INSERT INTO plans (name, duration_days, price_cents, active) VALUES ('Mensal', 30, 10000, 1)").lastInsertRowid;
+  const pendingId = store.run(
+    "INSERT INTO members (name, document, phone, status, access_role, plan_id, created_at) VALUES ('Lucas Pendente', '52998224725', '62991110000', 'pending', 'student', ?, datetime('now', 'localtime', '-3 hours'))",
+    [planId],
+  ).lastInsertRowid;
+
+  const wa = new WhatsappService(store, { authDir: null });
+  wa.setGatewayService({
+    createBatchPayment: async () => ({
+      charge: { payment_url: 'https://mpago.la/teste-link-123' },
+    }),
+  });
+
+  const queued = wa.enqueuePendingRecoveryReminders();
+  assert.equal(queued, 1);
+  assert.equal(wa.enqueuePendingRecoveryReminders(), 0);
+
+  const recoveryRow = store.get("SELECT * FROM whatsapp_logs WHERE kind = 'pending_recovery' AND member_id = ?", [pendingId]);
+  assert.ok(recoveryRow);
+  assert.match(recoveryRow.message, /quero pagar/i);
+
+  const dueRow = wa.enqueueMessage({
+    memberId: pendingId,
+    phone: '62991110000',
+    kind: 'due_reminder',
+    refKey: 'due:2026-12-01',
+    message: 'Seu plano vence em breve!',
+  });
+  const dueItem = store.get('SELECT * FROM whatsapp_logs WHERE id = ?', [dueRow.id]);
+  const enriched = await wa._enrichMessageWithPaymentLink(dueItem, store.getSettings());
+  assert.match(enriched, /https:\/\/mpago\.la\/teste-link-123/);
+});

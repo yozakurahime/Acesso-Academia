@@ -2475,7 +2475,7 @@ document.getElementById('billingQuickAdjust')?.addEventListener('click', (event)
   renderBillingSummary();
 });
 
-let memberCounts = { all: 0, active: 0, blocked: 0, pending: 0, noface: 0 };
+let memberCounts = { all: 0, active: 0, blocked: 0, pending: 0, active_noface: 0, noface: 0 };
 
 function updateMemberFilterChips() {
   const counts = memberCounts;
@@ -2484,6 +2484,7 @@ function updateMemberFilterChips() {
     active: `Ativos (${counts.active})`,
     blocked: `Bloqueados (${counts.blocked})`,
     pending: `Pendentes (${counts.pending})`,
+    active_noface: `Ativos sem FaceID (${counts.active_noface})`,
     noface: `Sem FaceID (${counts.noface})`,
   };
   document.querySelectorAll('#memberFilterChips .chip').forEach((chip) => {
@@ -2504,6 +2505,7 @@ function renderMembersTable() {
     const m = entry.member;
     const status = m.access_status || m.status;
     if (['active', 'blocked', 'pending'].includes(state.memberFilter) && status !== state.memberFilter) return false;
+    if (state.memberFilter === 'active_noface' && (status !== 'active' || m.face_registered)) return false;
     if (state.memberFilter === 'noface' && m.face_registered) return false;
     if (state.memberFilter === 'partner' && !m.partner_provider) return false;
     if (state.memberFilter === 'expired' && (m.partner_provider || !m.valid_until || m.valid_until >= todayIso)) return false;
@@ -2604,11 +2606,14 @@ function buildMemberSearchEntry(member) {
 
 function recomputeMemberCounts() {
   const todayIso = billingDateFormat.format(new Date());
-  const counts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, noface: 0 };
+  const counts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, active_noface: 0, noface: 0 };
   for (const member of state.allMembers) {
     const status = member.access_status || member.status;
     if (status === 'active' || status === 'blocked' || status === 'pending') counts[status]++;
-    if (!member.face_registered) counts.noface++;
+    if (!member.face_registered) {
+      counts.noface++;
+      if (status === 'active') counts.active_noface++;
+    }
     if (member.partner_provider) counts.partner++;
     if (!member.partner_provider && member.valid_until && member.valid_until < todayIso) counts.expired++;
   }
@@ -4279,6 +4284,10 @@ async function loadCurrentCash() {
     document.getElementById('cashInVal').textContent = fmtMoney(session.total_in_cents);
     document.getElementById('cashOutVal').textContent = fmtMoney(session.total_out_cents);
     document.getElementById('cashExpectedVal').textContent = fmtMoney(session.expected_cents);
+    const reserveEl = document.getElementById('cashReserveVal');
+    if (reserveEl) {
+      reserveEl.textContent = fmtMoney(Math.round(Number(session.total_in_cents || 0) * 0.05));
+    }
     const methodsEl = document.getElementById('cashMethodsSummary');
     if (methodsEl) {
       const methods = session.totals_by_method || [];
@@ -4501,6 +4510,43 @@ document.getElementById('btnCloseCashDetail')?.addEventListener('click', () => {
   selectedClosedCashSession = null;
   document.getElementById('cashHistoryDetailPanel')?.classList.add('hidden');
   document.querySelectorAll('.cash-history-row').forEach((row) => row.classList.remove('active'));
+});
+
+function buildCashSummaryText(detail) {
+  if (!detail) return '';
+  const methodsLines = (detail.totals_by_method || [])
+    .map((m) => `• ${methodName(m.method)}: *${fmtMoney(m.amount_cents)}*`)
+    .join('\n');
+  const reserveCents = Math.round(Number(detail.total_in_cents || 0) * 0.05);
+  const diff = Number(detail.closing_cents ?? 0) - Number(detail.expected_cents ?? 0);
+  const diffText = diff === 0 ? 'Exato' : diff > 0 ? `Sobra de ${fmtMoney(diff)}` : `Falta de ${fmtMoney(Math.abs(diff))}`;
+  return [
+    `*Fechamento de Caixa — Turno #${detail.id}*`,
+    `Operador: ${detail.staff_name || '—'}`,
+    `Abertura: ${fmtDateTime(detail.opened_at)}`,
+    detail.closed_at ? `Fechamento: ${fmtDateTime(detail.closed_at)}` : null,
+    `\nSaldo inicial: ${fmtMoney(detail.opening_cents)}`,
+    `Entradas totais: *${fmtMoney(detail.total_in_cents)}*`,
+    `Saídas / Sangrias: ${fmtMoney(detail.total_out_cents)}`,
+    `Dinheiro esperado: ${fmtMoney(detail.expected_cents)}`,
+    detail.closing_cents != null ? `Conferido na gaveta: *${fmtMoney(detail.closing_cents)}* (${diffText})` : null,
+    `Reserva sugerida (5%): *${fmtMoney(reserveCents)}*`,
+    methodsLines ? `\n*Por forma de pagamento:*\n${methodsLines}` : null,
+    detail.notes ? `\nObs.: ${detail.notes}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+document.getElementById('btnCopyCashSummary')?.addEventListener('click', async () => {
+  if (!selectedClosedCashSession) return;
+  const text = buildCashSummaryText(selectedClosedCashSession);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      showToast('Resumo do fechamento copiado para enviar no WhatsApp!');
+      return;
+    }
+  } catch {}
+  window.prompt('Copie o resumo do fechamento:', text);
 });
 
 document.getElementById('btnExportCashDetailCsv')?.addEventListener('click', () => {
@@ -4866,6 +4912,20 @@ async function loadSettings() {
   if (document.getElementById('sMaxCapacity')) document.getElementById('sMaxCapacity').value = s.max_capacity || '0';
   if (document.getElementById('backupLastAt')) {
     document.getElementById('backupLastAt').textContent = s.backup_last_at ? `Último backup: ${fmtDateTime(s.backup_last_at)}` : 'Nenhum backup gerado ainda.';
+  }
+  const backupHealthEl = document.getElementById('statBackupHealth');
+  if (backupHealthEl) {
+    const latestStr = [s.backup_last_at, s.backup_gdrive_last_at].filter(Boolean).sort().at(-1);
+    if (!latestStr) {
+      backupHealthEl.innerHTML = '<span class="badge badge-pending">Pendente</span>';
+    } else {
+      const diffDays = Math.floor((Date.now() - new Date(latestStr).getTime()) / 86400000);
+      backupHealthEl.innerHTML = Number.isFinite(diffDays) && diffDays > 3
+        ? `<span class="badge badge-blocked">Atrasado (${diffDays}d)</span>`
+        : '<span class="badge badge-active">Em dia</span>';
+    }
+  }
+  if (document.getElementById('backupLastAt')) {
     const gdriveEnabledEl = document.getElementById('gdriveEnabled');
     if (gdriveEnabledEl) {
       gdriveEnabledEl.checked = s.backup_gdrive_enabled === 'true';
@@ -5533,7 +5593,7 @@ document.getElementById('closeCashForm').addEventListener('submit', async (e) =>
   if (!window.confirm('Confirma o encerramento do turno e fechamento do caixa?')) return;
   await withLoading(e.target, async () => {
     try {
-      await api('/api/cash/close', {
+      const closed = await api('/api/cash/close', {
         method: 'POST',
         body: JSON.stringify({
           closing_cents: toCents(document.getElementById('closeCashAmount').value),
@@ -5542,8 +5602,12 @@ document.getElementById('closeCashForm').addEventListener('submit', async (e) =>
       });
       e.target.reset();
       document.getElementById('closeCashDiff').classList.add('hidden');
-      showToast('Caixa fechado!');
+      showToast('Caixa fechado! Resumo pronto na aba Turnos Encerrados.');
       await loadCash();
+      if (closed?.id) {
+        if (typeof switchCashSubtab === 'function') switchCashSubtab('history');
+        await openCashSessionDetail(closed.id);
+      }
     } catch (err) {
       showToast(err.message, true);
     }
@@ -7802,6 +7866,20 @@ document.addEventListener('keydown', (e) => {
   if (!e.repeat && !modal && (e.key === 'F9' || (!isTyping && e.ctrlKey && e.altKey && e.key.toLowerCase() === 'l'))) {
     e.preventDefault();
     document.getElementById('btnRelease')?.click();
+  }
+  if (!e.repeat && !modal && e.key === 'F2') {
+    const btn = document.getElementById('btnQuickDockRegister');
+    if (btn && !btn.classList.contains('hidden')) {
+      e.preventDefault();
+      btn.click();
+    }
+  }
+  if (!e.repeat && !modal && e.key === 'F4') {
+    const btn = document.getElementById('btnQuickDockPay');
+    if (btn && !btn.classList.contains('hidden')) {
+      e.preventDefault();
+      btn.click();
+    }
   }
 });
 

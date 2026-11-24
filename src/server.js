@@ -58,6 +58,7 @@ async function start() {
   whatsappBotService.setGatewayService(gatewayService);
   whatsappBotService.setAccessService(accessService);
   whatsappService.setBotHandler(whatsappBotService);
+  whatsappService.setGatewayService(gatewayService);
 
   const app = express();
   app.disable('x-powered-by');

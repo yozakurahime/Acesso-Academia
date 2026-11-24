@@ -13,6 +13,8 @@ import {
 const GREETINGS = ['Olá', 'Oi', 'Tudo bem', 'Olá! Tudo bem'];
 const AUTOMATED_CAMPAIGN_KINDS = [
   'due_reminder',
+  'overdue_reminder',
+  'pending_recovery',
   'inactive',
   'birthday',
   'workout_review',
@@ -119,6 +121,10 @@ export class WhatsappService {
 
   setBotHandler(handler) {
     this.onBotMessage = handler;
+  }
+
+  setGatewayService(gatewayService) {
+    this.gatewayService = gatewayService || null;
   }
 
   isMetaCloudMode(settings = this.store.getSettings()) {
@@ -1011,6 +1017,48 @@ export class WhatsappService {
     return queued;
   }
 
+  enqueuePendingRecoveryReminders(now = new Date()) {
+    const settings = this.store.getSettings();
+    if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_due === '0') return 0;
+
+    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
+    if (remainingBudget === 0) return 0;
+
+    const candidates = this.store.all(
+      `SELECT m.id, m.name, m.phone, m.plan_id, p.name AS plan_name
+       FROM members m
+       LEFT JOIN plans p ON p.id = m.plan_id
+       WHERE COALESCE(m.access_role, 'student') = 'student'
+         AND m.status = 'pending'
+         AND m.phone IS NOT NULL AND trim(m.phone) <> ''
+         AND m.created_at <= datetime('now', 'localtime', '-2 hours')
+         AND m.created_at >= datetime('now', 'localtime', '-48 hours')
+         AND NOT EXISTS (SELECT 1 FROM payments pay WHERE pay.member_id = m.id)
+       ORDER BY m.id ASC`,
+    );
+
+    let queued = 0;
+    for (const member of candidates) {
+      if (queued >= remainingBudget) break;
+      const firstName = String(member.name || 'Aluno').trim().split(/\s+/)[0];
+      const gymName = settings.gym_name || 'Academia Oxigênio';
+      const actionText = member.plan_id
+        ? `Seu cadastro para o plano *${member.plan_name || 'Plano'}* ficou aguardando o pagamento. Responda *quero pagar* por aqui que eu gero seu Pix ou link na hora!`
+        : `Seu cadastro na ${gymName} já está salvo! Responda *quero me matricular* por aqui para escolher sua modalidade e concluir sua matrícula.`;
+      const message = `${pickVariant(GREETINGS)} ${firstName}! ${actionText}`;
+      const inserted = this.enqueueMessage({
+        memberId: member.id,
+        phone: member.phone,
+        kind: 'pending_recovery',
+        refKey: `pending:${member.id}`,
+        message,
+      });
+      if (inserted) queued += 1;
+    }
+    return queued;
+  }
+
   enqueueOnboardingCheckins(now = new Date()) {
     const settings = this.store.getSettings();
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_welcome !== '1' || settings.whatsapp_notify_onboarding === '0') return 0;
@@ -1369,6 +1417,7 @@ export class WhatsappService {
     }
     const dueQueued = this.enqueueDueReminders(now);
     const overdueQueued = this.enqueueOverdueTodayReminders(now);
+    const pendingRecoveryQueued = this.enqueuePendingRecoveryReminders(now);
     const onboardingQueued = this.enqueueOnboardingCheckins(now);
     const milestoneQueued = this.enqueueMilestoneMessages(now);
     const inactiveQueued = this.enqueueInactiveCheckins(now);
@@ -1376,13 +1425,14 @@ export class WhatsappService {
     const classReminderQueued = this.enqueueClassReminders(now);
     const workoutReviewQueued = this.enqueueWorkoutReviewReminders(now);
     const winBackQueued = this.enqueueWinBackMessages(now);
-    const total = dueQueued + overdueQueued + onboardingQueued + milestoneQueued + inactiveQueued + birthdayQueued + classReminderQueued + workoutReviewQueued + winBackQueued;
+    const total = dueQueued + overdueQueued + pendingRecoveryQueued + onboardingQueued + milestoneQueued + inactiveQueued + birthdayQueued + classReminderQueued + workoutReviewQueued + winBackQueued;
     if (total > 0 && this.isReadyToSend()) {
       this.processQueue().catch(() => {});
     }
     return {
       dueQueued,
       overdueQueued,
+      pendingRecoveryQueued,
       onboardingQueued,
       milestoneQueued,
       inactiveQueued,
@@ -1424,6 +1474,27 @@ export class WhatsappService {
       [memberId, normalizedPhone, kind, String(message || '').trim()],
     );
     return this.store.get('SELECT * FROM whatsapp_logs WHERE id = ?', [res.lastInsertRowid]);
+  }
+
+  async _enrichMessageWithPaymentLink(item, settings) {
+    const baseText = String(item?.message || '');
+    if (!item?.member_id || !['due_reminder', 'overdue_reminder'].includes(item.kind)) return baseText;
+    if (/https?:\/\//i.test(baseText)) return baseText;
+    if (!this.gatewayService || !String(settings?.mp_access_token || '').trim()) return baseText;
+    try {
+      const { charge } = await this.gatewayService.createBatchPayment({
+        memberIds: [Number(item.member_id)],
+        mode: 'checkout',
+      });
+      if (charge?.payment_url) {
+        const enriched = `${baseText}\n\nPague agora (Pix ou Cartão): ${charge.payment_url}`;
+        this.store.run('UPDATE whatsapp_logs SET message = ? WHERE id = ?', [enriched, item.id]);
+        return enriched;
+      }
+    } catch {
+      // Se não for possível gerar link MP, envia mensagem padrão sem travar fila
+    }
+    return baseText;
   }
 
   async processQueue() {
@@ -1499,10 +1570,11 @@ export class WhatsappService {
               continue;
             }
             const jid = cached.jid;
+            const outboundText = await this._enrichMessageWithPaymentLink(next, settings);
             await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
             await sleepCancelable(1400 + Math.floor(Math.random() * 1800));
             if (this.status !== 'connected' || !this.sock || this.manualDisconnect) break;
-            await withTimeout(this.sock.sendMessage(jid, { text: next.message }), 15000, 'sendMessage');
+            await withTimeout(this.sock.sendMessage(jid, { text: outboundText }), 15000, 'sendMessage');
             await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
           }
 
