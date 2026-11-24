@@ -62,6 +62,11 @@ function applyRoleUi(role) {
   for (const tab of INSTRUCTOR_HIDDEN_TABS) {
     document.querySelectorAll(`.tab[data-tab="${tab}"]`).forEach((el) => el.classList.toggle('hidden', isInstructor));
   }
+  const canMembers = isTabAllowedForRole('members', effectiveRole);
+  const canBilling = isTabAllowedForRole('billing', effectiveRole);
+  document.getElementById('btnQuickDockRegister')?.classList.toggle('hidden', !canMembers);
+  document.getElementById('btnQuickDockPay')?.classList.toggle('hidden', !canBilling);
+  document.getElementById('quickSideDock')?.classList.toggle('hidden', !canMembers && !canBilling);
   if (!isTabAllowedForRole(state.activeTab, effectiveRole)) {
     switchTab('balcao');
   }
@@ -796,6 +801,32 @@ function setMemberFormOpen(open) {
 
 document.getElementById('btnMemberStep1Cancel')?.addEventListener('click', () => {
   setMemberFormOpen(false);
+});
+
+document.getElementById('btnQuickDockRegister')?.addEventListener('click', async () => {
+  const profileModal = document.getElementById('profileModal');
+  if (profileModal && !profileModal.classList.contains('hidden')) {
+    closeProfileModal(false);
+  }
+  setMemberFormOpen(true);
+  if (await switchTab('members') && state.activeTab === 'members') {
+    document.getElementById('mName')?.focus();
+  }
+});
+
+document.getElementById('btnQuickDockPay')?.addEventListener('click', async () => {
+  const profileModal = document.getElementById('profileModal');
+  const openMemberId = (profileModal && !profileModal.classList.contains('hidden') && state.selectedProfileId)
+    ? state.selectedProfileId
+    : null;
+  if (openMemberId) {
+    closeProfileModal(false);
+    await jumpToPaymentForMember(openMemberId);
+    return;
+  }
+  if (await switchTab('billing') && state.activeTab === 'billing') {
+    document.getElementById('pMemberSearch')?.focus();
+  }
 });
 
 document.getElementById('btnNewMember').addEventListener('click', async (event) => {

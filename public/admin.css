@@ -706,6 +706,96 @@ header.workspace-topbar,
   gap: 8px;
 }
 
+.quick-side-dock {
+  position: fixed;
+  right: 18px;
+  bottom: 24px;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.quick-side-btn {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.quick-side-btn .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.quick-side-btn--register:hover,
+.quick-side-btn--register:focus-visible {
+  border-color: rgba(255, 106, 0, 0.55);
+  background: rgba(255, 106, 0, 0.16);
+  color: #ff8c32;
+  transform: translateY(-1px);
+}
+
+.quick-side-btn--pay:hover,
+.quick-side-btn--pay:focus-visible {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+  transform: translateY(-1px);
+}
+
+.quick-side-btn::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) translateX(4px);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.quick-side-btn:hover::before,
+.quick-side-btn:focus-visible::before {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+@media (max-width: 768px) {
+  .quick-side-dock {
+    top: auto;
+    bottom: 16px;
+    right: 12px;
+    transform: none;
+    grid-auto-flow: column;
+  }
+  .quick-side-btn::before {
+    display: none;
+  }
+}
+
 .workspace-app :is(.panel, .modal-content, .dashboard-metrics dd) {
   overflow-wrap: anywhere;
 }
