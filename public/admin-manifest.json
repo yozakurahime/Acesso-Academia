@@ -1,0 +1,33 @@
+{
+  "id": "/app-recepcao",
+  "name": "Academia Oxigênio — Recepção",
+  "short_name": "Oxigênio Recepção",
+  "description": "Sistema de recepção, acesso e financeiro da Academia Oxigênio.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "lang": "pt-BR",
+  "theme_color": "#07080b",
+  "background_color": "#07080b",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

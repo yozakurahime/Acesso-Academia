@@ -1,8 +1,14 @@
-const CACHE_VERSION = 'v13';
+const CACHE_VERSION = 'v14';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 
 const SHELL_ASSETS = [
+  '/',
+  '/index.html',
+  '/app.js',
+  '/admin.css',
+  '/admin-operations.css',
+  '/admin-manifest.json',
   '/aluno',
   '/aluno.html',
   '/aluno.css',
@@ -19,6 +25,11 @@ const SHELL_ASSETS = [
 
 const SHELL_ASSET_SET = new Set(SHELL_ASSETS);
 const NETWORK_FIRST_SHELL_ASSETS = new Set([
+  '/',
+  '/index.html',
+  '/app.js',
+  '/admin.css',
+  '/admin-operations.css',
   '/aluno.css',
   '/styles.css',
   '/aluno.js',
@@ -31,6 +42,20 @@ const STUDENT_READ_ENDPOINTS = new Set([
   '/api/student/assessments',
   '/api/student/bookings',
   '/api/student/classes',
+]);
+const ADMIN_READ_ENDPOINTS = new Set([
+  '/api/dashboard',
+  '/api/members',
+  '/api/plans',
+  '/api/products',
+  '/api/cash/current',
+  '/api/cash/history',
+  '/api/staff',
+  '/api/settings',
+  '/api/classes',
+  '/api/modalities',
+  '/api/payments',
+  '/api/sales',
 ]);
 
 self.addEventListener('install', (event) => {
@@ -65,7 +90,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (STUDENT_READ_ENDPOINTS.has(url.pathname)) {
+  if (STUDENT_READ_ENDPOINTS.has(url.pathname) || ADMIN_READ_ENDPOINTS.has(url.pathname)) {
     event.respondWith(networkFirstWorkouts(request));
     return;
   }
@@ -78,6 +103,15 @@ self.addEventListener('fetch', (event) => {
 
   if (isStudentNavigate) {
     event.respondWith(networkFirstNavigate(request, url));
+    return;
+  }
+
+  const isAdminNavigate =
+    request.mode === 'navigate' &&
+    (url.pathname === '/' || url.pathname === '/index.html');
+
+  if (isAdminNavigate) {
+    event.respondWith(networkFirstNavigate(request, url, { fallbackPath: '/index.html' }));
     return;
   }
 
@@ -113,16 +147,16 @@ async function networkFirstWorkouts(request) {
   }
 }
 
-async function matchShellCache(cache, cacheKey, isNavigate) {
+async function matchShellCache(cache, cacheKey, isNavigate, fallbackPath = '/aluno.html') {
   const cached = await cache.match(cacheKey, { ignoreSearch: true });
   if (cached) return cached;
   if (isNavigate) {
-    return cache.match('/aluno.html', { ignoreSearch: true });
+    return cache.match(fallbackPath, { ignoreSearch: true });
   }
   return null;
 }
 
-async function networkFirstNavigate(request, url, { isNavigate = true } = {}) {
+async function networkFirstNavigate(request, url, { isNavigate = true, fallbackPath = '/aluno.html' } = {}) {
   const cache = await caches.open(SHELL_CACHE);
   const cacheKey = SHELL_ASSET_SET.has(url.pathname) ? url.pathname : request;
 
@@ -132,12 +166,12 @@ async function networkFirstNavigate(request, url, { isNavigate = true } = {}) {
       await cache.put(url.pathname, response.clone());
     }
     if (response && response.status >= 500) {
-      const fallback = await matchShellCache(cache, cacheKey, isNavigate);
+      const fallback = await matchShellCache(cache, cacheKey, isNavigate, fallbackPath);
       if (fallback) return fallback;
     }
     return response;
   } catch (err) {
-    const fallback = await matchShellCache(cache, cacheKey, isNavigate);
+    const fallback = await matchShellCache(cache, cacheKey, isNavigate, fallbackPath);
     if (fallback) return fallback;
     throw err;
   }

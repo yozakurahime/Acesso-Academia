@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#07080b" />
   <title>Academia Oxigênio | Recepção</title>
+  <link rel="manifest" href="/admin-manifest.json" />
   <link rel="icon" href="/oxigenio.jpg" />
   <link rel="stylesheet" href="/styles.css?v=20261121.2" />
   <link rel="stylesheet" href="/admin.css?v=20261121.2" />
@@ -136,7 +137,8 @@
           <button id="workspaceCommandOpen" type="button" class="btn btn-secondary workspace-command-trigger" aria-label="Buscar no painel" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span>Buscar alunos, comandos, páginas...</span><kbd>Ctrl K</kbd></button>
         </div>
         <div class="workspace-account">
-          <div class="live-status-pill" title="Servidor local e banco de dados ativos"><span class="live-status-dot"></span><span>Sistema Online</span></div>
+          <div id="liveStatusPill" class="live-status-pill" title="Servidor e banco de dados ativos"><span class="live-status-dot"></span><span id="liveStatusText">Sistema Online</span></div>
+          <button id="offlineSyncBadge" type="button" class="badge badge-pending hidden" style="cursor:pointer;border:0;" title="Clique para sincronizar pendências offline"></button>
           <a class="workspace-portal-link" href="https://academiaoxigenio.com/aluno" target="_blank" rel="noopener">Portal do aluno <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
           <button id="btnThemeToggle" type="button" class="btn btn-secondary theme-toggle" aria-pressed="false">Tema escuro</button>
           <button id="btnSwitchOperator" type="button" class="btn btn-secondary hidden" title="Trocar operador sem sair da tela"><span id="activeOperatorLabel">admin</span> · Trocar</button>

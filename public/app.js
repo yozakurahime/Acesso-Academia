@@ -456,12 +456,160 @@ async function withLoading(triggerEl, fn) {
   }
 }
 
+const OFFLINE_QUEUE_KEY = 'oxigenio_offline_queue_v1';
+let offlineSyncInProgress = false;
+
+function readOfflineQueue() {
+  try {
+    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeOfflineQueue(items) {
+  try {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(items));
+  } catch {
+    // Ignora falha de cota no localStorage.
+  }
+  updateOfflineStatusUi();
+}
+
+function isOfflineQueueableMutation(url, method) {
+  const m = String(method || 'GET').toUpperCase();
+  if (!['POST', 'PUT'].includes(m)) return false;
+  const path = String(url || '').split('?')[0];
+  return (
+    path === '/api/payments' ||
+    path === '/api/payments/batch' ||
+    path === '/api/sales' ||
+    path === '/api/cash/movements' ||
+    path === '/api/cash/open' ||
+    path === '/api/cash/close' ||
+    path === '/api/members' ||
+    /^\/api\/members\/\d+$/.test(path) ||
+    /^\/api\/members\/\d+\/enrollment$/.test(path) ||
+    /^\/api\/debts\/\d+\/settle$/.test(path) ||
+    /^\/api\/partner-requests\/\d+\/(approve|cancel)$/.test(path)
+  );
+}
+
+function updateOfflineStatusUi() {
+  const online = navigator.onLine !== false;
+  const queue = readOfflineQueue();
+  const statusTextEl = document.getElementById('liveStatusText');
+  const statusPillEl = document.getElementById('liveStatusPill');
+  const syncBadgeEl = document.getElementById('offlineSyncBadge');
+  if (statusTextEl) {
+    statusTextEl.textContent = online ? 'Sistema Online' : 'Modo Offline';
+  }
+  if (statusPillEl) {
+    statusPillEl.style.opacity = online ? '1' : '0.85';
+  }
+  if (syncBadgeEl) {
+    if (!queue.length && online) {
+      syncBadgeEl.classList.add('hidden');
+      syncBadgeEl.textContent = '';
+    } else {
+      syncBadgeEl.classList.remove('hidden');
+      if (!online) {
+        syncBadgeEl.textContent = queue.length ? `Offline · ${queue.length} pendente(s)` : 'Offline';
+      } else {
+        syncBadgeEl.textContent = offlineSyncInProgress
+          ? `Sincronizando ${queue.length}…`
+          : `Sincronizar ${queue.length} pendente(s)`;
+      }
+    }
+  }
+}
+
+async function syncOfflineQueue({ silent = false } = {}) {
+  if (offlineSyncInProgress || navigator.onLine === false) return { synced: 0 };
+  const queue = readOfflineQueue();
+  if (!queue.length) {
+    updateOfflineStatusUi();
+    return { synced: 0 };
+  }
+  offlineSyncInProgress = true;
+  updateOfflineStatusUi();
+  let synced = 0;
+  let dropped = 0;
+  const remaining = [...queue];
+
+  try {
+    while (remaining.length) {
+      const item = remaining[0];
+      try {
+        const res = await fetch(item.url, {
+          method: item.method,
+          headers: { 'Content-Type': 'application/json', ...(item.headers || {}) },
+          body: item.body ?? undefined,
+        });
+        if (res.ok) {
+          remaining.shift();
+          synced += 1;
+          writeOfflineQueue(remaining);
+          continue;
+        }
+        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+          remaining.shift();
+          dropped += 1;
+          writeOfflineQueue(remaining);
+          continue;
+        }
+        break;
+      } catch {
+        break;
+      }
+    }
+  } finally {
+    offlineSyncInProgress = false;
+    updateOfflineStatusUi();
+  }
+
+  if (synced > 0) {
+    if (!silent) showToast(`Conexão restaurada! ${synced} registro(s) sincronizado(s) com o servidor.`);
+    if (typeof loadDashboard === 'function') {
+      Promise.allSettled([loadDashboard(), loadMembers?.(), loadCurrentCash?.(), loadPayments?.()]).catch(() => {});
+    }
+  } else if (dropped > 0 && !silent) {
+    showToast(`${dropped} registro(s) offline não puderam ser aplicados por validação no servidor.`, true);
+  }
+  return { synced, dropped, remaining: remaining.length };
+}
+
 async function api(url, options = {}) {
   if (window.oxigenioDemo) return window.oxigenioDemo.request(url, options);
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
-  });
+  const method = String(options.method || 'GET').toUpperCase();
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      ...options,
+    });
+  } catch (err) {
+    const isNetworkErr = navigator.onLine === false || err?.name === 'TypeError';
+    if (isNetworkErr && isOfflineQueueableMutation(url, method)) {
+      const queue = readOfflineQueue();
+      queue.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        url,
+        method,
+        body: typeof options.body === 'string' ? options.body : undefined,
+        createdAt: new Date().toISOString(),
+      });
+      writeOfflineQueue(queue);
+      showToast('Sem internet: salvo na fila offline e será enviado quando conectar.');
+      return { ok: true, offlineQueued: true };
+    }
+    if (isNetworkErr) {
+      throw new Error('Sem conexão com o servidor. Esta operação exige internet.');
+    }
+    throw err;
+  }
   const contentType = res.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
     const message = res.status === 404
@@ -10680,3 +10828,33 @@ document.getElementById('btnWaBotContextReset')?.addEventListener('click', async
     showToast(err.message, true);
   }
 });
+
+// PWA + sincronização offline da recepção (não interfere no fluxo online nem no atualizador local)
+if ('serviceWorker' in navigator && !window.oxigenioDemo) {
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+}
+
+window.addEventListener('online', () => {
+  updateOfflineStatusUi();
+  syncOfflineQueue().catch(() => {});
+});
+window.addEventListener('offline', () => {
+  updateOfflineStatusUi();
+});
+document.getElementById('offlineSyncBadge')?.addEventListener('click', () => {
+  if (navigator.onLine === false) {
+    showToast('Sem internet no momento. Os registros serão enviados automaticamente quando conectar.');
+    return;
+  }
+  syncOfflineQueue().catch(() => {});
+});
+
+updateOfflineStatusUi();
+if (navigator.onLine !== false && readOfflineQueue().length > 0) {
+  syncOfflineQueue({ silent: true }).catch(() => {});
+}
+setInterval(() => {
+  if (navigator.onLine !== false && readOfflineQueue().length > 0) {
+    syncOfflineQueue({ silent: true }).catch(() => {});
+  }
+}, 15000);
