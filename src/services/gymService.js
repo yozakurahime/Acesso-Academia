@@ -1,5 +1,6 @@
 import { formatCpf, isValidCpf, normalizeCpf } from '../utils/cpf.js';
 import { normalizePartnerInput } from './partnerService.js';
+import { calculatePaymentFee } from './feeUtils.js';
 
 function normalizeMemberName(name) {
   return String(name || '').normalize('NFD').replace(/\p{M}/gu, '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -639,6 +640,7 @@ export class GymService {
   _buildCashSessionSummary(session) {
     if (!session) return null;
 
+    const settings = this.store.getSettings();
     const movements = this.store.all(
       'SELECT * FROM cash_movements WHERE session_id = ? ORDER BY id DESC',
       [session.id],
@@ -646,22 +648,44 @@ export class GymService {
 
     let totalIn = 0;
     let totalOut = 0;
+    let totalFee = 0;
     let drawerBalance = session.opening_cents;
     const totalsByMethod = new Map();
+    const enrichedMovements = [];
     for (const mov of movements) {
+      const isRevenue = mov.type === 'payment' || mov.type === 'sale';
+      const feeInfo = isRevenue
+        ? calculatePaymentFee(mov.amount_cents, mov.method, settings, { channel: 'point' })
+        : { gross_cents: mov.amount_cents, fee_pct: 0, fee_cents: 0, net_cents: mov.amount_cents };
+      enrichedMovements.push({
+        ...mov,
+        fee_pct: feeInfo.fee_pct,
+        fee_cents: feeInfo.fee_cents,
+        net_cents: feeInfo.net_cents,
+      });
+
       if (mov.type === 'out') totalOut += mov.amount_cents;
       else totalIn += mov.amount_cents;
+      if (isRevenue) totalFee += feeInfo.fee_cents;
       if (mov.method === 'cash') drawerBalance += mov.type === 'out' ? -mov.amount_cents : mov.amount_cents;
-      if (mov.type !== 'out') totalsByMethod.set(mov.method, (totalsByMethod.get(mov.method) || 0) + mov.amount_cents);
+      if (mov.type !== 'out') {
+        const prev = totalsByMethod.get(mov.method) || { amount_cents: 0, fee_cents: 0, net_cents: 0 };
+        prev.amount_cents += mov.amount_cents;
+        prev.fee_cents += feeInfo.fee_cents;
+        prev.net_cents += mov.type === 'in' ? mov.amount_cents : feeInfo.net_cents;
+        totalsByMethod.set(mov.method, prev);
+      }
     }
 
     return {
       ...session,
       total_in_cents: totalIn,
+      total_fee_cents: totalFee,
+      total_net_in_cents: Math.max(0, totalIn - totalFee),
       total_out_cents: totalOut,
       expected_cents: session.status === 'closed' && session.expected_cents != null ? session.expected_cents : drawerBalance,
-      totals_by_method: [...totalsByMethod].map(([method, amount_cents]) => ({ method, amount_cents })),
-      movements,
+      totals_by_method: [...totalsByMethod].map(([method, entry]) => ({ method, ...entry })),
+      movements: enrichedMovements,
     };
   }
 

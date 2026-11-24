@@ -1127,8 +1127,22 @@ async function loadDashboard() {
   }
   document.getElementById('statActive').textContent = data.activeMembers;
   document.getElementById('statBlocked').textContent = data.blockedMembers + data.pendingMembers;
-  document.getElementById('statToday').textContent = fmtMoney(data.revenueTodayCents + (data.salesTodayCents ?? 0));
-  document.getElementById('statMonth').textContent = fmtMoney(data.revenueMonthCents + (data.salesMonthCents ?? 0));
+  const grossToday = data.revenueTodayCents + (data.salesTodayCents ?? 0);
+  const netToday = (data.revenueTodayNetCents ?? data.revenueTodayCents) + (data.salesTodayCents ?? 0);
+  const feeToday = Number(data.revenueTodayFeeCents || 0);
+  document.getElementById('statToday').textContent = fmtMoney(grossToday);
+  const statTodayNet = document.getElementById('statTodayNet');
+  if (statTodayNet) {
+    statTodayNet.textContent = feeToday > 0 ? `Líquido: ${fmtMoney(netToday)} (-${fmtMoney(feeToday)} taxas)` : 'Entradas do dia';
+  }
+  const grossMonth = data.revenueMonthCents + (data.salesMonthCents ?? 0);
+  const netMonth = (data.revenueMonthNetCents ?? data.revenueMonthCents) + (data.salesMonthCents ?? 0);
+  const feeMonth = Number(data.revenueMonthFeeCents || 0);
+  document.getElementById('statMonth').textContent = fmtMoney(grossMonth);
+  const statMonthNet = document.getElementById('statMonthNet');
+  if (statMonthNet) {
+    statMonthNet.textContent = feeMonth > 0 ? `Líquido: ${fmtMoney(netMonth)} (-${fmtMoney(feeMonth)} taxas)` : 'Faturamento mensal';
+  }
   for (const [id, value] of Object.entries({
     statExpired: data.expiredEnrollments,
     statOverdue: data.overdueCharges,
@@ -4302,6 +4316,12 @@ async function loadCurrentCash() {
 
     document.getElementById('cashOpeningVal').textContent = fmtMoney(session.opening_cents);
     document.getElementById('cashInVal').textContent = fmtMoney(session.total_in_cents);
+    const cashNetInEl = document.getElementById('cashNetInVal');
+    if (cashNetInEl) {
+      const fee = Number(session.total_fee_cents || 0);
+      const net = Number(session.total_net_in_cents ?? session.total_in_cents ?? 0);
+      cashNetInEl.textContent = fee > 0 ? `Líquido: ${fmtMoney(net)} (-${fmtMoney(fee)} taxas)` : `Líquido: ${fmtMoney(net)}`;
+    }
     document.getElementById('cashOutVal').textContent = fmtMoney(session.total_out_cents);
     document.getElementById('cashExpectedVal').textContent = fmtMoney(session.expected_cents);
     const reserveEl = document.getElementById('cashReserveVal');
@@ -4312,7 +4332,12 @@ async function loadCurrentCash() {
     if (methodsEl) {
       const methods = session.totals_by_method || [];
       methodsEl.innerHTML = methods.length
-        ? methods.map((entry) => `<span class="cash-method-pill"><span>${escapeHtml(methodName(entry.method))}</span><strong>${fmtMoney(entry.amount_cents)}</strong></span>`).join('')
+        ? methods.map((entry) => {
+            const feePart = Number(entry.fee_cents || 0) > 0
+              ? ` <small class="muted">(Líq. ${fmtMoney(entry.net_cents)})</small>`
+              : '';
+            return `<span class="cash-method-pill"><span>${escapeHtml(methodName(entry.method))}</span><strong>${fmtMoney(entry.amount_cents)}${feePart}</strong></span>`;
+          }).join('')
         : '<span class="muted">Sem entradas por forma de pagamento ainda.</span>';
     }
 
@@ -4329,8 +4354,11 @@ async function loadOnlineCash() {
     if (el) el.textContent = txt;
   };
   setTxt('onlineCashTodayVal', fmtMoney(data.today_cents));
+  setTxt('onlineCashTodayNet', Number(data.today_fee_cents || 0) > 0 ? `Líquido: ${fmtMoney(data.today_net_cents)} (-${fmtMoney(data.today_fee_cents)})` : `Líquido: ${fmtMoney(data.today_net_cents ?? data.today_cents)}`);
   setTxt('onlineCashMonthVal', fmtMoney(data.month_cents));
+  setTxt('onlineCashMonthNet', Number(data.month_fee_cents || 0) > 0 ? `Líquido: ${fmtMoney(data.month_net_cents)} (-${fmtMoney(data.month_fee_cents)})` : `Líquido: ${fmtMoney(data.month_net_cents ?? data.month_cents)}`);
   setTxt('onlineCashTotalVal', fmtMoney(data.total_cents));
+  setTxt('onlineCashTotalNet', Number(data.total_fee_cents || 0) > 0 ? `Líquido: ${fmtMoney(data.total_net_cents)} (-${fmtMoney(data.total_fee_cents)})` : `Líquido: ${fmtMoney(data.total_net_cents ?? data.total_cents)}`);
   setTxt('onlineCashCountVal', String(data.total_count || 0));
 
   const body = document.getElementById('onlineCashBody');
@@ -4457,6 +4485,12 @@ async function openCashSessionDetail(sessionId) {
     document.getElementById('cashDetailMeta').textContent = `${fmtDateTime(detail.opened_at)} até ${detail.closed_at ? fmtDateTime(detail.closed_at) : 'em aberto'}${notePart}`;
     document.getElementById('cashDetailOpening').textContent = fmtMoney(detail.opening_cents);
     document.getElementById('cashDetailIn').textContent = fmtMoney(detail.total_in_cents);
+    const detailNetEl = document.getElementById('cashDetailNetIn');
+    if (detailNetEl) {
+      const fee = Number(detail.total_fee_cents || 0);
+      const net = Number(detail.total_net_in_cents ?? detail.total_in_cents ?? 0);
+      detailNetEl.textContent = fee > 0 ? `Líquido: ${fmtMoney(net)} (-${fmtMoney(fee)} taxas)` : `Líquido: ${fmtMoney(net)}`;
+    }
     document.getElementById('cashDetailOut').textContent = fmtMoney(detail.total_out_cents);
     const closingText = detail.closing_cents != null
       ? `${fmtMoney(detail.closing_cents)} / ${fmtMoney(detail.expected_cents)}`
@@ -4467,7 +4501,12 @@ async function openCashSessionDetail(sessionId) {
     if (methodsEl) {
       const methods = detail.totals_by_method || [];
       methodsEl.innerHTML = methods.length
-        ? methods.map((entry) => `<span class="cash-method-pill"><span>${escapeHtml(methodName(entry.method))}</span><strong>${fmtMoney(entry.amount_cents)}</strong></span>`).join('')
+        ? methods.map((entry) => {
+            const feePart = Number(entry.fee_cents || 0) > 0
+              ? ` <small class="muted">(Líq. ${fmtMoney(entry.net_cents)})</small>`
+              : '';
+            return `<span class="cash-method-pill"><span>${escapeHtml(methodName(entry.method))}</span><strong>${fmtMoney(entry.amount_cents)}${feePart}</strong></span>`;
+          }).join('')
         : '<span class="muted">Sem entradas por forma de pagamento neste turno.</span>';
     }
 
@@ -5039,6 +5078,11 @@ async function loadSettings() {
   document.getElementById('gwStoneApiKey').value = s.stone_api_key || '';
   document.getElementById('gwStoneSerial').value = s.stone_terminal_serial || '';
   document.getElementById('gwStoneWebhookSecret').value = s.stone_webhook_secret || '';
+  if (document.getElementById('gwFeePointDebit')) document.getElementById('gwFeePointDebit').value = s.fee_point_debit_pct ?? '0.74';
+  if (document.getElementById('gwFeePointCredit')) document.getElementById('gwFeePointCredit').value = s.fee_point_credit_pct ?? '0.74';
+  if (document.getElementById('gwFeePointPix')) document.getElementById('gwFeePointPix').value = s.fee_point_pix_pct ?? '0';
+  if (document.getElementById('gwFeeOnlinePix')) document.getElementById('gwFeeOnlinePix').value = s.fee_online_pix_pct ?? '0.99';
+  if (document.getElementById('gwFeeOnlineCredit')) document.getElementById('gwFeeOnlineCredit').value = s.fee_online_credit_pct ?? '4.98';
   document.getElementById('authEnabled').checked = s.auth_enabled === '1';
   document.getElementById('authUsername').value = s.auth_username || 'admin';
   if (document.getElementById('authSessionTtlHours')) {
@@ -6853,6 +6897,11 @@ document.getElementById('gatewaysForm')?.addEventListener('submit', async (e) =>
           stone_api_key: document.getElementById('gwStoneApiKey').value.trim(),
           stone_terminal_serial: document.getElementById('gwStoneSerial').value.trim(),
           stone_webhook_secret: document.getElementById('gwStoneWebhookSecret').value.trim(),
+          fee_point_debit_pct: document.getElementById('gwFeePointDebit')?.value.trim() || '0',
+          fee_point_credit_pct: document.getElementById('gwFeePointCredit')?.value.trim() || '0',
+          fee_point_pix_pct: document.getElementById('gwFeePointPix')?.value.trim() || '0',
+          fee_online_pix_pct: document.getElementById('gwFeeOnlinePix')?.value.trim() || '0',
+          fee_online_credit_pct: document.getElementById('gwFeeOnlineCredit')?.value.trim() || '0',
         }),
       });
       document.getElementById('gwPosProvider').value = settings.pos_provider || 'mercadopago';
@@ -8089,6 +8138,12 @@ async function loadReports() {
   }
 
   document.getElementById('repTotalCents').textContent = fmtMoney(data.financial.totalCents);
+  const repNetEl = document.getElementById('repNetTotal');
+  if (repNetEl) {
+    const fee = Number(data.financial.totalFeeCents || 0);
+    const net = Number(data.financial.totalNetCents ?? data.financial.totalCents ?? 0);
+    repNetEl.textContent = fee > 0 ? `Líquido: ${fmtMoney(net)} (-${fmtMoney(fee)} taxas)` : `Líquido: ${fmtMoney(net)}`;
+  }
   document.getElementById('repGrowth').textContent =
     data.financial.growthPct === null
       ? 'Sem comparativo do mês anterior'
@@ -8105,8 +8160,8 @@ async function loadReports() {
 
   renderHorizontalBars(
     'repMethodsChart',
-    data.financial.byMethod.map((m) => ({ label: m.label, value: m.total_cents, count: m.count })),
-    (v, item) => `${fmtMoney(v)} (${item.count})`,
+    data.financial.byMethod.map((m) => ({ label: m.label, value: m.total_cents, count: m.count, fee_cents: m.fee_cents, net_cents: m.net_cents })),
+    (v, item) => (Number(item.fee_cents || 0) > 0 ? `${fmtMoney(v)} (Líq. ${fmtMoney(item.net_cents)}) (${item.count})` : `${fmtMoney(v)} (${item.count})`),
     'Nenhum pagamento confirmado neste mês.',
   );
 

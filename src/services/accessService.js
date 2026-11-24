@@ -5,6 +5,7 @@ import { PartnerService, normalizePartnerInput } from './partnerService.js';
 import { DeviceService } from './deviceService.js';
 import { matchesDeviceIdentity } from './controlIdClient.js';
 import { fitnessToday, weeklyGoal, weeklyVisits, receptionFitnessSummary } from './fitnessProgress.js';
+import { calculatePaymentFee } from './feeUtils.js';
 
 function withoutPortalCredentials(member) {
   if (!member) return member;
@@ -453,17 +454,26 @@ export class AccessService {
       FROM members m LEFT JOIN plan_enrollments e ON e.member_id = m.id LEFT JOIN plans p ON p.id = e.plan_id
       GROUP BY 1`, [this.enrollmentCutoff(today)]).map((row) => [row.status, row.count]));
 
-    const revenueToday =
-      this.store.get(
-        "SELECT COALESCE(SUM(amount_cents), 0) AS total FROM payments WHERE status = 'paid' AND paid_at >= ? AND paid_at < ?",
-        [today, tomorrow],
-      )?.total ?? 0;
-
-    const revenueMonth =
-      this.store.get(
-        "SELECT COALESCE(SUM(amount_cents), 0) AS total FROM payments WHERE status = 'paid' AND paid_at >= ? AND paid_at < ?",
-        [monthStart, nextMonthStart],
-      )?.total ?? 0;
+    const settings = this.store.getSettings();
+    const sumPaymentsWithFees = (startDate, endDate) => {
+      const rows = this.store.all(
+        "SELECT amount_cents, method, external_id FROM payments WHERE status = 'paid' AND paid_at >= ? AND paid_at < ?",
+        [startDate, endDate],
+      );
+      let gross = 0;
+      let fee = 0;
+      for (const row of rows) {
+        const isOnline = String(row.external_id || '').startsWith('mp_') && !String(row.external_id || '').startsWith('mp_point');
+        const info = calculatePaymentFee(row.amount_cents, row.method, settings, { channel: isOnline ? 'online' : 'point' });
+        gross += info.gross_cents;
+        fee += info.fee_cents;
+      }
+      return { gross, fee, net: Math.max(0, gross - fee) };
+    };
+    const revToday = sumPaymentsWithFees(today, tomorrow);
+    const revMonth = sumPaymentsWithFees(monthStart, nextMonthStart);
+    const revenueToday = revToday.gross;
+    const revenueMonth = revMonth.gross;
 
     const recentLogs = this.store.all('SELECT * FROM access_logs ORDER BY id DESC LIMIT 10');
     const operation = this.store.get(`SELECT
@@ -485,7 +495,11 @@ export class AccessService {
       pendingMembers: counts.get('pending') ?? 0,
       teamMembers: counts.get('team') ?? 0,
       revenueTodayCents: revenueToday,
+      revenueTodayFeeCents: revToday.fee,
+      revenueTodayNetCents: revToday.net,
       revenueMonthCents: revenueMonth,
+      revenueMonthFeeCents: revMonth.fee,
+      revenueMonthNetCents: revMonth.net,
       recentLogs,
       ...operation,
       fitness: receptionFitnessSummary(this.store),
@@ -2427,6 +2441,7 @@ export class AccessService {
     const ticketAvgCents = paymentsCount > 0 ? Math.round(mensalidadesCents / paymentsCount) : 0;
     const growthPct = prevTotalCents > 0 ? Number((((totalCents - prevTotalCents) / prevTotalCents) * 100).toFixed(1)) : null;
 
+    const settings = this.store.getSettings();
     const byMethod = this.store.all(
       `SELECT COALESCE(pm.name, p.method) AS label, p.method AS code,
               COALESCE(SUM(p.amount_cents), 0) AS total_cents, COUNT(*) AS count
@@ -2436,7 +2451,28 @@ export class AccessService {
        GROUP BY p.method
        ORDER BY total_cents DESC`,
       [month],
+    ).map((m) => {
+      const info = calculatePaymentFee(m.total_cents, m.code, settings, { channel: 'point' });
+      return { ...m, fee_cents: info.fee_cents, net_cents: info.net_cents };
+    });
+
+    const monthPayRows = this.store.all(
+      "SELECT amount_cents, method, external_id FROM payments WHERE status = 'paid' AND substr(paid_at, 1, 7) = ?",
+      [month],
     );
+    const monthSaleRows = this.store.all(
+      'SELECT total_cents, method FROM sales WHERE substr(sold_at, 1, 7) = ?',
+      [month],
+    );
+    let totalFeeCents = 0;
+    for (const r of monthPayRows) {
+      const isOnline = String(r.external_id || '').startsWith('mp_') && !String(r.external_id || '').startsWith('mp_point');
+      totalFeeCents += calculatePaymentFee(r.amount_cents, r.method, settings, { channel: isOnline ? 'online' : 'point' }).fee_cents;
+    }
+    for (const s of monthSaleRows) {
+      totalFeeCents += calculatePaymentFee(s.total_cents, s.method, settings, { channel: 'point' }).fee_cents;
+    }
+    const totalNetCents = Math.max(0, totalCents - totalFeeCents);
 
     const byPlan = this.store.all(
       `SELECT COALESCE(pl.name, 'Sem plano') AS name,
@@ -2641,6 +2677,8 @@ export class AccessService {
         mensalidadesCents,
         vendasCents,
         totalCents,
+        totalFeeCents,
+        totalNetCents,
         prevTotalCents,
         growthPct,
         paymentsCount,

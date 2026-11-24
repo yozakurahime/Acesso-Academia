@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { normalizeBrPhone } from './whatsappService.js';
+import { calculatePaymentFee } from './feeUtils.js';
 
 function digitsOnly(str) {
   return String(str || '').replace(/\D/g, '');
@@ -135,18 +136,48 @@ export class GatewayService {
   getOnlineCashSummary(limit = 20) {
     const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
     const monthPrefix = today.slice(0, 7);
-    const agg = this.store.get(
-      `SELECT
-         COALESCE(SUM(CASE WHEN date(COALESCE(paid_at, created_at)) = ? THEN amount_cents ELSE 0 END), 0) AS today_cents,
-         COALESCE(SUM(CASE WHEN date(COALESCE(paid_at, created_at)) = ? THEN 1 ELSE 0 END), 0) AS today_count,
-         COALESCE(SUM(CASE WHEN substr(COALESCE(paid_at, created_at), 1, 7) = ? THEN amount_cents ELSE 0 END), 0) AS month_cents,
-         COALESCE(SUM(CASE WHEN substr(COALESCE(paid_at, created_at), 1, 7) = ? THEN 1 ELSE 0 END), 0) AS month_count,
-         COALESCE(SUM(amount_cents), 0) AS total_cents,
-         COUNT(*) AS total_count
+    const settings = this.store.getSettings();
+    const paidRows = this.store.all(
+      `SELECT amount_cents, checkout_ref, COALESCE(paid_at, created_at) AS paid_at
        FROM gateway_charges
        WHERE status = 'paid'`,
-      [today, today, monthPrefix, monthPrefix],
-    ) || { today_cents: 0, today_count: 0, month_cents: 0, month_count: 0, total_cents: 0, total_count: 0 };
+    );
+    const agg = {
+      today_cents: 0,
+      today_fee_cents: 0,
+      today_net_cents: 0,
+      today_count: 0,
+      month_cents: 0,
+      month_fee_cents: 0,
+      month_net_cents: 0,
+      month_count: 0,
+      total_cents: 0,
+      total_fee_cents: 0,
+      total_net_cents: 0,
+      total_count: 0,
+    };
+    for (const row of paidRows) {
+      const channelMethod = row.checkout_ref ? 'credit' : 'pix';
+      const feeInfo = calculatePaymentFee(row.amount_cents, channelMethod, settings, { channel: 'online' });
+      const paidDay = String(row.paid_at || '').slice(0, 10);
+      const paidMonth = String(row.paid_at || '').slice(0, 7);
+      agg.total_cents += feeInfo.gross_cents;
+      agg.total_fee_cents += feeInfo.fee_cents;
+      agg.total_net_cents += feeInfo.net_cents;
+      agg.total_count += 1;
+      if (paidDay === today) {
+        agg.today_cents += feeInfo.gross_cents;
+        agg.today_fee_cents += feeInfo.fee_cents;
+        agg.today_net_cents += feeInfo.net_cents;
+        agg.today_count += 1;
+      }
+      if (paidMonth === monthPrefix) {
+        agg.month_cents += feeInfo.gross_cents;
+        agg.month_fee_cents += feeInfo.fee_cents;
+        agg.month_net_cents += feeInfo.net_cents;
+        agg.month_count += 1;
+      }
+    }
 
     const items = this.store.all(
       `SELECT gc.id, gc.member_id, m.name AS member_name, p.name AS plan_name, gc.amount_cents,
@@ -158,7 +189,11 @@ export class GatewayService {
        ORDER BY COALESCE(gc.paid_at, gc.created_at) DESC, gc.id DESC
        LIMIT ?`,
       [Number(limit)],
-    );
+    ).map((item) => {
+      const channelMethod = item.checkout_ref ? 'credit' : 'pix';
+      const feeInfo = calculatePaymentFee(item.amount_cents, channelMethod, settings, { channel: 'online' });
+      return { ...item, fee_cents: feeInfo.fee_cents, net_cents: feeInfo.net_cents, fee_pct: feeInfo.fee_pct };
+    });
     return { ...agg, items };
   }
 

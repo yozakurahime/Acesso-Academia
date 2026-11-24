@@ -220,7 +220,7 @@
               <div>
                 <span class="card-label">Recebido hoje</span>
                 <strong id="statToday" class="card-value">—</strong>
-                <small class="card-sub">Entradas do dia</small>
+                <small id="statTodayNet" class="card-sub">Entradas do dia</small>
               </div>
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></div>
             </div>
@@ -230,7 +230,7 @@
               <div>
                 <span class="card-label">Recebido no mês</span>
                 <strong id="statMonth" class="card-value">—</strong>
-                <small class="card-sub">Faturamento mensal</small>
+                <small id="statMonthNet" class="card-sub">Faturamento mensal</small>
               </div>
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg></div>
             </div>
@@ -470,7 +470,7 @@
           <div id="cashOpenView" class="hidden">
             <div class="cards">
               <div class="card"><span class="card-label">Abertura</span><strong id="cashOpeningVal" class="card-value">R$ 0,00</strong></div>
-              <div class="card"><span class="card-label">Entradas em todas as formas</span><strong id="cashInVal" class="card-value">R$ 0,00</strong></div>
+              <div class="card"><span class="card-label">Entradas (Bruto)</span><strong id="cashInVal" class="card-value">R$ 0,00</strong><small id="cashNetInVal" class="card-sub">Líquido: R$ 0,00</small></div>
               <div class="card"><span class="card-label">Saídas / Sangrias</span><strong id="cashOutVal" class="card-value">R$ 0,00</strong></div>
               <div class="card"><span class="card-label">Dinheiro esperado na gaveta</span><strong id="cashExpectedVal" class="card-value">R$ 0,00</strong></div>
               <div class="card card-accent-amber"><span class="card-label">Reserva 5% (sugerida)</span><strong id="cashReserveVal" class="card-value">R$ 0,00</strong></div>
@@ -537,9 +537,9 @@
             <span class="badge badge-active">Separado do caixa da recepção</span>
           </div>
           <div class="cards">
-            <div class="card"><span class="card-label">Hoje (Online)</span><strong id="onlineCashTodayVal" class="card-value">R$ 0,00</strong></div>
-            <div class="card"><span class="card-label">No mês (Online)</span><strong id="onlineCashMonthVal" class="card-value">R$ 0,00</strong></div>
-            <div class="card"><span class="card-label">Total acumulado</span><strong id="onlineCashTotalVal" class="card-value">R$ 0,00</strong></div>
+            <div class="card"><span class="card-label">Hoje (Online)</span><strong id="onlineCashTodayVal" class="card-value">R$ 0,00</strong><small id="onlineCashTodayNet" class="card-sub">Líquido: R$ 0,00</small></div>
+            <div class="card"><span class="card-label">No mês (Online)</span><strong id="onlineCashMonthVal" class="card-value">R$ 0,00</strong><small id="onlineCashMonthNet" class="card-sub">Líquido: R$ 0,00</small></div>
+            <div class="card"><span class="card-label">Total acumulado</span><strong id="onlineCashTotalVal" class="card-value">R$ 0,00</strong><small id="onlineCashTotalNet" class="card-sub">Líquido: R$ 0,00</small></div>
             <div class="card"><span class="card-label">Pagamentos confirmados</span><strong id="onlineCashCountVal" class="card-value">0</strong></div>
           </div>
           <div class="table-wrap" style="margin-top:12px;">
@@ -578,7 +578,7 @@
             </div>
             <div class="cards" style="margin-top:10px;">
               <div class="card"><span class="card-label">Abertura</span><strong id="cashDetailOpening" class="card-value">R$ 0,00</strong></div>
-              <div class="card card-accent-green"><span class="card-label">Entradas</span><strong id="cashDetailIn" class="card-value">R$ 0,00</strong></div>
+              <div class="card card-accent-green"><span class="card-label">Entradas (Bruto)</span><strong id="cashDetailIn" class="card-value">R$ 0,00</strong><small id="cashDetailNetIn" class="card-sub">Líquido: R$ 0,00</small></div>
               <div class="card card-accent-red"><span class="card-label">Saídas / Sangrias</span><strong id="cashDetailOut" class="card-value">R$ 0,00</strong></div>
               <div class="card card-accent-amber"><span class="card-label">Conferido / Esperado</span><strong id="cashDetailClosing" class="card-value">R$ 0,00</strong></div>
             </div>
@@ -1207,7 +1207,7 @@
         </div>
 
         <div class="cards overview-cards">
-          <div class="card card-accent-green"><span class="card-label">Receita Total no Mês</span><strong id="repTotalCents" class="card-value">—</strong><small id="repGrowth" class="muted"></small></div>
+          <div class="card card-accent-green"><span class="card-label">Receita Total no Mês</span><strong id="repTotalCents" class="card-value">—</strong><small id="repNetTotal" class="muted"></small><small id="repGrowth" class="muted"></small></div>
           <div class="card card-accent-orange"><span class="card-label">Mensalidades / Produtos</span><strong id="repSplit" class="card-value">—</strong><small id="repTicket" class="muted"></small></div>
           <div class="card card-accent-amber"><span class="card-label">Projeção Fim do Mês</span><strong id="repProjectedEnd" class="card-value">—</strong><small id="repOpenReceivables" class="muted"></small></div>
           <div class="card card-accent-green"><span class="card-label">MRR Estimado (Ativos)</span><strong id="repMrr" class="card-value">—</strong><small class="muted">Receita recorrente mensal</small></div>
@@ -1918,6 +1918,11 @@
                 <label>Stone / Pagar.me — Chave API (Secret Key) <input type="password" id="gwStoneApiKey" placeholder="sk_..." autocomplete="new-password" /></label>
                 <label>Stone — Serial da Maquininha (POS) <input type="text" id="gwStoneSerial" placeholder="Ex: 6L..." /></label>
                 <label>Stone — Segredo do Webhook (opcional) <input type="password" id="gwStoneWebhookSecret" autocomplete="new-password" /></label>
+                <label>Taxa Débito Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointDebit" placeholder="0.74" /></label>
+                <label>Taxa Crédito à vista Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointCredit" placeholder="0.74" /></label>
+                <label>Taxa Pix Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointPix" placeholder="0" /></label>
+                <label>Taxa Pix Online (%) <input type="number" step="0.01" min="0" id="gwFeeOnlinePix" placeholder="0.99" /></label>
+                <label>Taxa Crédito Online (%) <input type="number" step="0.01" min="0" id="gwFeeOnlineCredit" placeholder="4.98" /></label>
                 <div style="align-self:end;">
                   <button type="submit" class="btn btn-primary">Salvar credenciais de pagamento</button>
                 </div>
