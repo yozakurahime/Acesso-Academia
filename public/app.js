@@ -5209,6 +5209,73 @@ function resetMemberWizard() {
   setMemberWizardStep(1);
 }
 
+const SIMILAR_NAME_STOPWORDS = new Set(['da', 'de', 'do', 'dos', 'das', 'e']);
+
+function findSimilarMembersByName(rawName, limit = 6) {
+  const q = normalizeSearch(rawName);
+  if (!q || q.length < 3) return [];
+  const tokens = q.split(/\s+/).filter((t) => t.length >= 2 && !SIMILAR_NAME_STOPWORDS.has(t));
+  if (!tokens.length) return [];
+
+  const scored = [];
+  for (const entry of state.memberSearchIndex || []) {
+    const target = entry.name || '';
+    if (!target) continue;
+    let score = -1;
+    if (target === q) score = 100;
+    else if (target.startsWith(q)) score = 90;
+    else if (tokens.every((t) => target.includes(t))) score = 75;
+    else if (target.includes(q)) score = 60;
+    else {
+      const targetWords = target.split(/\s+/).filter(Boolean);
+      const strongMatched = tokens.filter((t) => t.length >= 3 && targetWords.some((w) => w.startsWith(t) || w.includes(t)));
+      if (strongMatched.length > 0 && (tokens.length === 1 || targetWords[0]?.startsWith(tokens[0]))) {
+        score = 40 + strongMatched.length * 10;
+      }
+    }
+    if (score > 0) scored.push({ member: entry.member, score });
+  }
+
+  scored.sort((a, b) => b.score - a.score || a.member.name.localeCompare(b.member.name));
+  return scored.slice(0, limit).map((item) => item.member);
+}
+
+function renderSimilarMemberSuggestions(rawName) {
+  const alertEl = document.getElementById('mNameCheckAlert');
+  if (!alertEl || memberNameForceConfirmed) return false;
+  const matches = findSimilarMembersByName(rawName);
+  if (!matches.length) {
+    alertEl.classList.add('hidden');
+    alertEl.classList.remove('is-error');
+    alertEl.innerHTML = '';
+    return false;
+  }
+  alertEl.classList.remove('hidden', 'is-error');
+  const itemsHtml = matches
+    .map((m) => {
+      const status = m.access_status === 'active' ? 'Ativo' : m.access_status === 'blocked' ? 'Bloqueado' : 'Pendente';
+      const meta = [
+        `#${m.id}`,
+        m.document ? `CPF ${escapeHtml(m.document)}` : null,
+        status,
+      ].filter(Boolean).join(' · ');
+      return (
+        `<li style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:4px 0;">` +
+        `<span><strong>${escapeHtml(m.name)}</strong> <small class="muted">(${meta})</small></span>` +
+        `<span class="inline-actions" style="gap:6px;">` +
+        `<button type="button" class="btn btn-secondary btn-sm" data-open-profile="${Number(m.id)}">Abrir ficha</button>` +
+        `<button type="button" class="btn btn-success btn-sm" data-pay-existing="${Number(m.id)}">Receber</button>` +
+        `</span>` +
+        `</li>`
+      );
+    })
+    .join('');
+  alertEl.innerHTML =
+    `<strong>Cadastros com nome parecido (confira antes de criar um novo):</strong>` +
+    `<ul style="margin:6px 0 0;padding-left:18px;list-style:disc;">${itemsHtml}</ul>`;
+  return true;
+}
+
 async function checkMemberNameDuplicate({ silent = false } = {}) {
   const nameInput = document.getElementById('mName');
   const name = nameInput.value.trim();
@@ -5223,8 +5290,7 @@ async function checkMemberNameDuplicate({ silent = false } = {}) {
   try {
     const check = await api(`/api/members/check-name?name=${encodeURIComponent(name)}`);
     if (!check.exactMatch) {
-      alertEl.classList.add('hidden');
-      alertEl.classList.remove('is-error');
+      renderSimilarMemberSuggestions(name);
       return { ok: true };
     }
     alertEl.classList.remove('hidden');
@@ -5233,7 +5299,8 @@ async function checkMemberNameDuplicate({ silent = false } = {}) {
       .map(
         (m) =>
           `<li><strong>${escapeHtml(m.name)}</strong> (#${m.id}${m.document ? ` · CPF ${escapeHtml(m.document)}` : ''}) ` +
-          `<button type="button" class="btn btn-secondary btn-sm" data-open-existing="${escapeHtml(m.name)}">Ver na lista</button></li>`,
+          `<button type="button" class="btn btn-secondary btn-sm" data-open-profile="${Number(m.id)}">Abrir ficha</button> ` +
+          `<button type="button" class="btn btn-success btn-sm" data-pay-existing="${Number(m.id)}">Receber</button></li>`,
       )
       .join('');
     alertEl.innerHTML =
@@ -5281,11 +5348,9 @@ async function verifyAndAdvanceMemberStep1() {
 document.getElementById('mName').addEventListener('input', () => {
   memberNameForceConfirmed = false;
   maxMemberWizardStep = 1;
-  const alertEl = document.getElementById('mNameCheckAlert');
-  alertEl.classList.add('hidden');
-  alertEl.classList.remove('is-error');
   clearTimeout(memberNameCheckTimer);
   const val = document.getElementById('mName').value.trim();
+  renderSimilarMemberSuggestions(val);
   if (val.length >= 3) {
     memberNameCheckTimer = setTimeout(() => {
       checkMemberNameDuplicate({ silent: true });
@@ -5310,6 +5375,24 @@ document.getElementById('mName').addEventListener('keydown', (e) => {
 document.getElementById('btnMemberStep1Next').addEventListener('click', () => verifyAndAdvanceMemberStep1());
 
 document.getElementById('mNameCheckAlert').addEventListener('click', (e) => {
+  const profileBtn = e.target.closest('button[data-open-profile]');
+  if (profileBtn) {
+    const memberId = Number(profileBtn.dataset.openProfile);
+    if (memberId) {
+      setMemberFormOpen(false);
+      openProfile(memberId);
+    }
+    return;
+  }
+  const payBtn = e.target.closest('button[data-pay-existing]');
+  if (payBtn) {
+    const memberId = Number(payBtn.dataset.payExisting);
+    if (memberId) {
+      setMemberFormOpen(false);
+      jumpToPaymentForMember(memberId);
+    }
+    return;
+  }
   const openBtn = e.target.closest('button[data-open-existing]');
   if (openBtn) {
     document.getElementById('memberSearch').value = openBtn.dataset.openExisting;
