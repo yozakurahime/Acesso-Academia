@@ -219,9 +219,14 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
   assert.match(s2.reply, /CPF/i);
 
   const s3 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '52998224725' });
-  assert.match(s3.reply, /Cadastro pronto para \*Mariana Souza Lima\*/);
-  assert.match(s3.reply, /Escolha o número do plano/);
-  assert.doesNotMatch(s3.reply, /Infantil|Baby/i);
+  assert.match(s3.reply, /Confira se os dados estão corretos/);
+  assert.match(s3.reply, /Mariana Souza Lima/);
+  assert.match(s3.reply, /529\.982\.247-25/);
+
+  const s3Confirm = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
+  assert.match(s3Confirm.reply, /Cadastro pronto para \*Mariana Souza Lima\*/);
+  assert.match(s3Confirm.reply, /Escolha o número do plano/);
+  assert.doesNotMatch(s3Confirm.reply, /Infantil|Baby/i);
 
   const s4 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
   assert.match(s4.reply, /Matrícula adicionada para \*Mariana Souza Lima\*/);
@@ -447,7 +452,9 @@ test('OnlineSalesBotService respeita online_available e regras de turmas fechada
   assert.ok(step1);
   assert.match(step1.reply, /nome completo/i);
   await bot.handleIncomingMessage({ phone: '5562955554444', text: 'Aluno Teste Turma' });
-  const stepPlans = await bot.handleIncomingMessage({ phone: '5562955554444', text: '52998224725' });
+  const stepConfirm = await bot.handleIncomingMessage({ phone: '5562955554444', text: '52998224725' });
+  assert.match(stepConfirm.reply, /Confira se os dados estão corretos/);
+  const stepPlans = await bot.handleIncomingMessage({ phone: '5562955554444', text: 'sim' });
   assert.ok(stepPlans);
   assert.doesNotMatch(stepPlans.reply, /VIP Oculto/);
   assert.match(stepPlans.reply, /Hidroginástica 2x/);
@@ -462,4 +469,80 @@ test('OnlineSalesBotService respeita online_available e regras de turmas fechada
   const savedMember = store.get("SELECT id, name, status FROM members WHERE document = '529.982.247-25'");
   assert.equal(savedMember.name, 'Aluno Teste Turma');
   assert.equal(savedMember.status, 'pending');
+});
+
+test('OnlineSalesBotService permite conferir/corrigir dados e cadastrar várias pessoas no mesmo atendimento', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'TEST-MP-TOKEN',
+  });
+  const accessService = new AccessService(store, null, null);
+  let lastChargeBody = null;
+  const fakeMpFetch = async (_url, init) => {
+    lastChargeBody = init?.body ? JSON.parse(init.body) : null;
+    const payload = {
+      id: 88990011,
+      status: 'pending',
+      point_of_interaction: {
+        transaction_data: {
+          qr_code: '000201010212PIX_MULTI_CADASTRO',
+          qr_code_base64: 'ZmFrZQ==',
+        },
+      },
+    };
+    return { ok: true, status: 201, json: async () => payload, text: async () => JSON.stringify(payload) };
+  };
+  const gatewayService = new GatewayService(store, accessService, { fetchFn: fakeMpFetch });
+  const bot = new WhatsappBotService(store, { gatewayService, accessService });
+  const phone = '5562988887777';
+
+  await bot.handleIncomingMessage({ phone, text: 'Quero me matricular' });
+  await bot.handleIncomingMessage({ phone, text: 'Ana Clara Errada' });
+  const check1 = await bot.handleIncomingMessage({ phone, text: '52998224725' });
+  assert.match(check1.reply, /Confira se os dados estão corretos/);
+  assert.match(check1.reply, /Ana Clara Errada/);
+
+  // Pede para corrigir e envia os dados certos
+  const fix = await bot.handleIncomingMessage({ phone, text: 'corrigir' });
+  assert.match(fix.reply, /Vamos corrigir os dados/i);
+  await bot.handleIncomingMessage({ phone, text: 'Ana Clara Silva' });
+  const check2 = await bot.handleIncomingMessage({ phone, text: '52998224725' });
+  assert.match(check2.reply, /Ana Clara Silva/);
+  const confirm1 = await bot.handleIncomingMessage({ phone, text: '1' });
+  assert.match(confirm1.reply, /Cadastro pronto para \*Ana Clara Silva\*/);
+
+  // Escolhe plano 1 para Ana Clara Silva
+  const payMenu1 = await bot.handleIncomingMessage({ phone, text: '1' });
+  assert.match(payMenu1.reply, /Ana Clara Silva/);
+  assert.match(payMenu1.reply, /cadastrar outra pessoa/i);
+
+  // Escolhe 3 para cadastrar segunda pessoa no mesmo atendimento
+  const nextPerson = await bot.handleIncomingMessage({ phone, text: '3' });
+  assert.match(nextPerson.reply, /nome completo/i);
+  await bot.handleIncomingMessage({ phone, text: 'Beatriz Clara Silva' });
+  const check3 = await bot.handleIncomingMessage({ phone, text: '15350946056' });
+  assert.match(check3.reply, /Beatriz Clara Silva/);
+  assert.match(check3.reply, /153\.509\.460-56/);
+
+  const confirm2 = await bot.handleIncomingMessage({ phone, text: 'sim' });
+  assert.match(confirm2.reply, /Cadastro pronto para \*Beatriz Clara Silva\*/);
+
+  // Escolhe plano 1 para Beatriz: menu de pagamento deve somar as duas pessoas
+  const payMenu2 = await bot.handleIncomingMessage({ phone, text: '1' });
+  assert.match(payMenu2.reply, /Ana Clara Silva/);
+  assert.match(payMenu2.reply, /Beatriz Clara Silva/);
+
+  // Gera 1 único Pix para as duas juntas
+  const pixRes = await bot.handleIncomingMessage({ phone, text: '1' });
+  assert.match(pixRes.reply, /000201010212PIX_MULTI_CADASTRO/);
+  assert.match(pixRes.reply, /Ana Clara Silva/);
+  assert.match(pixRes.reply, /Beatriz Clara Silva/);
+  assert.ok(lastChargeBody);
+
+  const m1 = store.get("SELECT id, name FROM members WHERE document = '529.982.247-25'");
+  const m2 = store.get("SELECT id, name FROM members WHERE document = '153.509.460-56'");
+  assert.equal(m1.name, 'Ana Clara Silva');
+  assert.equal(m2.name, 'Beatriz Clara Silva');
 });

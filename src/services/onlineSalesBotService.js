@@ -4,6 +4,9 @@ const PAYMENT_INTENT_REGEX = /\b(pagar|pagamento|mensalidade|renovar|renova[cç]
 const ENROLLMENT_INTENT_REGEX = /\b(quero\s+me\s+matricular|fazer\s+matr[ií]cula|fazer\s+cadastro|me\s+cadastrar|nova\s+matr[ií]cula)\b/i;
 const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)|baby|infantil)\b/i;
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
+const CONFIRM_YES_REGEX = /^(1|sim|s|confirmar|confirmo|certo|ok|correto|isso)$/i;
+const CONFIRM_FIX_REGEX = /^(2|n[aã]o|n|corrigir|alterar|editar|errado|refazer)$/i;
+const ADD_ANOTHER_PERSON_REGEX = /^(3|mais|outra|outro|cadastrar\s+outr[ao]|outr[ao]\s+pessoa|nova\s+pessoa|adicionar\s+pessoa|mais\s+uma?)$/i;
 const PAYMENT_PIX_CHOICE_REGEX = /^(1|pix|qr|copia\s+e\s+cola)$/i;
 const PAYMENT_LINK_CHOICE_REGEX = /^(2|link|cart[aã]o|cr[eé]dito|d[eé]bito)$/i;
 const PAYMENT_CHECK_REGEX = /\b(j[aá]\s+paguei|paguei|verificar|confirmar\s+pagamento|conferir)\b/i;
@@ -223,7 +226,8 @@ export class OnlineSalesBotService {
       '\nComo deseja continuar?',
       '• Responda *1* para gerar o *Pix Copia e Cola*',
       '• Responda *2* para gerar o *Link de Pagamento (Cartão ou Pix)*',
-      '• Ou envie o *CPF ou nome completo* de outra pessoa para incluir no mesmo pagamento',
+      '• Responda *3* para *cadastrar outra pessoa* e incluir junto',
+      '• Ou envie o *CPF ou nome completo* de alguém já cadastrado para incluir',
       '• Responda *cancelar* para sair',
     ].filter(Boolean).join('\n');
   }
@@ -284,7 +288,39 @@ export class OnlineSalesBotService {
     });
   }
 
-  _finalizeExistingMemberEnrollment({ phone, member, plan, chosenClass = null }) {
+  _mergePaymentItems(existingItems = [], newItems = []) {
+    const merged = [...(existingItems || [])];
+    for (const item of newItems || []) {
+      if (!merged.some((m) => m.member_id === item.member_id)) {
+        merged.push(item);
+      }
+    }
+    return merged;
+  }
+
+  _startAnotherEnrollmentSession(phone, paymentItems = [], prefix = '') {
+    this._setSession(phone, {
+      kind: 'enroll',
+      step: 'ask_name',
+      plans: [],
+      chosenPlan: null,
+      chosenClass: null,
+      availableClasses: [],
+      existingMember: null,
+      fullName: null,
+      pendingCpfDigits: null,
+      pendingCpfFormatted: null,
+      existingByCpf: null,
+      paymentItems: [...(paymentItems || [])],
+    });
+    const prompt = prefix
+      ? `${prefix}\n\nInforme o *nome completo* da próxima pessoa:`
+      : 'Ótimo! Vamos cadastrar a próxima pessoa.\n\nInforme o *nome completo*:';
+    this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: prompt });
+    return { reply: prompt, requiresHuman: false };
+  }
+
+  _finalizeExistingMemberEnrollment({ phone, member, plan, chosenClass = null, existingPaymentItems = [] }) {
     this.store.run(
       "UPDATE members SET plan_id = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
       [plan.id, member.id],
@@ -296,7 +332,8 @@ export class OnlineSalesBotService {
       );
     }
     const updated = this.store.get('SELECT * FROM members WHERE id = ?', [member.id]);
-    const items = this._resolveBillableList(updated ? [updated] : []);
+    const newItems = this._resolveBillableList(updated ? [updated] : []);
+    const items = this._mergePaymentItems(existingPaymentItems, newItems);
     if (!items.length) {
       this._sessions.delete(phone);
       const reply = 'Cadastro localizado! Para finalizar a matrícula, fale com nossa recepção.';
@@ -340,6 +377,10 @@ export class OnlineSalesBotService {
           availableClasses: [],
           existingMember: null,
           fullName: null,
+          pendingCpfDigits: null,
+          pendingCpfFormatted: null,
+          existingByCpf: null,
+          paymentItems: [],
         });
         const reply = 'Ótimo! Vou fazer seu cadastro por aqui agora mesmo.\n\nPrimeiro, me informe seu *nome completo*:';
         this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
@@ -361,6 +402,7 @@ export class OnlineSalesBotService {
         availableClasses: [],
         existingMember,
         fullName: existingMember.name || null,
+        paymentItems: [],
       });
       const planLines = plans.map((p, idx) => `*${idx + 1}.* ${p.name} — *${formatBrl(p.price_cents)}*`).join('\n');
       const firstName = String(existingMember.name || 'Aluno').trim().split(/\s+/)[0];
@@ -368,17 +410,26 @@ export class OnlineSalesBotService {
         `Encontrei o cadastro de *${firstName}*, mas ainda não há um plano vinculado. Escolha o número do plano para adicionar sua matrícula e pagar por aqui:`,
         '\nEscolha o número do plano desejado:',
         planLines,
-        '\n_(Responda o número do plano ou *cancelar* para sair.)_',
+        '\n_(Responda o número do plano, *mais* para cadastrar outra pessoa ou *cancelar* para sair.)_',
       ].join('\n');
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
     }
 
     if (session.step === 'choose_plan') {
+      if (ADD_ANOTHER_PERSON_REGEX.test(String(userText).trim())) {
+        const savedName = session.existingMember?.name || session.fullName || 'o aluno';
+        return this._startAnotherEnrollmentSession(
+          phone,
+          session.paymentItems || [],
+          `Cadastro de *${savedName}* mantido! Vamos cadastrar a próxima pessoa.`,
+        );
+      }
+
       const idx = Number(String(userText).trim()) - 1;
       const chosen = Number.isInteger(idx) && idx >= 0 && idx < session.plans.length ? session.plans[idx] : null;
       if (!chosen) {
-        const reply = `Responda apenas o número de *1 a ${session.plans.length}* para escolher o plano, ou *cancelar* para sair.`;
+        const reply = `Responda apenas o número de *1 a ${session.plans.length}* para escolher o plano, *mais* para cadastrar outra pessoa ou *cancelar* para sair.`;
         this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
         return { reply, requiresHuman: false };
       }
@@ -426,6 +477,7 @@ export class OnlineSalesBotService {
           phone,
           member: session.existingMember,
           plan: chosen,
+          existingPaymentItems: session.paymentItems || [],
         });
       }
 
@@ -454,6 +506,7 @@ export class OnlineSalesBotService {
           member: session.existingMember,
           plan: session.chosenPlan,
           chosenClass,
+          existingPaymentItems: session.paymentItems || [],
         });
       }
       session.step = 'ask_name';
@@ -473,7 +526,7 @@ export class OnlineSalesBotService {
       session.fullName = name;
       session.step = 'ask_cpf';
       this._setSession(phone, session);
-      const reply = `Certo, *${name}*! Agora informe seu *CPF (11 dígitos)* para finalizar o cadastro:`;
+      const reply = `Certo, *${name}*! Agora informe o *CPF (11 dígitos)*:`;
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
     }
@@ -488,31 +541,72 @@ export class OnlineSalesBotService {
       const formattedCpf = formatCpfDigits(digits);
       const existingByCpf = this.store
         .all("SELECT * FROM members WHERE access_role = 'student'")
-        .find((m) => String(m.document || '').replace(/\D/g, '') === digits);
+        .find((m) => String(m.document || '').replace(/\D/g, '') === digits) || null;
 
-      let member = existingByCpf || null;
+      session.pendingCpfDigits = digits;
+      session.pendingCpfFormatted = formattedCpf;
+      session.existingByCpf = existingByCpf;
+      session.step = 'confirm_data';
+      this._setSession(phone, session);
+
+      const displayName = existingByCpf ? existingByCpf.name : session.fullName;
+      const header = existingByCpf
+        ? 'Encontrei um cadastro com este CPF. Confira os dados:'
+        : 'Confira se os dados estão corretos:';
+      const reply = [
+        header,
+        `\n• *Nome:* ${displayName}`,
+        `• *CPF:* ${formattedCpf}`,
+        '\n• Responda *1* ou *sim* para confirmar e continuar',
+        '• Responda *2* ou *corrigir* para digitar novamente',
+      ].join('\n');
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    if (session.step === 'confirm_data') {
+      const answer = String(userText || '').trim();
+      if (CONFIRM_FIX_REGEX.test(answer)) {
+        session.step = 'ask_name';
+        session.fullName = null;
+        session.pendingCpfDigits = null;
+        session.pendingCpfFormatted = null;
+        session.existingByCpf = null;
+        this._setSession(phone, session);
+        const reply = 'Tudo bem! Vamos corrigir os dados.\n\nInforme o *nome completo*:';
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+      if (!CONFIRM_YES_REGEX.test(answer)) {
+        const reply = 'Responda *1* (ou *sim*) para confirmar os dados, ou *2* (ou *corrigir*) para digitar novamente.';
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
+      let member = session.existingByCpf || null;
       if (!member) {
         if (this.accessService?.createMember) {
           member = await this.accessService.createMember({
             name: session.fullName,
-            document: formattedCpf,
+            document: session.pendingCpfFormatted,
             phone,
           });
         } else {
           const ins = this.store.run(
             "INSERT INTO members (name, document, phone, status, access_role) VALUES (?, ?, ?, 'pending', 'student')",
-            [session.fullName, formattedCpf, phone],
+            [session.fullName, session.pendingCpfFormatted, phone],
           );
           member = this.store.get('SELECT * FROM members WHERE id = ?', [ins.lastInsertRowid]);
         }
       }
 
-      const items = this._resolveBillableList([member]);
-      if (items.length > 0) {
+      const newItems = this._resolveBillableList([member]);
+      if (newItems.length > 0) {
+        const items = this._mergePaymentItems(session.paymentItems || [], newItems);
         this._setSession(phone, { kind: 'payment', items, pendingChargeId: null });
         const reply = this._buildPaymentMenuReply(
           items,
-          `Cadastro localizado para *${member.name}*!`,
+          `Cadastro confirmado para *${member.name}*!`,
         );
         this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
         return { reply, requiresHuman: false };
@@ -535,13 +629,17 @@ export class OnlineSalesBotService {
         availableClasses: [],
         existingMember: member,
         fullName: member.name,
+        pendingCpfDigits: null,
+        pendingCpfFormatted: null,
+        existingByCpf: null,
+        paymentItems: session.paymentItems || [],
       });
       const planLines = plans.map((p, idx) => `*${idx + 1}.* ${p.name} — *${formatBrl(p.price_cents)}*`).join('\n');
       const reply = [
         `Cadastro pronto para *${member.name}*! Agora escolha o número da modalidade/plano que deseja adicionar (seguindo as regras de vagas):`,
         '\nEscolha o número do plano desejado:',
         planLines,
-        '\n_(Responda o número do plano ou *cancelar* se quiser apenas manter o cadastro.)_',
+        '\n_(Responda o número do plano, *mais* para cadastrar outra pessoa ou *cancelar* para sair.)_',
       ].join('\n');
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false };
@@ -591,6 +689,10 @@ export class OnlineSalesBotService {
 
     if (existing?.kind === 'enroll' || (!existing && wantsEnroll && !wantsPayment)) {
       return this._handleEnrollmentFlow({ phone, userText, session: existing });
+    }
+
+    if (existing?.kind === 'payment' && ADD_ANOTHER_PERSON_REGEX.test(String(userText).trim())) {
+      return this._startAnotherEnrollmentSession(phone, existing.items || []);
     }
 
     if (existing && PAYMENT_DISCOUNT_REGEX.test(userText)) {
