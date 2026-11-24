@@ -546,3 +546,57 @@ test('OnlineSalesBotService permite conferir/corrigir dados e cadastrar várias 
   assert.equal(m1.name, 'Ana Clara Silva');
   assert.equal(m2.name, 'Beatriz Clara Silva');
 });
+
+test('WhatsappBotService transcreve audios com fallback de modelo e salva transcricao no chat mesmo com bot pausado', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    gemini_transcribe_model: 'modelo-inexistente',
+    gemini_model: 'gemini-2.5-flash',
+  });
+  const calls = [];
+  const fakeFetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('modelo-inexistente')) {
+      return { ok: false, status: 404, text: async () => 'not found' };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'Qual o horário da natação hoje?' }] } }],
+      }),
+    };
+  };
+  const bot = new WhatsappBotService(store, { fetchFn: fakeFetch });
+  const phone = '5562993334444';
+  bot.pauseContact(phone, 60_000);
+
+  const saved = bot.recordChatMessage({
+    phone,
+    direction: 'in',
+    senderType: 'customer',
+    body: '',
+    mediaType: 'audio',
+    mediaUrl: '/api/whatsapp/media/audio_teste.ogg',
+  });
+  assert.ok(saved?.id);
+
+  // Mesmo com o contato pausado, transcribeAndSaveAudioMessage salva a transcricao no historico
+  const transcript = await bot.transcribeAndSaveAudioMessage({
+    chatMessageId: saved.id,
+    audioBuffer: Buffer.from('fake-ogg'),
+    audioMimeType: 'audio/ogg',
+  });
+  assert.equal(transcript, 'Qual o horário da natação hoje?');
+  assert.ok(calls.some((u) => u.includes('modelo-inexistente')));
+  assert.ok(calls.some((u) => u.includes('gemini-2.5-flash')));
+
+  const row = store.get('SELECT body, media_type, media_url FROM whatsapp_chat_messages WHERE id = ?', [saved.id]);
+  assert.equal(row.media_type, 'audio');
+  assert.equal(row.media_url, '/api/whatsapp/media/audio_teste.ogg');
+  assert.match(row.body, /Qual o horário da natação hoje\?/);
+
+  const chat = store.get('SELECT last_message FROM whatsapp_chats WHERE phone = ?', [phone]);
+  assert.match(chat.last_message, /Qual o horário da natação hoje\?/);
+});

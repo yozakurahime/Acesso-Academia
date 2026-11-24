@@ -192,6 +192,7 @@ export class WhatsappBotService {
     const humanFlag = needsHuman ? 1 : 0;
     const cleanSummary = handoffSummary ? String(handoffSummary).trim().slice(0, 240) : null;
 
+    let msgId = null;
     try {
       this.store.run(
         `INSERT INTO whatsapp_chats (phone, contact_name, member_id, bot_paused, needs_human, handoff_summary, unread_count, last_message, last_message_at)
@@ -207,15 +208,35 @@ export class WhatsappBotService {
            last_message_at = datetime('now', 'localtime')`,
         [normalized, resolvedName, member?.id || null, pausedFlag, humanFlag, cleanSummary, unreadDelta, previewText.slice(0, 240), unreadDelta],
       );
-      this.store.run(
+      const msgRes = this.store.run(
         `INSERT INTO whatsapp_chat_messages (phone, direction, sender_type, body, media_type, media_url)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [normalized, direction, senderType, cleanBody, mediaType || null, mediaUrl || null],
       );
+      msgId = Number(msgRes.lastInsertRowid || 0) || null;
     } catch {
       return null;
     }
-    return { phone: normalized };
+    return { id: msgId, phone: normalized };
+  }
+
+  saveAudioTranscription(chatMessageId, transcript) {
+    const id = Number(chatMessageId);
+    const clean = sanitizeReply(transcript);
+    if (!Number.isInteger(id) || id <= 0 || !clean) return false;
+    try {
+      const row = this.store.get('SELECT id, phone, body FROM whatsapp_chat_messages WHERE id = ?', [id]);
+      if (!row) return false;
+      const formatted = `🎙️ "${clean}"`;
+      this.store.run('UPDATE whatsapp_chat_messages SET body = ? WHERE id = ?', [formatted, id]);
+      this.store.run(
+        "UPDATE whatsapp_chats SET last_message = ? WHERE phone = ? AND (last_message = '[Áudio]' OR last_message = '' OR last_message IS NULL)",
+        [formatted.slice(0, 240), row.phone],
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   listChats() {
@@ -533,48 +554,69 @@ export class WhatsappBotService {
     const rawKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
     const apiKey = rawKey.replace(/^["']+|["']+$/g, '').trim();
     if (!apiKey || !base64Data) return null;
-    const model = String(settings.gemini_transcribe_model || 'gemini-3.5-transcribe').trim();
-    try {
-      const text = await this._callGemini({
-        apiKey,
-        model,
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: 'Transcreva este áudio em português fielmente, retornando apenas o texto transcrito:' },
-              { inlineData: { mimeType, data: base64Data } },
-            ],
-          },
-        ],
-      });
-      return sanitizeReply(text);
-    } catch {
-      return null;
+    const primaryModel = String(settings.gemini_transcribe_model || settings.gemini_model || 'gemini-2.5-flash').trim();
+    const fallbackModel = String(settings.gemini_model || 'gemini-2.5-flash').trim();
+    const models = primaryModel === fallbackModel ? [primaryModel] : [primaryModel, fallbackModel];
+    for (const model of models) {
+      try {
+        const text = await this._callGemini({
+          apiKey,
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: 'Transcreva este áudio em português fielmente, retornando apenas o texto transcrito:' },
+                { inlineData: { mimeType, data: base64Data } },
+              ],
+            },
+          ],
+        });
+        const clean = sanitizeReply(text);
+        if (clean) return clean;
+      } catch {
+        // tenta próximo modelo fallback
+      }
     }
+    return null;
   }
 
-  async handleIncomingMessage({ phone, text = '', audioBuffer = null, audioMimeType = '', pushName = '' } = {}) {
+  async transcribeAndSaveAudioMessage({ chatMessageId, audioBuffer, audioMimeType = 'audio/ogg', settings = this.store.getSettings?.() || {} } = {}) {
+    if (!chatMessageId || !audioBuffer?.length) return null;
+    const transcript = await this.transcribeAudio({
+      base64Data: Buffer.from(audioBuffer).toString('base64'),
+      mimeType: audioMimeType || 'audio/ogg',
+      settings,
+    });
+    if (transcript) {
+      this.saveAudioTranscription(chatMessageId, transcript);
+    }
+    return transcript;
+  }
+
+  async handleIncomingMessage({ phone, text = '', audioBuffer = null, audioMimeType = '', pushName = '', chatMessageId = null } = {}) {
     const normalized = normalizeBrPhone(phone);
     if (!normalized) return null;
 
     const settings = this.store.getSettings?.() || {};
-    if (settings.whatsapp_bot_enabled !== '1') return null;
-
     const rawKey = String(settings.gemini_api_key || process.env.GEMINI_API_KEY || '').trim();
     const apiKey = rawKey.replace(/^["']+|["']+$/g, '').trim();
-    if (!apiKey) return null;
-
-    if (this.isPaused(normalized)) return null;
 
     let userText = sanitizeReply(text);
-    if (!userText && audioBuffer?.length) {
+    if (!userText && audioBuffer?.length && apiKey) {
       userText = await this.transcribeAudio({
         base64Data: Buffer.from(audioBuffer).toString('base64'),
         mimeType: audioMimeType || 'audio/ogg',
         settings,
       }) || '';
+      if (userText && chatMessageId) {
+        this.saveAudioTranscription(chatMessageId, userText);
+      }
     }
+
+    if (settings.whatsapp_bot_enabled !== '1') return null;
+    if (!apiKey) return null;
+    if (this.isPaused(normalized)) return null;
     if (!userText) return null;
 
     if (HUMAN_REQUEST_REGEX.test(userText)) {

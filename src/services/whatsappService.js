@@ -307,8 +307,9 @@ export class WhatsappService {
             ? (mediaType === 'image' ? '[Imagem]' : mediaType === 'audio' ? '[Áudio]' : '[Mídia]')
             : incomingText;
 
+          let savedChatMsg = null;
           if ((fallbackText || mediaUrl) && this.onBotMessage?.recordChatMessage) {
-            this.onBotMessage.recordChatMessage({
+            savedChatMsg = this.onBotMessage.recordChatMessage({
               phone: senderPhone,
               direction: 'in',
               senderType: 'customer',
@@ -329,7 +330,15 @@ export class WhatsappService {
               audioBuffer,
               audioMimeType,
               pushName: contactName,
+              chatMessageId: savedChatMsg?.id || null,
             });
+          } else if (audioBuffer?.length && savedChatMsg?.id && this.onBotMessage?.transcribeAndSaveAudioMessage) {
+            this.onBotMessage.transcribeAndSaveAudioMessage({
+              chatMessageId: savedChatMsg.id,
+              audioBuffer,
+              audioMimeType,
+              settings,
+            }).catch(() => {});
           }
           processed += 1;
         }
@@ -594,8 +603,9 @@ export class WhatsappService {
             ? (mediaTarget.type === 'sticker' ? '[Figurinha animada]' : mediaTarget.type === 'image' ? '[Imagem]' : '[Áudio]')
             : incomingText;
 
+          let savedChatMsg = null;
           if ((fallbackText || mediaUrl) && this.onBotMessage?.recordChatMessage) {
-            this.onBotMessage.recordChatMessage({
+            savedChatMsg = this.onBotMessage.recordChatMessage({
               phone: senderPhone,
               direction: 'in',
               senderType: 'customer',
@@ -621,8 +631,15 @@ export class WhatsappService {
                 audioBuffer,
                 audioMimeType,
                 pushName: msg.pushName || '',
+                chatMessageId: savedChatMsg?.id || null,
               });
             }
+          } else if (audioBuffer?.length && savedChatMsg?.id && this.onBotMessage?.transcribeAndSaveAudioMessage) {
+            this.onBotMessage.transcribeAndSaveAudioMessage({
+              chatMessageId: savedChatMsg.id,
+              audioBuffer,
+              audioMimeType,
+            }).catch(() => {});
           }
 
           if (!allowReceipts) continue;
@@ -1608,10 +1625,10 @@ export class WhatsappService {
     }
   }
 
-  _dispatchToBot({ sock, jid, senderPhone, incomingText, audioBuffer, audioMimeType, pushName }) {
+  _dispatchToBot({ sock, jid, senderPhone, incomingText, audioBuffer, audioMimeType, pushName, chatMessageId = null }) {
     if (!this.onBotMessage) return;
     if (audioBuffer?.length || this.botDebounceMs <= 0) {
-      this._flushBotBuffer({ sock, jid, senderPhone, texts: incomingText ? [incomingText] : [], audioBuffer, audioMimeType, pushName }).catch(() => {});
+      this._flushBotBuffer({ sock, jid, senderPhone, texts: incomingText ? [incomingText] : [], audioBuffer, audioMimeType, pushName, chatMessageId }).catch(() => {});
       return;
     }
 
@@ -1645,7 +1662,7 @@ export class WhatsappService {
     this._botDebounceMap.set(senderPhone, entry);
   }
 
-  async _flushBotBuffer({ sock, jid, senderPhone, texts = [], audioBuffer = null, audioMimeType = '', pushName = '' }) {
+  async _flushBotBuffer({ sock, jid, senderPhone, texts = [], audioBuffer = null, audioMimeType = '', pushName = '', chatMessageId = null }) {
     if (!this.onBotMessage) return;
     const combinedText = texts.map((t) => String(t || '').trim()).filter(Boolean).join('\n');
     if (!combinedText && !audioBuffer?.length) return;
@@ -1655,6 +1672,7 @@ export class WhatsappService {
       audioBuffer,
       audioMimeType,
       pushName,
+      chatMessageId,
     });
     if (botResult?.reply) {
       if (this.isMetaCloudMode()) {
