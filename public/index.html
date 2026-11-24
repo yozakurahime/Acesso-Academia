@@ -1904,36 +1904,54 @@
                   <p class="muted">Credenciais de checkout online, maquininha Point Smart, Stone Connect (Pagar.me v5) e webhooks automáticos.</p>
                 </div>
               </div>
-              <form id="gatewaysForm" class="form-grid">
-                <label>Provedor da Maquininha (PDV)
-                  <select id="gwPosProvider">
-                    <option value="mercadopago">Mercado Pago Point Smart</option>
-                    <option value="stone">Stone Smart POS (Connect / Pagar.me)</option>
-                  </select>
-                </label>
-                <label>Mercado Pago — Access Token online <input type="password" id="gwMpToken" placeholder="APP_USR-..." /></label>
-                <label>Mercado Pago — Public Key (Checkout no portal) <input type="text" id="gwMpPublicKey" placeholder="APP_USR-..." /></label>
-                <label>Mercado Pago — Access Token da Point (opcional) <input type="password" id="gwMpPointToken" placeholder="Usa o token online se vazio" /></label>
-                <label>Mercado Pago Point — ID da Maquininha <input type="text" id="gwMpPointTerminalId" placeholder="Ex: NEWLAND_N950__..." /></label>
-                <label>Chave secreta do webhook online <input type="password" id="gwMpWebhookSecret" autocomplete="new-password" /></label>
-                <label>Chave secreta do webhook da Point (opcional) <input type="password" id="gwMpPointWebhookSecret" autocomplete="new-password" /></label>
-                <label>Stone / Pagar.me — Chave API (Secret Key) <input type="password" id="gwStoneApiKey" placeholder="sk_..." autocomplete="new-password" /></label>
-                <label>Stone — Serial da Maquininha (POS) <input type="text" id="gwStoneSerial" placeholder="Ex: 6L..." /></label>
-                <label>Stone — Segredo do Webhook (opcional) <input type="password" id="gwStoneWebhookSecret" autocomplete="new-password" /></label>
-                <label>Taxa Débito Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointDebit" placeholder="0.74" /></label>
-                <label>Taxa Crédito à vista Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointCredit" placeholder="0.74" /></label>
-                <label>Taxa Pix Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointPix" placeholder="0" /></label>
-                <label>Taxa Pix Online (%) <input type="number" step="0.01" min="0" id="gwFeeOnlinePix" placeholder="0.99" /></label>
-                <label>Taxa Crédito Online (%) <input type="number" step="0.01" min="0" id="gwFeeOnlineCredit" placeholder="4.98" /></label>
-                <div style="align-self:end;">
+              <form id="gatewaysForm" class="settings-grouped-form">
+                <div class="settings-subblock">
+                  <h4>Mercado Pago — Online &amp; Maquininha Point</h4>
+                  <div class="form-grid">
+                    <label>Provedor da Maquininha (PDV)
+                      <select id="gwPosProvider">
+                        <option value="mercadopago">Mercado Pago Point Smart</option>
+                        <option value="stone">Stone Smart POS (Connect / Pagar.me)</option>
+                      </select>
+                    </label>
+                    <label>Access Token online <input type="password" id="gwMpToken" placeholder="APP_USR-..." /></label>
+                    <label>Public Key (Checkout no portal) <input type="text" id="gwMpPublicKey" placeholder="APP_USR-..." /></label>
+                    <label>Access Token da Point (opcional) <input type="password" id="gwMpPointToken" placeholder="Usa o token online se vazio" /></label>
+                    <label>ID da Maquininha Point <input type="text" id="gwMpPointTerminalId" placeholder="Ex: NEWLAND_N950__..." /></label>
+                    <label>Segredo do Webhook online <input type="password" id="gwMpWebhookSecret" autocomplete="new-password" /></label>
+                    <label>Segredo do Webhook Point (opcional) <input type="password" id="gwMpPointWebhookSecret" autocomplete="new-password" /></label>
+                  </div>
+                  <div class="inline-actions" style="margin-top:12px;">
+                    <button type="button" id="btnListMpTerminals" class="btn btn-secondary btn-sm">Buscar maquininhas Point</button>
+                    <button type="button" id="btnEnablePointPdv" class="btn btn-secondary btn-sm">Ativar modo PDV na maquininha</button>
+                  </div>
+                  <div id="mpTerminalsList" class="billing-queue" style="margin-top:10px;"></div>
+                </div>
+
+                <div class="settings-subblock">
+                  <h4>Taxas da Maquininha &amp; Online (%)</h4>
+                  <div class="form-grid">
+                    <label>Débito Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointDebit" placeholder="0.74" /></label>
+                    <label>Crédito à vista Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointCredit" placeholder="0.74" /></label>
+                    <label>Pix Maquininha (%) <input type="number" step="0.01" min="0" id="gwFeePointPix" placeholder="0" /></label>
+                    <label>Pix Online (%) <input type="number" step="0.01" min="0" id="gwFeeOnlinePix" placeholder="0.99" /></label>
+                    <label>Crédito Online (%) <input type="number" step="0.01" min="0" id="gwFeeOnlineCredit" placeholder="4.98" /></label>
+                  </div>
+                </div>
+
+                <div class="settings-subblock">
+                  <h4>Stone / Pagar.me (Opcional)</h4>
+                  <div class="form-grid">
+                    <label>Chave API (Secret Key) <input type="password" id="gwStoneApiKey" placeholder="sk_..." autocomplete="new-password" /></label>
+                    <label>Serial da Maquininha (POS) <input type="text" id="gwStoneSerial" placeholder="Ex: 6L..." /></label>
+                    <label>Segredo do Webhook (opcional) <input type="password" id="gwStoneWebhookSecret" autocomplete="new-password" /></label>
+                  </div>
+                </div>
+
+                <div class="settings-form-actions">
                   <button type="submit" class="btn btn-primary">Salvar credenciais de pagamento</button>
                 </div>
               </form>
-              <div class="inline-actions" style="margin-top:12px;">
-                <button type="button" id="btnListMpTerminals" class="btn btn-secondary btn-sm">Buscar maquininhas Point</button>
-                <button type="button" id="btnEnablePointPdv" class="btn btn-secondary btn-sm">Ativar modo PDV na maquininha</button>
-              </div>
-              <div id="mpTerminalsList" class="billing-queue" style="margin-top:10px;"></div>
               <p class="muted" style="margin-top:10px;font-size:12px;">
                 Webhook Mercado Pago: <code>POST /api/webhooks/mercadopago</code> · Webhook Stone/Pagar.me: <code>POST /api/webhooks/stone</code>.
               </p>
@@ -1946,18 +1964,34 @@
                   <p class="muted">Alunos vinculados ao Wellhub (por ID Wellhub) ou TotalPass (por CPF) acessam a catraca sem precisar de matrícula paga na academia.</p>
                 </div>
               </div>
-              <form id="partnersForm" class="form-grid">
-                <label class="checkbox-label"><input type="checkbox" id="sWellhubEnabled" /> Ativar Wellhub (Gympass)</label>
-                <label class="checkbox-label"><input type="checkbox" id="sWellhubRequireCheckin" /> Exigir check-in diário do Wellhub na catraca</label>
-                <label>Gym ID (Wellhub) <input type="text" id="sWellhubGymId" placeholder="Opcional (para API Wellhub)" /></label>
-                <label>API Key / Token (Wellhub) <input type="password" id="sWellhubApiKey" placeholder="Opcional" /></label>
-                <label>Webhook Secret (Wellhub) <input type="password" id="sWellhubWebhookSecret" placeholder="Opcional" /></label>
-                <label class="checkbox-label"><input type="checkbox" id="sTotalpassEnabled" /> Ativar TotalPass</label>
-                <label class="checkbox-label"><input type="checkbox" id="sTotalpassRequireCheckin" /> Exigir check-in diário do TotalPass na catraca</label>
-                <label>Place API Key (TotalPass) <input type="text" id="sTotalpassGymId" placeholder="Ex: 8ee8fec2-172e-..." /></label>
-                <label>Partner API Key / Token (TotalPass) <input type="password" id="sTotalpassApiToken" placeholder="Opcional" /></label>
-                <label>Webhook Secret (TotalPass) <input type="password" id="sTotalpassWebhookSecret" placeholder="Opcional" /></label>
-                <div style="align-self:end;"><button type="submit" class="btn btn-primary">Salvar Convênios</button></div>
+              <form id="partnersForm" class="settings-grouped-form">
+                <div class="settings-subblock">
+                  <h4>Wellhub (Gympass)</h4>
+                  <div class="settings-toggle-grid" style="margin-bottom:10px;">
+                    <label class="checkbox-label"><input type="checkbox" id="sWellhubEnabled" /> Ativar Wellhub (Gympass)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="sWellhubRequireCheckin" /> Exigir check-in diário do Wellhub na catraca</label>
+                  </div>
+                  <div class="form-grid">
+                    <label>Gym ID (Wellhub) <input type="text" id="sWellhubGymId" placeholder="Opcional (para API Wellhub)" /></label>
+                    <label>API Key / Token (Wellhub) <input type="password" id="sWellhubApiKey" placeholder="Opcional" /></label>
+                    <label>Webhook Secret (Wellhub) <input type="password" id="sWellhubWebhookSecret" placeholder="Opcional" /></label>
+                  </div>
+                </div>
+                <div class="settings-subblock">
+                  <h4>TotalPass</h4>
+                  <div class="settings-toggle-grid" style="margin-bottom:10px;">
+                    <label class="checkbox-label"><input type="checkbox" id="sTotalpassEnabled" /> Ativar TotalPass</label>
+                    <label class="checkbox-label"><input type="checkbox" id="sTotalpassRequireCheckin" /> Exigir check-in diário do TotalPass na catraca</label>
+                  </div>
+                  <div class="form-grid">
+                    <label>Place API Key (TotalPass) <input type="text" id="sTotalpassGymId" placeholder="Ex: 8ee8fec2-172e-..." /></label>
+                    <label>Partner API Key / Token (TotalPass) <input type="password" id="sTotalpassApiToken" placeholder="Opcional" /></label>
+                    <label>Webhook Secret (TotalPass) <input type="password" id="sTotalpassWebhookSecret" placeholder="Opcional" /></label>
+                  </div>
+                </div>
+                <div class="settings-form-actions">
+                  <button type="submit" class="btn btn-primary">Salvar Convênios</button>
+                </div>
               </form>
               <p class="muted" style="margin:10px 0 0;font-size:12px;">
                 Webhook Wellhub: <code>/api/webhooks/wellhub</code> · Webhook TotalPass: <code>/api/webhooks/totalpass</code>
