@@ -191,7 +191,9 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
   store.run("INSERT INTO plans (name, duration_days, price_cents, active) VALUES ('Natação Infantil (Mensal)', 30, 14000, 1)");
   store.run("INSERT INTO plans (name, duration_days, price_cents, active) VALUES ('Natação Baby (Mensal)', 30, 14000, 1)");
   const accessService = new AccessService(store, null, null);
-  const fakeMpFetch = async () => {
+  let lastPixBody = null;
+  const fakeMpFetch = async (_url, init) => {
+    lastPixBody = init?.body ? JSON.parse(init.body) : null;
     const payload = {
       id: 77665544,
       status: 'pending',
@@ -233,6 +235,7 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
 
   const s5 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
   assert.match(s5.reply, /000201010212PIX_NOVA_MATRICULA/);
+  assert.match(lastPixBody?.payer?.email || '', /@academiaoxigenio\.com$/);
 
   const created = store.get("SELECT id, name, status FROM members WHERE document = '529.982.247-25'");
   assert.equal(created.name, 'Mariana Souza Lima');

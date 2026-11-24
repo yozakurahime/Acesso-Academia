@@ -412,8 +412,12 @@ export class GatewayService {
     const lastName = parts.slice(1).join(' ') || 'Academia';
     const cpf = digitsOnly(member.document);
 
+    const cleanEmail = String(member.email || '').trim();
+    const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
+      ? cleanEmail
+      : `aluno${member.id}@academiaoxigenio.com`;
     const payer = {
-      email: member.email || `aluno${member.id}@academia.local`,
+      email: validEmail,
       first_name: firstName,
       last_name: lastName,
     };
