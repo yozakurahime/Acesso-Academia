@@ -155,6 +155,7 @@ export class AccessService {
     if (preview && outcome === 'allowed') {
       extra.planName = 'Plano Mensal';
       extra.daysRemaining = 4;
+      extra.validUntil = addDays(today, 4);
       extra.inGrace = false;
       extra.workoutSummary = { title: 'Treino A — Superiores', goal: 'Hipertrofia', exerciseCount: 6 };
       return extra;

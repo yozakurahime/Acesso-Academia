@@ -427,6 +427,28 @@ body[data-state="offline"]::after {
   text-wrap: balance;
 }
 
+.turnstile-due-pill {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 12px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  background: rgba(16, 185, 129, 0.16);
+  color: #a7f3d0;
+  font-size: clamp(14px, 1.45vw, 24px);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.turnstile-due-pill.is-warning {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+}
+
 .turnstile-display[data-state="idle"] h1 {
   font-size: clamp(36px, 4.1vw, 82px);
 }

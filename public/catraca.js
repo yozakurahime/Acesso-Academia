@@ -292,6 +292,34 @@ function triggerCardEnterAnimation() {
   mainCard.classList.add('is-entering');
 }
 
+function formatValidUntilBr(validUntil) {
+  const m = String(validUntil || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
+
+function renderTurnstileTitle(titleEl, titleText, state, event) {
+  if (!titleEl) return;
+  titleEl.textContent = titleText || '';
+  const dueBr = state === 'allowed' ? formatValidUntilBr(event?.validUntil) : '';
+  const role = event?.accessRole || 'student';
+  const showDue = Boolean(dueBr) && (role === 'student' || Boolean(event?.isVisitor));
+  if (!showDue) return;
+
+  const badge = document.createElement('span');
+  const days = typeof event?.daysRemaining === 'number' ? event.daysRemaining : null;
+  const isWarning = Boolean(event?.inGrace) || (days !== null && days <= 5);
+  badge.className = `turnstile-due-pill${isWarning ? ' is-warning' : ''}`;
+  if (event?.inGrace || (days !== null && days < 0)) {
+    badge.textContent = `Venceu em ${dueBr}`;
+  } else if (days === 0) {
+    badge.textContent = `Vence hoje · ${dueBr}`;
+  } else {
+    badge.textContent = `Vence em ${dueBr}`;
+  }
+  titleEl.appendChild(document.createTextNode(' '));
+  titleEl.appendChild(badge);
+}
+
 function render(state, event) {
   const view = event ? `${state}:${event.id}` : state;
   if (lastView === view) return;
@@ -315,7 +343,7 @@ function render(state, event) {
   icon.textContent = symbol;
   preview.hidden = !event?.preview;
   statusLabel.textContent = copy.status;
-  title.textContent = copy.title;
+  renderTurnstileTitle(title, copy.title, state, event);
   message.textContent = copy.message;
   if (isNewEvent || state !== 'idle') {
     triggerCardEnterAnimation();
