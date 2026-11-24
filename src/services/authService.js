@@ -130,7 +130,47 @@ export class AuthService {
     return s.auth_enabled === '1' && Boolean(s.auth_password_hash);
   }
 
-  signToken(username, role = 'admin', tokenVersion = null) {
+  getSessionTtlMs() {
+    const s = this.store.getSettings();
+    const hours = Number(s.auth_session_ttl_hours);
+    if (Number.isFinite(hours) && hours >= 1 && hours <= 720) {
+      return Math.round(hours * 60 * 60 * 1000);
+    }
+    return SESSION_TTL_MS;
+  }
+
+  getIdleTimeoutMinutes() {
+    const s = this.store.getSettings();
+    const mins = Number(s.auth_idle_timeout_minutes);
+    if (Number.isFinite(mins) && mins >= 1 && mins <= 1440) {
+      return Math.round(mins);
+    }
+    return 0;
+  }
+
+  listLoginOperators() {
+    const s = this.store.getSettings();
+    const mainAdmin = String(s.auth_username || 'admin').trim() || 'admin';
+    const rows = this.store.all(
+      'SELECT username, role FROM app_users WHERE active = 1 ORDER BY id ASC',
+    );
+    const seen = new Set();
+    const operators = [];
+    for (const row of rows) {
+      const uname = String(row.username || '').trim();
+      if (!uname) continue;
+      const key = uname.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      operators.push({ username: uname, role: row.role || 'reception' });
+    }
+    if (!seen.has(mainAdmin.toLowerCase())) {
+      operators.unshift({ username: mainAdmin, role: 'admin' });
+    }
+    return operators;
+  }
+
+  signToken(username, role = 'admin', tokenVersion = null, ttlMs = null) {
     const cleanRole = ALLOWED_USER_ROLES.has(role) ? role : 'admin';
     let tv = tokenVersion;
     if (tv === null || tv === undefined) {
@@ -140,7 +180,8 @@ export class AuthService {
       );
       tv = appUser ? Number(appUser.token_version ?? 1) : null;
     }
-    const payloadObj = { u: username, username, role: cleanRole, exp: Date.now() + SESSION_TTL_MS };
+    const effectiveTtlMs = Number.isFinite(Number(ttlMs)) && Number(ttlMs) > 0 ? Number(ttlMs) : this.getSessionTtlMs();
+    const payloadObj = { u: username, username, role: cleanRole, exp: Date.now() + effectiveTtlMs };
     if (tv !== null && tv !== undefined) payloadObj.tv = Number(tv);
     const payload = Buffer.from(JSON.stringify(payloadObj), 'utf8').toString('base64url');
     const sig = crypto.createHmac('sha256', this.getAdminSecret()).update(payload).digest('base64url');
@@ -189,7 +230,7 @@ export class AuthService {
     return this.verifyToken(cookies[SESSION_COOKIE]);
   }
 
-  setSessionCookie(req, res, username, role = null) {
+  setSessionCookie(req, res, username, role = null, { persistent = true } = {}) {
     let resolvedRole = role;
     if (!resolvedRole) {
       const appUser = this.store.get(
@@ -198,15 +239,18 @@ export class AuthService {
       );
       resolvedRole = appUser?.role || 'admin';
     }
-    const token = this.signToken(username, resolvedRole);
+    const ttlMs = this.getSessionTtlMs();
+    const token = this.signToken(username, resolvedRole, null, ttlMs);
     const isHttps = req.secure || req.headers?.['x-forwarded-proto'] === 'https';
     const parts = [
       `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
       'Path=/',
       'HttpOnly',
       'SameSite=Lax',
-      `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
     ];
+    if (persistent) {
+      parts.push(`Max-Age=${Math.floor(ttlMs / 1000)}`);
+    }
     if (isHttps) parts.push('Secure');
     res.setHeader('Set-Cookie', parts.join('; '));
   }
@@ -500,7 +544,7 @@ export class AuthService {
     };
   }
 
-  configure({ enabled, username, password }) {
+  configure({ enabled, username, password, idleTimeoutMinutes, sessionTtlHours }) {
     const s = this.store.getSettings();
     const cleanUser = String(username || s.auth_username || 'admin').trim();
     if (!cleanUser) {
@@ -513,6 +557,16 @@ export class AuthService {
       auth_session_secret: crypto.randomBytes(32).toString('hex'),
     };
 
+    if (idleTimeoutMinutes !== undefined && idleTimeoutMinutes !== null && idleTimeoutMinutes !== '') {
+      const mins = Math.max(0, Math.min(1440, Math.round(Number(idleTimeoutMinutes) || 0)));
+      updates.auth_idle_timeout_minutes = String(mins);
+    }
+
+    if (sessionTtlHours !== undefined && sessionTtlHours !== null && sessionTtlHours !== '') {
+      const hours = Math.max(1, Math.min(720, Math.round(Number(sessionTtlHours) || 168)));
+      updates.auth_session_ttl_hours = String(hours);
+    }
+
     if (password && String(password).length > 0) {
       updates.auth_password_hash = hashPassword(password);
     } else if (enabled && !s.auth_password_hash) {
@@ -523,6 +577,8 @@ export class AuthService {
     return {
       enabled: this.isEnabled(),
       username: cleanUser,
+      idleTimeoutMinutes: this.getIdleTimeoutMinutes(),
+      sessionTtlHours: Math.round(this.getSessionTtlMs() / (60 * 60 * 1000)),
     };
   }
 

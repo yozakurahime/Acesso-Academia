@@ -219,8 +219,7 @@ function scheduleLiveLogsRefresh() {
   clearTimeout(liveLogsRefreshTimer);
   liveLogsRefreshTimer = setTimeout(() => {
     if (document.hidden) return;
-    if (state.activeTab === 'balcao') loadBalcaoRecentLogs().catch(() => {});
-    else if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
+    if (state.activeTab === 'balcao') loadDashboard().catch(() => {});
     else if (state.activeTab === 'logs') loadLogs().catch(() => {});
   }, 250);
 }
@@ -314,8 +313,7 @@ if (!window.oxigenioDemo && !window.__liveLogsPollStarted) {
   setInterval(() => {
     const loginOverlay = document.getElementById('loginOverlay');
     if (document.hidden || (loginOverlay && !loginOverlay.classList.contains('hidden'))) return;
-    if (state.activeTab === 'balcao') loadBalcaoRecentLogs().catch(() => {});
-    else if (state.activeTab === 'dashboard') loadDashboard().catch(() => {});
+    if (state.activeTab === 'balcao') loadDashboard().catch(() => {});
     else if (state.activeTab === 'logs') loadLogs().catch(() => {});
   }, 5000);
 }
@@ -486,8 +484,7 @@ function loadOnce(loader) {
 }
 
 const tabLoaders = {
-  dashboard: () => Promise.all([loadDashboard(), loadOnce(loadSettings), loadOnce(loadDevices), loadCurrentCash()]),
-  balcao: () => Promise.all([loadOnce(loadMembers), loadCurrentCash(), loadBalcaoRecentLogs().catch(() => {})]),
+  balcao: () => Promise.all([loadOnce(loadMembers), loadDashboard(), loadCurrentCash(), loadOnce(loadSettings), loadOnce(loadDevices)]),
   members: () => Promise.all([loadOnce(loadMembers), loadOnce(loadPlans), loadOnce(loadGymStructure)]),
   billing: () => Promise.all([
     loadOnce(loadMembers), loadOnce(loadPlans), loadOnce(loadSettings),
@@ -528,7 +525,7 @@ function loadTab(tabName) {
     status.setAttribute('role', 'status');
     panel.querySelector('.page-title').after(status);
   }
-  const forms = tabName === 'dashboard' || isWarm ? [] : [...panel.querySelectorAll('form')];
+  const forms = tabName === 'balcao' || isWarm ? [] : [...panel.querySelectorAll('form')];
   forms.forEach((form) => { form.inert = true; });
   if (status && !isWarm) status.textContent = 'Carregando…';
   const request = tabLoaders[tabName]().then(() => {
@@ -555,10 +552,11 @@ function loadTab(tabName) {
   return isWarm ? Promise.resolve(true) : request;
 }
 
-const VOLATILE_TABS = new Set(['dashboard', 'balcao', 'billing', 'cash', 'logs', 'reports', 'settings']);
+const VOLATILE_TABS = new Set(['balcao', 'billing', 'cash', 'logs', 'reports', 'settings']);
 
 function switchTab(tabName, { updateHash = true } = {}) {
-  let target = Object.hasOwn(tabLoaders, tabName) ? tabName : 'balcao';
+  const normalizedTab = tabName === 'dashboard' ? 'balcao' : tabName;
+  let target = Object.hasOwn(tabLoaders, normalizedTab) ? normalizedTab : 'balcao';
   if (!isTabAllowedForRole(target)) target = 'balcao';
   if (state.activeTab !== target) stopPaymentAutoPoll();
   state.activeTab = target;
@@ -785,13 +783,20 @@ function setMemberFormOpen(open) {
   panel.classList.toggle('hidden', !open);
   if (listPanel) listPanel.classList.toggle('hidden', open);
   const button = document.getElementById('btnNewMember');
-  button.setAttribute('aria-expanded', String(open));
-  button.textContent = open ? 'Fechar cadastro' : 'Novo aluno';
+  if (button) {
+    button.setAttribute('aria-expanded', String(open));
+    button.classList.toggle('hidden', open);
+    button.textContent = 'Novo aluno';
+  }
   if (open) {
     resetMemberWizard();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
+
+document.getElementById('btnMemberStep1Cancel')?.addEventListener('click', () => {
+  setMemberFormOpen(false);
+});
 
 document.getElementById('btnNewMember').addEventListener('click', async (event) => {
   const open = event.currentTarget.getAttribute('aria-expanded') === 'false';
@@ -907,12 +912,7 @@ function renderBalcaoRecentLogs(logs = []) {
 }
 
 async function loadBalcaoRecentLogs() {
-  const [data, occupancy] = await Promise.all([
-    api('/api/dashboard'),
-    api('/api/occupancy').catch(() => null),
-  ]);
-  updateSidebarLiveOccupancy(occupancy, data.recentLogs?.[0] || null);
-  renderBalcaoRecentLogs(data.recentLogs || []);
+  return loadDashboard();
 }
 
 document.getElementById('btnBalcaoRefreshLogs')?.addEventListener('click', (event) => withLoading(event.currentTarget, async () => {
@@ -4928,6 +4928,12 @@ async function loadSettings() {
   document.getElementById('gwStoneWebhookSecret').value = s.stone_webhook_secret || '';
   document.getElementById('authEnabled').checked = s.auth_enabled === '1';
   document.getElementById('authUsername').value = s.auth_username || 'admin';
+  if (document.getElementById('authSessionTtlHours')) {
+    document.getElementById('authSessionTtlHours').value = String(s.auth_session_ttl_hours || '168');
+  }
+  if (document.getElementById('authIdleTimeoutMinutes')) {
+    document.getElementById('authIdleTimeoutMinutes').value = String(s.auth_idle_timeout_minutes || '0');
+  }
 
   const statusText = document.getElementById('deviceStatusText');
   if (s.controlid_mock_mode === 'true') {
@@ -7979,17 +7985,162 @@ document.getElementById('cancelEnrollmentForm')?.addEventListener('submit', asyn
   });
 });
 
-function showLoginOverlay() {
-  document.getElementById('loginOverlay')?.classList.remove('hidden');
+const LAST_LOGIN_USER_KEY = 'oxigenio_last_login_user';
+const ROLE_LABELS_PT = { admin: 'Admin', reception: 'Recepção', instructor: 'Professor' };
+const authUiState = {
+  enabled: false,
+  username: null,
+  operators: [],
+  idleTimeoutMinutes: 0,
+  mode: 'login',
+  idleTimerId: null,
+  lastActivityAt: Date.now(),
+  activityListenersAttached: false,
+};
+
+function renderLoginOperators(operators = [], selectedUsername = '') {
+  const wrap = document.getElementById('loginOperatorsWrap');
+  const list = document.getElementById('loginOperatorsList');
+  if (!wrap || !list) return;
+  if (!Array.isArray(operators) || !operators.length) {
+    wrap.classList.add('hidden');
+    list.innerHTML = '';
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const selectedLower = String(selectedUsername || '').trim().toLowerCase();
+  list.innerHTML = operators
+    .map((op) => {
+      const uname = escapeHtml(op.username || '');
+      const roleLabel = escapeHtml(ROLE_LABELS_PT[op.role] || op.role || 'Operador');
+      const active = uname.toLowerCase() === selectedLower ? ' active' : '';
+      return `<button type="button" class="login-operator-pill${active}" data-login-operator="${uname}"><span>${uname}</span><small>${roleLabel}</small></button>`;
+    })
+    .join('');
+}
+
+document.getElementById('loginOperatorsList')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-login-operator]');
+  if (!btn) return;
+  const picked = btn.dataset.loginOperator || '';
+  const userInput = document.getElementById('loginUser');
+  if (userInput) userInput.value = picked;
+  renderLoginOperators(authUiState.operators, picked);
   document.getElementById('loginPass')?.focus();
+});
+
+document.getElementById('btnToggleLoginPass')?.addEventListener('click', (event) => {
+  const input = document.getElementById('loginPass');
+  const btn = event.currentTarget;
+  if (!input || !btn) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? 'Mostrar' : 'Ocultar';
+  btn.setAttribute('aria-pressed', String(!showing));
+  input.focus();
+});
+
+document.getElementById('loginPass')?.addEventListener('keydown', (event) => {
+  const warn = document.getElementById('loginCapsWarn');
+  if (!warn || typeof event.getModifierState !== 'function') return;
+  warn.classList.toggle('hidden', !event.getModifierState('CapsLock'));
+});
+
+function stopIdleLockMonitor() {
+  clearTimeout(authUiState.idleTimerId);
+  authUiState.idleTimerId = null;
+}
+
+function scheduleIdleLockTimer() {
+  stopIdleLockMonitor();
+  if (!authUiState.enabled || !authUiState.idleTimeoutMinutes || authUiState.idleTimeoutMinutes <= 0) return;
+  const overlay = document.getElementById('loginOverlay');
+  if (overlay && !overlay.classList.contains('hidden')) return;
+  const ms = authUiState.idleTimeoutMinutes * 60 * 1000;
+  authUiState.idleTimerId = setTimeout(async () => {
+    await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    showLoginOverlay({
+      mode: 'lock',
+      subtitle: 'Sessão bloqueada por inatividade. Digite a senha para continuar.',
+      username: authUiState.username || undefined,
+    });
+  }, ms);
+}
+
+function startIdleLockMonitor(minutes = 0) {
+  authUiState.idleTimeoutMinutes = Math.max(0, Number(minutes) || 0);
+  if (!authUiState.activityListenersAttached) {
+    authUiState.activityListenersAttached = true;
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - authUiState.lastActivityAt < 1000) return;
+      authUiState.lastActivityAt = now;
+      scheduleIdleLockTimer();
+    };
+    for (const evt of ['pointerdown', 'keydown', 'scroll']) {
+      window.addEventListener(evt, onActivity, { passive: true });
+    }
+  }
+  scheduleIdleLockTimer();
+}
+
+function showLoginOverlay({ mode = 'login', subtitle = '', username = '' } = {}) {
+  authUiState.mode = mode;
+  stopIdleLockMonitor();
+  const overlay = document.getElementById('loginOverlay');
+  const titleEl = document.getElementById('loginTitle');
+  const subtitleEl = document.getElementById('loginSubtitle');
+  const submitBtn = document.getElementById('btnLoginSubmit');
+  const cancelBtn = document.getElementById('btnLoginCancelSwitch');
+  const userInput = document.getElementById('loginUser');
+  const passInput = document.getElementById('loginPass');
+  const toggleBtn = document.getElementById('btnToggleLoginPass');
+  if (titleEl) {
+    titleEl.textContent = mode === 'switch' ? 'Trocar operador' : mode === 'lock' ? 'Painel bloqueado' : 'Academia Oxigênio';
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = subtitle || (mode === 'switch'
+      ? `Operador atual: ${authUiState.username || 'admin'}. Escolha ou informe outro operador.`
+      : 'Entre com seu operador para acessar o sistema');
+  }
+  if (submitBtn) submitBtn.textContent = mode === 'switch' ? 'Trocar operador' : 'Entrar';
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', mode !== 'switch');
+
+  const rememberedUser = username || localStorage.getItem(LAST_LOGIN_USER_KEY) || authUiState.username || 'admin';
+  if (userInput && rememberedUser) userInput.value = rememberedUser;
+  if (passInput) {
+    passInput.value = '';
+    passInput.type = 'password';
+  }
+  if (toggleBtn) {
+    toggleBtn.textContent = 'Mostrar';
+    toggleBtn.setAttribute('aria-pressed', 'false');
+  }
+  document.getElementById('loginCapsWarn')?.classList.add('hidden');
+  renderLoginOperators(authUiState.operators, userInput?.value || rememberedUser);
+  overlay?.classList.remove('hidden');
+  (userInput?.value?.trim() ? passInput : userInput)?.focus();
   for (const element of document.querySelectorAll('body > .layout, body > .modal')) element.inert = true;
 }
 
 function hideLoginOverlay() {
+  authUiState.mode = 'login';
   document.getElementById('loginOverlay')?.classList.add('hidden');
   document.getElementById('loginError')?.classList.add('hidden');
+  document.getElementById('btnLoginCancelSwitch')?.classList.add('hidden');
   for (const element of document.querySelectorAll('body > .layout, body > .modal')) element.inert = false;
+  scheduleIdleLockTimer();
 }
+
+document.getElementById('btnLoginCancelSwitch')?.addEventListener('click', () => {
+  hideLoginOverlay();
+});
+
+document.getElementById('btnSwitchOperator')?.addEventListener('click', async () => {
+  const status = await api('/api/auth/status').catch(() => null);
+  if (status?.operators) authUiState.operators = status.operators;
+  showLoginOverlay({ mode: 'switch' });
+});
 
 document.getElementById('btnStudentInvite').addEventListener('click', (event) => {
   const id = state.selectedProfileId;
@@ -8004,8 +8155,13 @@ document.getElementById('btnStudentInvite').addEventListener('click', (event) =>
   });
 });
 
-function updateLogoutButton(enabled) {
+function updateLogoutButton(enabled, username = null) {
+  authUiState.enabled = Boolean(enabled);
+  if (username) authUiState.username = username;
   document.getElementById('btnLogout')?.classList.toggle('hidden', !enabled);
+  document.getElementById('btnSwitchOperator')?.classList.toggle('hidden', !enabled);
+  const opLabel = document.getElementById('activeOperatorLabel');
+  if (opLabel && authUiState.username) opLabel.textContent = authUiState.username;
 }
 
 document.getElementById('authForm')?.addEventListener('submit', async (e) => {
@@ -8014,6 +8170,8 @@ document.getElementById('authForm')?.addEventListener('submit', async (e) => {
   const username = document.getElementById('authUsername').value.trim();
   const password = document.getElementById('authPassword').value;
   const confirmPass = document.getElementById('authPasswordConfirm').value;
+  const sessionTtlHours = Number(document.getElementById('authSessionTtlHours')?.value || 168);
+  const idleTimeoutMinutes = Number(document.getElementById('authIdleTimeoutMinutes')?.value || 0);
 
   if (password && password !== confirmPass) {
     showToast('As senhas não conferem.', true);
@@ -8024,11 +8182,12 @@ document.getElementById('authForm')?.addEventListener('submit', async (e) => {
     try {
       const res = await api('/api/auth/setup', {
         method: 'POST',
-        body: JSON.stringify({ enabled, username, password }),
+        body: JSON.stringify({ enabled, username, password, sessionTtlHours, idleTimeoutMinutes }),
       });
       document.getElementById('authPassword').value = '';
       document.getElementById('authPasswordConfirm').value = '';
-      updateLogoutButton(res.enabled);
+      updateLogoutButton(res.enabled, res.username);
+      startIdleLockMonitor(res.idleTimeoutMinutes ?? idleTimeoutMinutes);
       showToast(res.enabled ? 'Login ativado! Sessão iniciada.' : 'Login desativado.');
     } catch (err) {
       showToast(err.message, true);
@@ -8042,22 +8201,41 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
   errEl.classList.add('hidden');
   const username = document.getElementById('loginUser').value.trim();
   const password = document.getElementById('loginPass').value;
+  const rememberSession = document.getElementById('loginRemember')?.checked !== false;
+  const isSwitch = authUiState.mode === 'switch';
+  const wasLock = authUiState.mode === 'lock';
 
   await withLoading(e.target, async () => {
     try {
-      const loginRes = await api('/api/auth/login', {
+      const endpoint = isSwitch ? '/api/auth/switch' : '/api/auth/login';
+      const loginRes = await api(endpoint, {
         method: 'POST',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, rememberSession }),
       });
+      if (username) localStorage.setItem(LAST_LOGIN_USER_KEY, username);
       let role = loginRes?.user?.role || loginRes?.role;
-      if (!role) {
+      let resolvedUser = loginRes?.username || username;
+      let idleMins = loginRes?.idleTimeoutMinutes;
+      if (!role || idleMins === undefined) {
         const statusRes = await api('/api/auth/status').catch(() => null);
-        role = statusRes?.role || 'admin';
+        role = role || statusRes?.role || 'admin';
+        resolvedUser = resolvedUser || statusRes?.username || username;
+        if (idleMins === undefined) idleMins = statusRes?.idleTimeoutMinutes || 0;
+        if (statusRes?.operators) authUiState.operators = statusRes.operators;
       }
       document.getElementById('loginPass').value = '';
+      updateLogoutButton(true, resolvedUser);
       hideLoginOverlay();
-      updateLogoutButton(true);
       applyRoleUi(role);
+      startIdleLockMonitor(idleMins || 0);
+      if (isSwitch) {
+        showToast(`Operador alterado para ${resolvedUser}.`);
+        return;
+      }
+      if (wasLock) {
+        showToast(`Sessão desbloqueada (${resolvedUser}).`);
+        return;
+      }
       startTurnstileEventsStream();
       if (!(await openInitialMemberFromUrl())) {
         switchTab(getTabFromHash(), { updateHash: !window.location.hash });
@@ -8119,6 +8297,7 @@ function clearSessionState() {
 }
 
 document.getElementById('btnLogout')?.addEventListener('click', async () => {
+  stopIdleLockMonitor();
   await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
   clearSessionState();
   showLoginOverlay();
@@ -8144,17 +8323,21 @@ async function openInitialMemberFromUrl() {
   if (!window.oxigenioDemo) {
     try {
       const auth = await api('/api/auth/status');
-      updateLogoutButton(auth.enabled);
+      authUiState.operators = auth.operators || [];
+      updateLogoutButton(auth.enabled, auth.username);
       if (auth.username) {
         document.getElementById('loginUser').value = auth.username;
       }
       if (auth.enabled && !auth.authenticated) {
-        showLoginOverlay();
+        showLoginOverlay({ mode: 'login' });
         return;
       }
       applyRoleUi(auth.role || 'admin');
+      if (auth.enabled) {
+        startIdleLockMonitor(auth.idleTimeoutMinutes || 0);
+      }
     } catch {
-      showLoginOverlay();
+      showLoginOverlay({ mode: 'login' });
       const errEl = document.getElementById('loginError');
       if (errEl) {
         errEl.textContent = 'Não foi possível verificar a autenticação. Faça login ou recarregue a página.';

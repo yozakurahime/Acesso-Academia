@@ -772,7 +772,15 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.get('/auth/status', (req, res) => {
     if (!authService) {
-      return res.json({ enabled: false, authenticated: true, username: 'admin', role: 'admin' });
+      return res.json({
+        enabled: false,
+        authenticated: true,
+        username: 'admin',
+        role: 'admin',
+        idleTimeoutMinutes: 0,
+        sessionTtlHours: 168,
+        operators: [],
+      });
     }
     const enabled = authService.isEnabled();
     const session = enabled ? authService.getSessionFromRequest(req) : null;
@@ -784,6 +792,9 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       username: authenticated ? (session?.u || settings.auth_username || 'admin') : null,
       role: authenticated ? (session?.role || 'admin') : null,
       hasPassword: Boolean(settings.auth_password_hash),
+      idleTimeoutMinutes: authService.getIdleTimeoutMinutes(),
+      sessionTtlHours: Math.round(authService.getSessionTtlMs() / (60 * 60 * 1000)),
+      operators: enabled ? authService.listLoginOperators() : [],
     });
   });
 
@@ -791,13 +802,48 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (!authService || !authService.isEnabled()) {
       return res.json({ ok: true, enabled: false });
     }
-    const { username, password } = req.body || {};
+    const { username, password, rememberSession } = req.body || {};
     const user = authService.authenticateUser(username, password);
     if (!user) {
       return res.status(401).json({ error: 'Usuário ou senha inválidos.' });
     }
-    authService.setSessionCookie(req, res, user.username, user.role);
-    return res.json({ ok: true, username: user.username, role: user.role });
+    authService.setSessionCookie(req, res, user.username, user.role, {
+      persistent: rememberSession !== false,
+    });
+    return res.json({
+      ok: true,
+      username: user.username,
+      role: user.role,
+      idleTimeoutMinutes: authService.getIdleTimeoutMinutes(),
+    });
+  });
+
+  router.post('/auth/switch', limitLogin, (req, res) => {
+    if (!authService || !authService.isEnabled()) {
+      return res.json({ ok: true, enabled: false, username: 'admin', role: 'admin' });
+    }
+    const { username, password, rememberSession } = req.body || {};
+    const user = authService.authenticateUser(username, password);
+    if (!user) {
+      return res.status(401).json({ error: 'Usuário ou senha inválidos.' });
+    }
+    const previousUser = req.authUser || null;
+    authService.setSessionCookie(req, res, user.username, user.role, {
+      persistent: rememberSession !== false,
+    });
+    auditService?.log({
+      actorUser: user.username,
+      actorRole: user.role,
+      action: 'auth.switch_operator',
+      entity: 'auth',
+      details: { previousUser, nextUser: user.username, role: user.role },
+    });
+    return res.json({
+      ok: true,
+      username: user.username,
+      role: user.role,
+      idleTimeoutMinutes: authService.getIdleTimeoutMinutes(),
+    });
   });
 
   router.post('/auth/logout', (req, res) => {
@@ -817,8 +863,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     limitSetup,
     handle(async (req, res) => {
       if (!authService) throw new Error('Serviço de autenticação não inicializado.');
-      const { enabled, username, password } = req.body || {};
-      const result = authService.configure({ enabled: Boolean(enabled), username, password });
+      const { enabled, username, password, idleTimeoutMinutes, sessionTtlHours } = req.body || {};
+      const result = authService.configure({
+        enabled: Boolean(enabled),
+        username,
+        password,
+        idleTimeoutMinutes,
+        sessionTtlHours,
+      });
       if (result.enabled) {
         authService.setSessionCookie(req, res, result.username);
       } else {
@@ -829,7 +881,12 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         actorRole: req.authRole,
         action: 'auth.setup',
         entity: 'auth',
-        details: { enabled: Boolean(result.enabled), username: result.username || null },
+        details: {
+          enabled: Boolean(result.enabled),
+          username: result.username || null,
+          idleTimeoutMinutes: result.idleTimeoutMinutes,
+          sessionTtlHours: result.sessionTtlHours,
+        },
       });
       res.json({ ok: true, ...result });
     }),

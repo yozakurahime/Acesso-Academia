@@ -14,22 +14,37 @@
   <a class="workspace-skip" href="#workspaceContent">Ir para o conteúdo</a>
   <div id="loginOverlay" class="login-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
     <div class="panel login-card">
-      <div class="brand" style="margin-bottom:14px;">
+      <div class="brand" style="margin-bottom:16px;">
         <img class="brand-badge" src="/oxigenio.jpg" width="48" height="48" alt="" />
         <div>
           <h2 id="loginTitle" style="margin:0;">Academia Oxigênio</h2>
-          <p class="muted" style="margin:2px 0 0;">Acesso restrito ao painel</p>
+          <p id="loginSubtitle" class="muted" style="margin:2px 0 0;">Entre com seu operador para acessar o sistema</p>
         </div>
       </div>
+      <div id="loginOperatorsWrap" class="login-operators hidden">
+        <span class="login-operators-label">Acesso rápido por operador</span>
+        <div id="loginOperatorsList" class="login-operators-list"></div>
+      </div>
       <form id="loginForm" class="form-stack">
-        <label>Usuário
+        <label>Usuário / Operador
           <input type="text" id="loginUser" autocomplete="username" value="admin" required />
         </label>
         <label>Senha
-          <input type="password" id="loginPass" autocomplete="current-password" required />
+          <div class="password-input-wrap">
+            <input type="password" id="loginPass" autocomplete="current-password" required />
+            <button type="button" id="btnToggleLoginPass" class="btn btn-secondary btn-sm password-toggle-btn" aria-label="Mostrar senha" aria-pressed="false">Mostrar</button>
+          </div>
+          <small id="loginCapsWarn" class="muted hidden" style="color:var(--warning,#d97706);margin-top:4px;display:block;">Caps Lock ativado.</small>
+        </label>
+        <label class="checkbox-label" style="font-size:13px;">
+          <input type="checkbox" id="loginRemember" checked />
+          Manter sessão conectada neste computador
         </label>
         <p id="loginError" class="muted hidden" style="color:var(--danger,#dc2626);margin:0;"></p>
-        <button type="submit" class="btn btn-primary btn-block">Entrar</button>
+        <div class="login-actions">
+          <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-block">Entrar</button>
+          <button type="button" id="btnLoginCancelSwitch" class="btn btn-secondary btn-block hidden">Continuar na sessão atual</button>
+        </div>
       </form>
     </div>
   </div>
@@ -72,7 +87,6 @@
         <div class="nav-group">
           <p>Recepção</p>
           <button class="tab active" data-tab="balcao" aria-current="page" title="Balcão"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg><span class="tab-label">Balcão</span></button>
-          <button class="tab" data-tab="dashboard" title="Visão geral"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Visão geral</span></button>
           <button class="tab" data-tab="members" title="Alunos"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span class="tab-label">Alunos</span></button>
           <button class="tab" data-tab="chat" title="Atendimento WhatsApp"><svg class="icon" aria-hidden="true"><use href="#i-chat"/></svg><span class="tab-label">Atendimento <span id="chatNavBadge" class="badge badge-pending hidden" style="margin-left:4px;">0</span></span></button>
           <button class="tab" data-tab="logs" title="Controle de acesso"><svg class="icon" aria-hidden="true"><use href="#i-entry"/></svg><span class="tab-label">Controle de acesso</span></button>
@@ -125,6 +139,7 @@
           <div class="live-status-pill" title="Servidor local e banco de dados ativos"><span class="live-status-dot"></span><span>Sistema Online</span></div>
           <a class="workspace-portal-link" href="https://academiaoxigenio.com/aluno" target="_blank" rel="noopener">Portal do aluno <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
           <button id="btnThemeToggle" type="button" class="btn btn-secondary theme-toggle" aria-pressed="false">Tema escuro</button>
+          <button id="btnSwitchOperator" type="button" class="btn btn-secondary hidden" title="Trocar operador sem sair da tela"><span id="activeOperatorLabel">admin</span> · Trocar</button>
           <button id="btnLogout" type="button" class="btn btn-secondary hidden">Sair</button>
         </div>
       </header>
@@ -133,13 +148,50 @@
       <div id="partnerRequestNotifications" class="partner-requests-tray" aria-live="assertive" aria-label="Solicitações de convênio na catraca"></div>
 
       <!-- PAGINA INICIAL -->
-      <section id="tab-dashboard" class="tab-panel">
+      <!-- BALCÃO E VISÃO GERAL (UNIFICADOS) -->
+      <section id="tab-balcao" class="tab-panel active">
         <div class="page-title">
-          <div><time id="receptionDate" class="reception-date"></time><h2>Visão geral</h2></div>
-          <div class="inline-actions">
-            <button type="button" id="btnRefreshDashboard" class="btn btn-secondary"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-button-label>Atualizar</span></button>
-            <a class="btn btn-secondary display-link" href="/catraca.html" target="_blank" rel="noopener">Tela da catraca <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
+          <div class="operations-heading">
+            <time id="receptionDate" class="reception-date"></time>
+            <h2>Balcão</h2>
+            <p>Atendimento rápido da recepção, indicadores do dia e movimentação da catraca.</p>
           </div>
+          <div class="inline-actions">
+            <button type="button" class="btn btn-secondary btn-sm" data-go="balcao" data-expand="visitorDetails" data-focus="visName">Visitante / Day Use</button>
+            <button type="button" id="balcaoCashBadge" class="badge badge-pending" data-go="cash" style="cursor:pointer;border:0;">Caixa: —</button>
+            <button type="button" id="btnRefreshDashboard" class="btn btn-secondary btn-sm"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-button-label>Atualizar</span></button>
+            <a class="btn btn-secondary btn-sm display-link" href="/catraca.html" target="_blank" rel="noopener">Tela da catraca <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a>
+          </div>
+        </div>
+
+        <div class="dashboard-primary-ctas">
+          <button type="button" class="dash-hero-cta dash-hero-cta--register" data-go="members" data-focus="mName">
+            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span>
+            <span class="dash-hero-cta-text">
+              <strong>CADASTRAR ALUNO</strong>
+              <small>Novo cadastro, plano e Face ID</small>
+            </span>
+            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </button>
+          <button type="button" class="dash-hero-cta dash-hero-cta--pay" data-go="billing" data-focus="pMemberSearch">
+            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></span>
+            <span class="dash-hero-cta-text">
+              <strong>RECEBER PAGAMENTO</strong>
+              <small>Mensalidade, Pix, cartão ou dinheiro</small>
+            </span>
+            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Buscar aluno rapidamente</h2>
+          </div>
+          <form id="balcaoQuickSearchForm" class="quick-search">
+            <div class="quick-search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="balcaoQuickSearch" aria-label="Nome, CPF ou telefone do aluno" placeholder="Digite nome, CPF ou telefone do aluno..." autocomplete="off" /></div>
+            <button type="submit" class="btn btn-primary">Buscar aluno <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          </form>
+          <div id="balcaoQuickResults" class="balcao-quick-results hidden" aria-live="polite"></div>
         </div>
 
         <div class="cards overview-cards dashboard-primary">
@@ -206,45 +258,45 @@
         </div>
 
         <div class="dashboard-lower">
-        <div class="panel dashboard-activity">
-          <div class="panel-header">
-            <h2>Passagens recentes</h2>
-            <div class="inline-actions">
-              <button id="btnSyncLogsDash" class="btn btn-secondary btn-sm">Sincronizar catraca</button>
-              <button class="btn btn-secondary btn-sm" data-go="logs">Ver registros</button>
+          <div class="panel dashboard-activity">
+            <div class="panel-header">
+              <h2>Passagens recentes na catraca</h2>
+              <div class="inline-actions">
+                <button id="btnSyncLogsDash" class="btn btn-secondary btn-sm">Sincronizar catraca</button>
+                <button class="btn btn-secondary btn-sm" data-go="logs">Ver registros</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Pessoa</th><th>Evento</th><th>Horário</th></tr>
+                </thead>
+                <tbody id="dashLogsBody"><tr><td colspan="3" class="empty-cell">Carregando registros…</td></tr></tbody>
+              </table>
             </div>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Pessoa</th><th>Evento</th><th>Horário</th></tr>
-              </thead>
-              <tbody id="dashLogsBody"><tr><td colspan="3" class="empty-cell">Carregando registros…</td></tr></tbody>
-            </table>
+          <div class="dashboard-details">
+            <section class="panel">
+              <div class="panel-header"><h2>Pendências</h2></div>
+              <dl class="dashboard-metrics">
+                <div class="dashboard-metric-link" data-go="chat" role="button" tabindex="0"><dt>Atendimentos aguardando humano</dt><dd id="statChatHuman">—</dd></div>
+                <div class="dashboard-metric-link" data-go="members" role="button" tabindex="0"><dt>Matrículas vencidas</dt><dd id="statExpired">—</dd></div>
+                <div class="dashboard-metric-link" data-go="billing" role="button" tabindex="0"><dt>Cobranças vencidas em aberto</dt><dd id="statOverdue">—</dd></div>
+                <div class="dashboard-metric-link" data-go="products" role="button" tabindex="0"><dt>Produtos com até 5 unidades</dt><dd id="statLowStock">—</dd></div>
+                <div class="dashboard-metric-link" data-go="cash" role="button" tabindex="0"><dt>Caixa Online (Mercado Pago)</dt><dd id="statOnlineToday">—</dd></div>
+              </dl>
+            </section>
+            <section class="panel">
+              <div class="panel-header"><h2>Academia e catraca</h2></div>
+              <dl class="dashboard-metrics">
+                <div><dt>Integrantes da equipe com acesso</dt><dd id="statTeam">—</dd></div>
+                <div><dt>Turmas cadastradas</dt><dd id="statClasses">—</dd></div>
+                <div><dt>Eventos de acesso hoje</dt><dd id="statAccess">—</dd></div>
+                <div><dt>A uma visita da meta semanal</dt><dd id="statFitnessNear">—</dd></div>
+                <div><dt>Voltaram hoje após 14 dias ou mais</dt><dd id="statFitnessReturn">—</dd></div>
+              </dl>
+            </section>
           </div>
-        </div>
-        <div class="dashboard-details">
-          <section class="panel">
-            <div class="panel-header"><h2>Pendências</h2></div>
-            <dl class="dashboard-metrics">
-              <div class="dashboard-metric-link" data-go="chat" role="button" tabindex="0"><dt>Atendimentos aguardando humano</dt><dd id="statChatHuman">—</dd></div>
-              <div class="dashboard-metric-link" data-go="members" role="button" tabindex="0"><dt>Matrículas vencidas</dt><dd id="statExpired">—</dd></div>
-              <div class="dashboard-metric-link" data-go="billing" role="button" tabindex="0"><dt>Cobranças vencidas em aberto</dt><dd id="statOverdue">—</dd></div>
-              <div class="dashboard-metric-link" data-go="products" role="button" tabindex="0"><dt>Produtos com até 5 unidades</dt><dd id="statLowStock">—</dd></div>
-              <div class="dashboard-metric-link" data-go="cash" role="button" tabindex="0"><dt>Caixa Online (Mercado Pago)</dt><dd id="statOnlineToday">—</dd></div>
-            </dl>
-          </section>
-          <section class="panel">
-            <div class="panel-header"><h2>Academia e catraca</h2></div>
-            <dl class="dashboard-metrics">
-              <div><dt>Integrantes da equipe com acesso</dt><dd id="statTeam">—</dd></div>
-              <div><dt>Turmas cadastradas</dt><dd id="statClasses">—</dd></div>
-              <div><dt>Eventos de acesso hoje</dt><dd id="statAccess">—</dd></div>
-              <div><dt>A uma visita da meta semanal</dt><dd id="statFitnessNear">—</dd></div>
-              <div><dt>Voltaram hoje após 14 dias ou mais</dt><dd id="statFitnessReturn">—</dd></div>
-            </dl>
-          </section>
-        </div>
         </div>
         <details id="visitorDetails" class="panel dashboard-visitor">
           <summary>Registrar visitante / Day Use</summary>
@@ -256,65 +308,6 @@
             <div><button type="submit" class="btn btn-primary">Liberar visitante</button></div>
           </form>
         </details>
-      </section>
-
-      <!-- BALCÃO -->
-      <section id="tab-balcao" class="tab-panel active">
-        <div class="page-title">
-          <div class="operations-heading"><h2>Balcão</h2><p>Atendimento rápido da recepção: cadastro, pagamento e consulta de alunos.</p></div>
-          <div class="inline-actions">
-            <button type="button" class="btn btn-secondary btn-sm" data-go="dashboard" data-expand="visitorDetails" data-focus="visName">Visitante / Day Use</button>
-            <button type="button" id="balcaoCashBadge" class="badge badge-pending" data-go="cash" style="cursor:pointer;border:0;">Caixa: —</button>
-          </div>
-        </div>
-
-        <div class="dashboard-primary-ctas">
-          <button type="button" class="dash-hero-cta dash-hero-cta--register" data-go="members" data-focus="mName">
-            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span>
-            <span class="dash-hero-cta-text">
-              <strong>CADASTRAR ALUNO</strong>
-              <small>Novo cadastro, plano e Face ID</small>
-            </span>
-            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
-          </button>
-          <button type="button" class="dash-hero-cta dash-hero-cta--pay" data-go="billing" data-focus="pMemberSearch">
-            <span class="dash-hero-cta-icon"><svg class="icon" aria-hidden="true"><use href="#i-cash"/></svg></span>
-            <span class="dash-hero-cta-text">
-              <strong>RECEBER PAGAMENTO</strong>
-              <small>Mensalidade, Pix, cartão ou dinheiro</small>
-            </span>
-            <svg class="icon dash-hero-cta-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
-          </button>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Buscar aluno rapidamente</h2>
-          </div>
-          <form id="balcaoQuickSearchForm" class="quick-search">
-            <div class="quick-search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="balcaoQuickSearch" aria-label="Nome, CPF ou telefone do aluno" placeholder="Digite nome, CPF ou telefone do aluno..." autocomplete="off" /></div>
-            <button type="submit" class="btn btn-primary">Buscar aluno <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
-          </form>
-          <div id="balcaoQuickResults" class="balcao-quick-results hidden" aria-live="polite"></div>
-        </div>
-
-        <div class="panel balcao-logs-panel" id="balcaoRecentLogsPanel">
-          <div class="panel-header">
-            <h2>Últimas passagens na catraca</h2>
-            <div class="inline-actions">
-              <button type="button" id="btnBalcaoRefreshLogs" class="btn btn-secondary btn-sm">Atualizar</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-go="logs">Ver registros</button>
-            </div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Pessoa</th><th>Evento</th><th>Horário</th></tr>
-              </thead>
-              <tbody id="balcaoLogsBody"><tr><td colspan="3" class="empty-cell">Carregando passagens…</td></tr></tbody>
-            </table>
-          </div>
-        </div>
       </section>
 
       <!-- ALUNOS -->
@@ -348,6 +341,7 @@
               </div>
               <div id="mNameCheckAlert" class="wizard-alert hidden"></div>
               <div class="wizard-actions">
+                <button type="button" id="btnMemberStep1Cancel" class="btn btn-secondary">Cancelar</button>
                 <button type="button" id="btnMemberStep1Next" class="btn btn-primary">Continuar para plano e turma</button>
               </div>
             </div>
@@ -1968,10 +1962,28 @@
                 </div>
               </div>
               <form id="authForm" class="form-grid">
-                <label class="checkbox-label"><input type="checkbox" id="authEnabled" /> Exigir login para acessar o sistema</label>
-                <label>Usuário <input type="text" id="authUsername" value="admin" required /></label>
+                <label class="checkbox-label"><input type="checkbox" id="authEnabled" /> Exigir login para acessar o sistema (local e externo)</label>
+                <label>Usuário administrador <input type="text" id="authUsername" value="admin" required /></label>
                 <label>Nova senha <input type="password" id="authPassword" autocomplete="new-password" minlength="8" maxlength="128" placeholder="Mínimo 8 caracteres" /></label>
                 <label>Confirmar senha <input type="password" id="authPasswordConfirm" autocomplete="new-password" placeholder="Repita a senha" /></label>
+                <label>Duração da sessão
+                  <select id="authSessionTtlHours">
+                    <option value="12">12 horas (turno)</option>
+                    <option value="24">24 horas (1 dia)</option>
+                    <option value="168" selected>7 dias (padrão)</option>
+                    <option value="720">30 dias</option>
+                  </select>
+                </label>
+                <label>Bloqueio por inatividade
+                  <select id="authIdleTimeoutMinutes">
+                    <option value="0">Desativado</option>
+                    <option value="5">5 minutos</option>
+                    <option value="15">15 minutos</option>
+                    <option value="30">30 minutos</option>
+                    <option value="60">1 hora</option>
+                    <option value="120">2 horas</option>
+                  </select>
+                </label>
                 <div style="align-self:end;">
                   <button type="submit" class="btn btn-primary">Salvar segurança</button>
                 </div>

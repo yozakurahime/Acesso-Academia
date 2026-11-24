@@ -113,3 +113,70 @@ test('tela e atalho locais funcionam com login ativo e têm proteção de origem
   });
   assert.equal(badIpRes.status, 400);
 });
+
+test('AuthService suporta tempo de sessao, bloqueio por inatividade, lista de operadores e troca rapida (/api/auth/switch)', async (t) => {
+  const store = await DatabaseStore.create();
+  const authService = new AuthService(store);
+  authService.configure({
+    enabled: true,
+    username: 'admin',
+    password: 'senha-admin-forte',
+    idleTimeoutMinutes: 15,
+    sessionTtlHours: 24,
+  });
+  authService.createUser({ username: 'recepcao1', password: 'senha-recepcao-1', role: 'reception' });
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api', createApiRouter({ store, authService }));
+  const server = await new Promise((resolve) => {
+    const result = app.listen(0, '127.0.0.1', () => resolve(result));
+  });
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+
+  const status = await (await fetch(base + '/auth/status')).json();
+  assert.equal(status.enabled, true);
+  assert.equal(status.idleTimeoutMinutes, 15);
+  assert.equal(status.sessionTtlHours, 24);
+  assert.deepEqual(
+    status.operators.map((o) => `${o.username}:${o.role}`),
+    ['admin:admin', 'recepcao1:reception'],
+  );
+
+  // Login temporario (rememberSession: false) nao envia Max-Age
+  const tempLogin = await fetch(base + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'senha-admin-forte', rememberSession: false }),
+  });
+  assert.equal(tempLogin.status, 200);
+  const setCookieHeader = tempLogin.headers.get('set-cookie') || '';
+  assert.doesNotMatch(setCookieHeader, /Max-Age=/i);
+  const adminCookie = setCookieHeader.split(';')[0];
+
+  // Troca de operador com senha errada falha sem derrubar sessao atual
+  const badSwitch = await fetch(base + '/auth/switch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ username: 'recepcao1', password: 'errada' }),
+  });
+  assert.equal(badSwitch.status, 401);
+
+  // Troca de operador valida atualiza cookie e retorna novo papel
+  const goodSwitch = await fetch(base + '/auth/switch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: adminCookie },
+    body: JSON.stringify({ username: 'recepcao1', password: 'senha-recepcao-1' }),
+  });
+  assert.equal(goodSwitch.status, 200);
+  const switchedBody = await goodSwitch.json();
+  assert.equal(switchedBody.username, 'recepcao1');
+  assert.equal(switchedBody.role, 'reception');
+  const receptionCookie = (goodSwitch.headers.get('set-cookie') || '').split(';')[0];
+
+  const switchedStatus = await (await fetch(base + '/auth/status', { headers: { cookie: receptionCookie } })).json();
+  assert.equal(switchedStatus.authenticated, true);
+  assert.equal(switchedStatus.username, 'recepcao1');
+  assert.equal(switchedStatus.role, 'reception');
+});

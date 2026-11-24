@@ -636,11 +636,74 @@ header.workspace-topbar,
 
 .workspace-app .login-overlay .brand h2 { color: var(--text); }
 .workspace-app .login-overlay {
-  background: rgba(7, 9, 14, 0.88);
+  background: radial-gradient(circle at top, rgba(249, 115, 22, 0.14), rgba(7, 9, 14, 0.92) 60%);
+  backdrop-filter: blur(8px);
 }
 .workspace-app .login-overlay .login-card {
   padding: 28px;
   border-color: var(--border);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  max-width: 430px;
+}
+.login-operators {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+.login-operators-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.login-operators-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.login-operator-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.login-operator-pill.active {
+  border-color: var(--accent, #f97316);
+  background: rgba(249, 115, 22, 0.14);
+  color: var(--accent, #f97316);
+}
+.login-operator-pill small {
+  font-size: 10px;
+  opacity: 0.78;
+}
+.password-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.password-input-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+.password-toggle-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.login-actions {
+  display: grid;
+  gap: 8px;
 }
 
 .workspace-app :is(.panel, .modal-content, .dashboard-metrics dd) {
