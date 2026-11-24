@@ -4808,10 +4808,12 @@ function renderLogsTable() {
   const visible = filtered.slice(0, state.logsLimit);
   document.getElementById('logsBody').innerHTML = visible.length
     ? visible
-        .map(
-          (l) =>
-            `<tr><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td><td>${escapeHtml(l.controlid_user_id || '-')}</td><td>${escapeHtml(l.member_name || '-')}</td><td>${escapeHtml(l.event_label)}</td></tr>`,
-        )
+        .map((l) => {
+          const memberCell = l.member_id
+            ? `<button type="button" class="member-jump-link" data-open-member="${Number(l.member_id)}"><strong>${escapeHtml(l.member_name || '-')}</strong></button>`
+            : escapeHtml(l.member_name || '-');
+          return `<tr><td>${escapeHtml(fmtDateTime(l.occurred_at))}</td><td>${escapeHtml(l.controlid_user_id || '-')}</td><td>${memberCell}</td><td>${escapeHtml(l.event_label)}</td></tr>`;
+        })
         .join('')
     : '<tr><td colspan="4" class="muted">Nenhum log encontrado.</td></tr>';
 
