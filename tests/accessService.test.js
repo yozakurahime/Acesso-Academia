@@ -787,3 +787,71 @@ test('deletePayment recalcula validade corretamente mesmo quando o primeiro paga
   assert.equal(delFirst.ok, true);
   assert.equal(delFirst.member.valid_until, p1.member.valid_until);
 });
+
+test('recordPayment usa o vencimento da cobranca aberta quando valid_until estiver adiantado (ex: importacao)', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.createPlan({ name: 'Mensal Cobranca Base', price_cents: 10000, duration_days: 30 });
+  const mPast = await service.createMember({ name: 'Aluno Cobranca Atrasada', document: nextCpf(), plan_id: plan.id });
+  const mFuture = await service.createMember({ name: 'Aluno Cobranca A Vencer', document: nextCpf(), plan_id: plan.id });
+
+  const today = store.get("SELECT date('now', 'localtime') AS d").d;
+  const rolledForwardDue = store.get("SELECT date('now', 'localtime', '+20 days') AS d").d;
+  const pastChargeDue = store.get("SELECT date('now', 'localtime', '-10 days') AS d").d;
+  const upcomingChargeDue = store.get("SELECT date('now', 'localtime', '+2 days') AS d").d;
+
+  store.run('DELETE FROM membership_charges WHERE member_id IN (?, ?)', [mPast.id, mFuture.id]);
+  store.run("UPDATE members SET status = 'active', valid_until = ? WHERE id IN (?, ?)", [rolledForwardDue, mPast.id, mFuture.id]);
+  store.run(
+    'INSERT INTO plan_enrollments (member_id, plan_id, starts_on, ends_on) VALUES (?, ?, ?, ?) ON CONFLICT(member_id) DO UPDATE SET ends_on = excluded.ends_on',
+    [mPast.id, plan.id, today, rolledForwardDue],
+  );
+  store.run(
+    'INSERT INTO plan_enrollments (member_id, plan_id, starts_on, ends_on) VALUES (?, ?, ?, ?) ON CONFLICT(member_id) DO UPDATE SET ends_on = excluded.ends_on',
+    [mFuture.id, plan.id, today, rolledForwardDue],
+  );
+
+  const cPast = service.createMembershipCharge(mPast.id, { due: pastChargeDue, amount: plan.price_cents });
+  const cFuture = service.createMembershipCharge(mFuture.id, { due: upcomingChargeDue, amount: plan.price_cents });
+
+  const resPast = await service.recordPayment({
+    member_id: mPast.id,
+    plan_id: plan.id,
+    charge_id: cPast.id,
+    amount_cents: plan.price_cents,
+    method: 'pix',
+  });
+  const expectedPast = store.get("SELECT date('now', 'localtime', '+30 days') AS d").d;
+  assert.equal(resPast.member.valid_until, expectedPast);
+
+  const resFuture = await service.recordPayment({
+    member_id: mFuture.id,
+    plan_id: plan.id,
+    charge_id: cFuture.id,
+    amount_cents: plan.price_cents,
+    method: 'pix',
+  });
+  const expectedFuture = store.get('SELECT date(?, \'+30 days\') AS d', [upcomingChargeDue]).d;
+  assert.equal(resFuture.member.valid_until, expectedFuture);
+});
+
+test('savePlanEnrollment atualiza o valor da cobranca em aberto ao trocar de plano', async () => {
+  const { store, service } = await createTestEnv();
+  const plan120 = service.createPlan({ name: 'Musculacao Completo', price_cents: 12000, duration_days: 30 });
+  const plan100 = service.createPlan({ name: 'Musculacao Normal', price_cents: 10000, duration_days: 30 });
+  const member = await service.createMember({
+    name: 'Aluna Troca Plano',
+    document: nextCpf(),
+    plan_id: plan120.id,
+  });
+
+  const before = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  assert.equal(before.amount, 12000);
+
+  const today = store.get("SELECT date('now', 'localtime') AS d").d;
+  const updated = await service.savePlanEnrollment(member.id, { plan_id: plan100.id, starts_on: today });
+  assert.equal(updated.charge.amount, 10000);
+
+  const after = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  assert.equal(after.id, before.id);
+  assert.equal(after.amount, 10000);
+});

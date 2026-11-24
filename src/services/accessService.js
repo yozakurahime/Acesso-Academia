@@ -1211,7 +1211,12 @@ export class AccessService {
           'SELECT id, due, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due, id LIMIT 1',
           [member.id],
         );
-        if (!openCharge && !this.store.get('SELECT id FROM membership_charges WHERE member_id = ? AND due = ?', [member.id, chargeDue])) {
+        if (openCharge) {
+          if (openCharge.amount !== plan.price_cents) {
+            this.store.run('UPDATE membership_charges SET amount = ? WHERE id = ?', [plan.price_cents, openCharge.id]);
+          }
+          createdCharge = { id: openCharge.id, member_id: member.id, due: openCharge.due, amount: plan.price_cents };
+        } else if (!this.store.get('SELECT id FROM membership_charges WHERE member_id = ? AND due = ?', [member.id, chargeDue])) {
           const ins = this.store.run(
             'INSERT INTO membership_charges (member_id, due, amount) VALUES (?, ?, ?)',
             [member.id, chargeDue, plan.price_cents],
@@ -1386,9 +1391,13 @@ export class AccessService {
       .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
       .sort()
       .pop() || null;
-    const extendsCurrent = Boolean(currentDue && currentDue >= today);
+    const chargeDue = charge?.source !== 'enrollment' && charge?.due && /^\d{4}-\d{2}-\d{2}$/.test(charge.due)
+      ? charge.due
+      : null;
+    const baseDue = chargeDue || currentDue;
+    const extendsCurrent = Boolean(baseDue && baseDue >= today);
     const newValidUntil = extendsCurrent
-      ? addDays(currentDue, plan.duration_days)
+      ? addDays(baseDue, plan.duration_days)
       : addDays(today, plan.duration_days > 1 ? plan.duration_days : 0);
 
     const availableCredit = Number(member.credit_cents || 0);
@@ -2214,20 +2223,7 @@ export class AccessService {
       }
     }
     const currentMember = this.getMember(member.id);
-    let reason = this.getAccessDenial(currentMember);
-    if (reason && /^Aguarde a liberação na recepção \((Wellhub|TotalPass)\)$/.test(reason)) {
-      const hasExternalCreds = currentMember.partner_provider === 'wellhub'
-        ? Boolean(settings.wellhub_api_key && settings.wellhub_gym_id)
-        : Boolean(settings.totalpass_api_token && settings.totalpass_gym_id);
-      if (hasExternalCreds) {
-        try {
-          await new PartnerService(this.store).registerMemberCheckin({ memberId: currentMember.id, source: 'turnstile' });
-          reason = this.getAccessDenial(currentMember);
-        } catch (err) {
-          reason = err.message;
-        }
-      }
-    }
+    const reason = this.getAccessDenial(currentMember);
     if (reason) {
       this.store.run(
         `INSERT INTO access_logs (controlid_user_id, member_id, member_name, event_code, event_label, occurred_at)

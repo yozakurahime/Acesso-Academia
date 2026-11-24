@@ -161,11 +161,11 @@ function renderPartnerRequestNotifications() {
           </div>
           <div class="partner-request-body">
             <strong>${escapeHtml(req.member_name || 'Aluno de convênio')} (#${req.member_id})</strong>
-            <span class="muted" style="font-size:12px;">${docPart ? `${docPart} · ` : ''}Aguardando liberação na recepção (válido só hoje)</span>
+            <span class="muted" style="font-size:12px;">${docPart ? `${docPart} · ` : ''}Confirma o check-in?</span>
           </div>
           <div class="partner-request-actions">
-            <button type="button" class="btn btn-primary btn-sm" data-approve-partner-req="${req.id}">Liberar hoje</button>
-            <button type="button" class="btn btn-secondary btn-sm" data-cancel-partner-req="${req.id}">Cancelar</button>
+            <button type="button" class="btn btn-primary btn-sm" data-approve-partner-req="${req.id}">Sim</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-cancel-partner-req="${req.id}">Não</button>
           </div>
         </div>`;
     })
@@ -295,6 +295,13 @@ function startTurnstileEventsStream() {
       if (idx >= 0) pendingPartnerRequests[idx] = req;
       else pendingPartnerRequests.unshift(req);
       renderPartnerRequestNotifications();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const providerLabel = req.provider === 'wellhub' ? 'Wellhub' : 'TotalPass';
+        new Notification(`Confirma o check-in? (${providerLabel})`, {
+          body: `${req.member_name || 'Aluno de convênio'} (#${req.member_id}) aguarda liberação na catraca.`,
+          tag: `partner-req-${req.id}`,
+        });
+      }
     } catch {
       // Ignora payload malformado.
     }
@@ -2962,10 +2969,10 @@ window.openProfile = async (id) => {
       const waDigits = String(m.phone || '').replace(/\D+/g, '');
       if (waDigits.length >= 10) {
         const normalizedWa = waDigits.startsWith('55') ? waDigits : `55${waDigits}`;
-        sideWa.href = `https://wa.me/${normalizedWa}`;
+        sideWa.dataset.phone = normalizedWa;
         sideWa.classList.remove('hidden');
       } else {
-        sideWa.removeAttribute('href');
+        delete sideWa.dataset.phone;
         sideWa.classList.add('hidden');
       }
     }
@@ -3645,6 +3652,17 @@ document.getElementById('btnProfChangePhoto').addEventListener('click', () => {
 
 document.getElementById('btnProfPay').addEventListener('click', () => {
   if (state.selectedProfileMember) jumpToPaymentForMember(state.selectedProfileMember);
+});
+
+document.getElementById('profSideWhatsapp')?.addEventListener('click', async (event) => {
+  const phone = event.currentTarget?.dataset?.phone;
+  if (!phone) return;
+  try {
+    await switchTab('chat');
+    await openChat(phone);
+  } catch (err) {
+    showToast(err.message, true);
+  }
 });
 
 document.getElementById('btnProfDelete')?.addEventListener('click', async (e) => {

@@ -216,6 +216,13 @@ function formatTurnstileMessages(state, event, defaults) {
     };
   }
   if (state === 'denied') {
+    if (/^Aguarde a liberação na recepção/i.test(event?.reason || '')) {
+      return {
+        status: 'Check-in diário',
+        title: event?.firstName || 'Aguarde um instante',
+        message: `${event.reason} · Faça o check-in diário e aguarde a confirmação da recepção.`,
+      };
+    }
     return {
       status: 'Acesso bloqueado',
       title: event?.firstName || defaultTitle,

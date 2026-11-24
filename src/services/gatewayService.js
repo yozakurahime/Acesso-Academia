@@ -1171,6 +1171,25 @@ export class GatewayService {
     const member = primaryMember;
     const plan = primaryPlan;
     const charge = primaryCharge;
+    const pointMethodMap = {
+      credit: 'credit_card',
+      credit_card: 'credit_card',
+      debit: 'debit_card',
+      debit_card: 'debit_card',
+      pix: 'qr',
+      qr: 'qr',
+      voucher: 'voucher_card',
+      voucher_card: 'voucher_card',
+    };
+    const defaultType = pointMethodMap[String(payment_method || '').trim().toLowerCase()] || null;
+    const orderConfig = {
+      point: {
+        terminal_id: chosenTerminal,
+        print_on_terminal: 'no_ticket',
+      },
+      ...(defaultType ? { payment_method: { default_type: defaultType } } : {}),
+    };
+
     const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Date.now()}`;
     const res = await this.fetch('https://api.mercadopago.com/v1/orders', {
       method: 'POST',
@@ -1184,12 +1203,7 @@ export class GatewayService {
         external_reference: String(member.id),
         expiration_time: 'PT16M',
         description,
-        config: {
-          point: {
-            terminal_id: chosenTerminal,
-            print_on_terminal: 'no_ticket',
-          },
-        },
+        config: orderConfig,
         transactions: {
           payments: [
             {
@@ -1376,7 +1390,8 @@ export class GatewayService {
       method: 'POST',
       headers: {
         ...headers,
-        'X-Idempotency-Key': `cancel_point_order:${order.order_id}`,
+        'X-Idempotency-Key': `cancel_point_order:${order.order_id}:${Date.now()}`,
+        'x-allow-cancelable-status': 'at_terminal',
       },
       signal: AbortSignal.timeout(15000),
     });
