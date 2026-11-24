@@ -6,6 +6,8 @@ const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
 const CONFIRM_YES_REGEX = /^(1|sim|s|confirmar|confirmo|certo|ok|correto|isso)$/i;
 const CONFIRM_FIX_REGEX = /^(2|n[aã]o|n|corrigir|alterar|editar|errado|refazer)$/i;
+const EMAIL_SKIP_REGEX = /^(pular|nao|n[aã]o|n[aã]o\s+tenho|sem\s+e-?mail|depois)$/i;
+const SIMPLE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const ADD_ANOTHER_PERSON_REGEX = /^(3|mais|outra|outro|cadastrar\s+outr[ao]|outr[ao]\s+pessoa|nova\s+pessoa|adicionar\s+pessoa|mais\s+uma?)$/i;
 const PAYMENT_PIX_CHOICE_REGEX = /^(1|pix|qr|copia\s+e\s+cola)$/i;
 const PAYMENT_LINK_CHOICE_REGEX = /^(2|link|cart[aã]o|cr[eé]dito|d[eé]bito)$/i;
@@ -546,17 +548,53 @@ export class OnlineSalesBotService {
       session.pendingCpfDigits = digits;
       session.pendingCpfFormatted = formattedCpf;
       session.existingByCpf = existingByCpf;
+      session.pendingEmail = existingByCpf?.email ? String(existingByCpf.email).trim() : null;
+
+      if (existingByCpf && session.pendingEmail) {
+        session.step = 'confirm_data';
+        this._setSession(phone, session);
+        const reply = [
+          'Encontrei um cadastro com este CPF. Confira os dados:',
+          `\n• *Nome:* ${existingByCpf.name}`,
+          `• *CPF:* ${formattedCpf}`,
+          `• *E-mail:* ${session.pendingEmail}`,
+          '\n• Responda *1* ou *sim* para confirmar e continuar',
+          '• Responda *2* ou *corrigir* para digitar novamente',
+        ].join('\n');
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
+      session.step = 'ask_email';
+      this._setSession(phone, session);
+      const reply = 'Agora informe seu *e-mail* para receber o comprovante do pagamento (ou responda *pular* se não quiser informar):';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    if (session.step === 'ask_email') {
+      const rawEmail = String(userText || '').trim();
+      if (EMAIL_SKIP_REGEX.test(rawEmail)) {
+        session.pendingEmail = null;
+      } else if (SIMPLE_EMAIL_REGEX.test(rawEmail)) {
+        session.pendingEmail = rawEmail.toLowerCase();
+      } else {
+        const reply = 'E-mail inválido. Digite um e-mail válido (ex: nome@gmail.com) ou responda *pular*:';
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
       session.step = 'confirm_data';
       this._setSession(phone, session);
-
-      const displayName = existingByCpf ? existingByCpf.name : session.fullName;
-      const header = existingByCpf
+      const displayName = session.existingByCpf ? session.existingByCpf.name : session.fullName;
+      const header = session.existingByCpf
         ? 'Encontrei um cadastro com este CPF. Confira os dados:'
         : 'Confira se os dados estão corretos:';
       const reply = [
         header,
         `\n• *Nome:* ${displayName}`,
-        `• *CPF:* ${formattedCpf}`,
+        `• *CPF:* ${session.pendingCpfFormatted}`,
+        `• *E-mail:* ${session.pendingEmail || 'Não informado'}`,
         '\n• Responda *1* ou *sim* para confirmar e continuar',
         '• Responda *2* ou *corrigir* para digitar novamente',
       ].join('\n');
@@ -571,6 +609,7 @@ export class OnlineSalesBotService {
         session.fullName = null;
         session.pendingCpfDigits = null;
         session.pendingCpfFormatted = null;
+        session.pendingEmail = null;
         session.existingByCpf = null;
         this._setSession(phone, session);
         const reply = 'Tudo bem! Vamos corrigir os dados.\n\nInforme o *nome completo*:';
@@ -590,14 +629,21 @@ export class OnlineSalesBotService {
             name: session.fullName,
             document: session.pendingCpfFormatted,
             phone,
+            email: session.pendingEmail || null,
           });
         } else {
           const ins = this.store.run(
-            "INSERT INTO members (name, document, phone, status, access_role) VALUES (?, ?, ?, 'pending', 'student')",
-            [session.fullName, session.pendingCpfFormatted, phone],
+            "INSERT INTO members (name, document, phone, email, status, access_role) VALUES (?, ?, ?, ?, 'pending', 'student')",
+            [session.fullName, session.pendingCpfFormatted, phone, session.pendingEmail || null],
           );
           member = this.store.get('SELECT * FROM members WHERE id = ?', [ins.lastInsertRowid]);
         }
+      } else if (session.pendingEmail && !member.email) {
+        this.store.run(
+          "UPDATE members SET email = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+          [session.pendingEmail, member.id],
+        );
+        member = this.store.get('SELECT * FROM members WHERE id = ?', [member.id]);
       }
 
       const newItems = this._resolveBillableList([member]);

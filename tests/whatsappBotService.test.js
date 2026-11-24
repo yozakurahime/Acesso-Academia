@@ -220,10 +220,14 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
   const s2 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Mariana Souza Lima' });
   assert.match(s2.reply, /CPF/i);
 
-  const s3 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '52998224725' });
+  const s3Email = await bot.handleIncomingMessage({ phone: '5562991234567', text: '52998224725' });
+  assert.match(s3Email.reply, /e-mail/i);
+
+  const s3 = await bot.handleIncomingMessage({ phone: '5562991234567', text: 'Mariana@Gmail.com' });
   assert.match(s3.reply, /Confira se os dados estão corretos/);
   assert.match(s3.reply, /Mariana Souza Lima/);
   assert.match(s3.reply, /529\.982\.247-25/);
+  assert.match(s3.reply, /mariana@gmail\.com/);
 
   const s3Confirm = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
   assert.match(s3Confirm.reply, /Cadastro pronto para \*Mariana Souza Lima\*/);
@@ -235,7 +239,7 @@ test('OnlineSalesBotService guia matricula nova pelo WhatsApp (plano -> nome -> 
 
   const s5 = await bot.handleIncomingMessage({ phone: '5562991234567', text: '1' });
   assert.match(s5.reply, /000201010212PIX_NOVA_MATRICULA/);
-  assert.match(lastPixBody?.payer?.email || '', /@academiaoxigenio\.com$/);
+  assert.equal(lastPixBody?.payer?.email, 'mariana@gmail.com');
 
   const created = store.get("SELECT id, name, status FROM members WHERE document = '529.982.247-25'");
   assert.equal(created.name, 'Mariana Souza Lima');
@@ -455,7 +459,9 @@ test('OnlineSalesBotService respeita online_available e regras de turmas fechada
   assert.ok(step1);
   assert.match(step1.reply, /nome completo/i);
   await bot.handleIncomingMessage({ phone: '5562955554444', text: 'Aluno Teste Turma' });
-  const stepConfirm = await bot.handleIncomingMessage({ phone: '5562955554444', text: '52998224725' });
+  const stepAskEmail = await bot.handleIncomingMessage({ phone: '5562955554444', text: '52998224725' });
+  assert.match(stepAskEmail.reply, /e-mail/i);
+  const stepConfirm = await bot.handleIncomingMessage({ phone: '5562955554444', text: 'pular' });
   assert.match(stepConfirm.reply, /Confira se os dados estão corretos/);
   const stepPlans = await bot.handleIncomingMessage({ phone: '5562955554444', text: 'sim' });
   assert.ok(stepPlans);
@@ -503,7 +509,8 @@ test('OnlineSalesBotService permite conferir/corrigir dados e cadastrar várias 
 
   await bot.handleIncomingMessage({ phone, text: 'Quero me matricular' });
   await bot.handleIncomingMessage({ phone, text: 'Ana Clara Errada' });
-  const check1 = await bot.handleIncomingMessage({ phone, text: '52998224725' });
+  await bot.handleIncomingMessage({ phone, text: '52998224725' });
+  const check1 = await bot.handleIncomingMessage({ phone, text: 'pular' });
   assert.match(check1.reply, /Confira se os dados estão corretos/);
   assert.match(check1.reply, /Ana Clara Errada/);
 
@@ -511,7 +518,8 @@ test('OnlineSalesBotService permite conferir/corrigir dados e cadastrar várias 
   const fix = await bot.handleIncomingMessage({ phone, text: 'corrigir' });
   assert.match(fix.reply, /Vamos corrigir os dados/i);
   await bot.handleIncomingMessage({ phone, text: 'Ana Clara Silva' });
-  const check2 = await bot.handleIncomingMessage({ phone, text: '52998224725' });
+  await bot.handleIncomingMessage({ phone, text: '52998224725' });
+  const check2 = await bot.handleIncomingMessage({ phone, text: 'pular' });
   assert.match(check2.reply, /Ana Clara Silva/);
   const confirm1 = await bot.handleIncomingMessage({ phone, text: '1' });
   assert.match(confirm1.reply, /Cadastro pronto para \*Ana Clara Silva\*/);
@@ -525,7 +533,8 @@ test('OnlineSalesBotService permite conferir/corrigir dados e cadastrar várias 
   const nextPerson = await bot.handleIncomingMessage({ phone, text: '3' });
   assert.match(nextPerson.reply, /nome completo/i);
   await bot.handleIncomingMessage({ phone, text: 'Beatriz Clara Silva' });
-  const check3 = await bot.handleIncomingMessage({ phone, text: '15350946056' });
+  await bot.handleIncomingMessage({ phone, text: '15350946056' });
+  const check3 = await bot.handleIncomingMessage({ phone, text: 'pular' });
   assert.match(check3.reply, /Beatriz Clara Silva/);
   assert.match(check3.reply, /153\.509\.460-56/);
 
