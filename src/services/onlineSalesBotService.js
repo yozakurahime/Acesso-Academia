@@ -1,7 +1,7 @@
 import { normalizeBrPhone } from './whatsappService.js';
 
 const PAYMENT_INTENT_REGEX = /\b(pagar|pagamento|mensalidade|renovar|renova[cç][aã]o|pix|link\s+de\s+pagamento|quero\s+pagar)\b/i;
-const ENROLLMENT_INTENT_REGEX = /\b(quero\s+me\s+matricular|fazer\s+matr[ií]cula|fazer\s+cadastro|me\s+cadastrar|nova\s+matr[ií]cula)\b/i;
+const ENROLLMENT_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|vamos|preciso|posso|queria)\s+(?:me\s+)?(?:matricular|cadastrar)|(?:fazer|fechar|concluir|realizar|abrir|iniciar|nova)\s+(?:a\s+|uma\s+)?(?:matr[ií]cula|cadastro|inscri[cç][aã]o)|me\s+(?:matricular|cadastrar)|matricular\s+(?:meu|minha|o|a|um|uma|ele|ela))\b/i;
 const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)|baby|infantil)\b/i;
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
 const CONFIRM_YES_REGEX = /^(1|sim|s|confirmar|confirmo|certo|ok|correto|isso)$/i;

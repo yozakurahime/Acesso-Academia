@@ -600,3 +600,35 @@ test('WhatsappBotService transcreve audios com fallback de modelo e salva transc
   const chat = store.get('SELECT last_message FROM whatsapp_chats WHERE phone = ?', [phone]);
   assert.match(chat.last_message, /Qual o horário da natação hoje\?/);
 });
+
+test('OnlineSalesBotService reconhece frases naturais como "fechar a matricula dele" sem capturar duvida de taxa de matricula', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'TEST-MP-TOKEN',
+  });
+  const accessService = new AccessService(store, null, null);
+  const gatewayService = new GatewayService(store, accessService);
+  const himeCalls = [];
+  const fakeFetch = async () => {
+    himeCalls.push(1);
+    return {
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Não cobramos taxa de matrícula!' }] } }] }),
+    };
+  };
+  const bot = new WhatsappBotService(store, { gatewayService, accessService, fetchFn: fakeFetch });
+
+  const faq = await bot.handleIncomingMessage({ phone: '5562994441111', text: 'Vocês cobram taxa de matrícula?' });
+  assert.equal(himeCalls.length, 1);
+  assert.match(faq.reply, /taxa de matrícula/i);
+
+  const naturalEnroll = await bot.handleIncomingMessage({
+    phone: '5562986601004',
+    text: 'Meu marido fez uma aula de natação experimental ontem.. gostaria de fechar a matrícula dele.',
+  });
+  assert.ok(naturalEnroll);
+  assert.match(naturalEnroll.reply, /nome completo/i);
+  assert.equal(himeCalls.length, 1);
+});
