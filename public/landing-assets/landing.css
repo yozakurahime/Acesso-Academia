@@ -105,7 +105,10 @@ img { max-width: 100%; display: block; }
 
 /* Hero */
 .hero {
-  padding: clamp(48px, 8vw, 96px) 0 clamp(40px, 6vw, 72px);
+  min-height: calc(100vh - 76px);
+  display: flex;
+  align-items: center;
+  padding: clamp(32px, 5vw, 64px) 0;
 }
 .hero-grid {
   display: grid;
