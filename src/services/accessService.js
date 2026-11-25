@@ -336,21 +336,17 @@ export class AccessService {
       identifier: identifier || String(req.member_id),
       source: 'reception',
     });
-    const firstName = String(req.member_name || 'BEM VINDO').trim().split(/\s+/, 1)[0];
-    let releaseError = null;
     const isCloudRole = String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud';
     if (isCloudRole && this.edgeCloudHub) {
       this.edgeCloudHub.enqueueCommand('sync_needed', { memberId: req.member_id });
-      this.edgeCloudHub.enqueueCommand('release', { direction: 'entry' });
     } else {
-      try {
-        await this.releaseTurnstile(null, firstName);
-      } catch (err) {
-        releaseError = err.message;
+      const updatedMember = this.getMember(req.member_id);
+      if (updatedMember) {
+        await this.trySyncMemberToDevice(updatedMember).catch(() => {});
       }
     }
     this._emitPartnerRequest('partner_request_resolved', { id, member_id: req.member_id, status: 'approved' });
-    return { approved: true, requestId: id, checkin, releaseError };
+    return { approved: true, requestId: id, checkin, releaseError: null };
   }
 
   cancelPartnerRequest(requestId) {

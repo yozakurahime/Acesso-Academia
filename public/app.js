@@ -192,9 +192,7 @@ document.getElementById('partnerRequestNotifications')?.addEventListener('click'
         const res = await api(`/api/partner-requests/${reqId}/approve`, { method: 'POST' });
         pendingPartnerRequests = pendingPartnerRequests.filter((r) => Number(r.id) !== reqId);
         renderPartnerRequestNotifications();
-        showToast(res.releaseError
-          ? `Liberado para hoje! (Aviso na catraca: ${res.releaseError})`
-          : 'Acesso de convênio liberado para hoje e catraca acionada!');
+        showToast('Check-in de convênio confirmado para hoje! O aluno já pode passar o FaceID.');
         await Promise.allSettled([loadDashboard(), loadLogs(), loadBalcaoRecentLogs()]);
       } catch (err) {
         showToast(err.message, true);
