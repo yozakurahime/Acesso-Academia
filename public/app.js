@@ -5372,6 +5372,10 @@ async function loadSettings() {
   if (document.getElementById('gwFeePointPix')) document.getElementById('gwFeePointPix').value = s.fee_point_pix_pct ?? '0';
   if (document.getElementById('gwFeeOnlinePix')) document.getElementById('gwFeeOnlinePix').value = s.fee_online_pix_pct ?? '0.99';
   if (document.getElementById('gwFeeOnlineCredit')) document.getElementById('gwFeeOnlineCredit').value = s.fee_online_credit_pct ?? '4.98';
+  if (document.getElementById('gwFeeCheckoutPix')) document.getElementById('gwFeeCheckoutPix').value = s.fee_checkout_pix_pct ?? s.fee_online_pix_pct ?? '0.99';
+  if (document.getElementById('gwFeeCheckoutCredit')) document.getElementById('gwFeeCheckoutCredit').value = s.fee_checkout_credit_pct ?? s.fee_online_credit_pct ?? '4.98';
+  if (document.getElementById('gwFeeCheckoutDebit')) document.getElementById('gwFeeCheckoutDebit').value = s.fee_checkout_debit_pct ?? '3.99';
+  if (document.getElementById('gwFeeSubscriptionCredit')) document.getElementById('gwFeeSubscriptionCredit').value = s.fee_subscription_credit_pct ?? s.fee_online_credit_pct ?? '4.98';
   document.getElementById('authEnabled').checked = s.auth_enabled === '1';
   document.getElementById('authUsername').value = s.auth_username || 'admin';
   if (document.getElementById('authSessionTtlHours')) {
@@ -7284,6 +7288,10 @@ document.getElementById('gatewaysForm')?.addEventListener('submit', async (e) =>
           fee_point_pix_pct: document.getElementById('gwFeePointPix')?.value.trim() || '0',
           fee_online_pix_pct: document.getElementById('gwFeeOnlinePix')?.value.trim() || '0',
           fee_online_credit_pct: document.getElementById('gwFeeOnlineCredit')?.value.trim() || '0',
+          fee_checkout_pix_pct: document.getElementById('gwFeeCheckoutPix')?.value.trim() || '0',
+          fee_checkout_credit_pct: document.getElementById('gwFeeCheckoutCredit')?.value.trim() || '0',
+          fee_checkout_debit_pct: document.getElementById('gwFeeCheckoutDebit')?.value.trim() || '0',
+          fee_subscription_credit_pct: document.getElementById('gwFeeSubscriptionCredit')?.value.trim() || '0',
         }),
       });
       document.getElementById('gwPosProvider').value = settings.pos_provider || 'mercadopago';

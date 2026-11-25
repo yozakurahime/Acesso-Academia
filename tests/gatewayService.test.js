@@ -579,3 +579,29 @@ test('GatewayService.syncPendingCharges reconcilia cobranca checkout pendente e 
   assert.equal(sync.paidCount, 1);
   assert.equal(access.getMember(member.id).status, 'active');
 });
+
+test('Taxas separam maquininha, Pix online direto, Link/Checkout e assinatura conforme canal e metodo pago', async () => {
+  const { calculatePaymentFee, resolvePaymentChannel } = await import('../src/services/feeUtils.js');
+  const settings = {
+    fee_point_debit_pct: '0.74',
+    fee_point_credit_pct: '0.74',
+    fee_point_pix_pct: '0',
+    fee_online_pix_pct: '0.99',
+    fee_online_credit_pct: '4.98',
+    fee_checkout_pix_pct: '1.19',
+    fee_checkout_credit_pct: '5.49',
+    fee_checkout_debit_pct: '3.99',
+    fee_subscription_credit_pct: '4.49',
+  };
+
+  assert.equal(resolvePaymentChannel({ external_id: 'point:123', notes: 'Point' }), 'point');
+  assert.equal(resolvePaymentChannel({ external_id: 'mercadopago:123', notes: 'Pagamento online (Mercado Pago)' }), 'checkout');
+  assert.equal(resolvePaymentChannel({ external_id: 'mercadopago:123', notes: 'Assinatura Mercado Pago (pre_1)' }), 'subscription');
+  assert.equal(resolvePaymentChannel({ external_id: 'mercadopago:123', notes: 'Pix automático' }), 'online');
+
+  assert.equal(calculatePaymentFee(10000, 'credit', settings, { channel: 'point' }).fee_cents, 74);
+  assert.equal(calculatePaymentFee(10000, 'pix', settings, { channel: 'online' }).fee_cents, 99);
+  assert.equal(calculatePaymentFee(10000, 'pix', settings, { channel: 'checkout' }).fee_cents, 119);
+  assert.equal(calculatePaymentFee(10000, 'credit', settings, { channel: 'checkout' }).fee_cents, 549);
+  assert.equal(calculatePaymentFee(10000, 'credit', settings, { channel: 'subscription' }).fee_cents, 449);
+});

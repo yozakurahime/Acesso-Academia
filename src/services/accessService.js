@@ -5,7 +5,7 @@ import { PartnerService, normalizePartnerInput } from './partnerService.js';
 import { DeviceService } from './deviceService.js';
 import { matchesDeviceIdentity } from './controlIdClient.js';
 import { fitnessToday, weeklyGoal, weeklyVisits, receptionFitnessSummary } from './fitnessProgress.js';
-import { calculatePaymentFee } from './feeUtils.js';
+import { calculatePaymentFee, resolvePaymentChannel } from './feeUtils.js';
 
 function withoutPortalCredentials(member) {
   if (!member) return member;
@@ -457,18 +457,23 @@ export class AccessService {
     const settings = this.store.getSettings();
     const sumPaymentsWithFees = (startDate, endDate) => {
       const rows = this.store.all(
-        "SELECT amount_cents, method, external_id FROM payments WHERE status = 'paid' AND paid_at >= ? AND paid_at < ?",
+        "SELECT amount_cents, method, external_id, notes FROM payments WHERE status = 'paid' AND paid_at >= ? AND paid_at < ?",
         [startDate, endDate],
       );
       let gross = 0;
       let fee = 0;
+      const byChannel = { point: { gross: 0, fee: 0 }, online: { gross: 0, fee: 0 }, checkout: { gross: 0, fee: 0 }, subscription: { gross: 0, fee: 0 } };
       for (const row of rows) {
-        const isOnline = String(row.external_id || '').startsWith('mp_') && !String(row.external_id || '').startsWith('mp_point');
-        const info = calculatePaymentFee(row.amount_cents, row.method, settings, { channel: isOnline ? 'online' : 'point' });
+        const channel = resolvePaymentChannel(row);
+        const info = calculatePaymentFee(row.amount_cents, row.method, settings, { channel });
         gross += info.gross_cents;
         fee += info.fee_cents;
+        if (byChannel[channel]) {
+          byChannel[channel].gross += info.gross_cents;
+          byChannel[channel].fee += info.fee_cents;
+        }
       }
-      return { gross, fee, net: Math.max(0, gross - fee) };
+      return { gross, fee, net: Math.max(0, gross - fee), byChannel };
     };
     const revToday = sumPaymentsWithFees(today, tomorrow);
     const revMonth = sumPaymentsWithFees(monthStart, nextMonthStart);

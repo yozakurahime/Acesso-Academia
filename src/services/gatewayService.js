@@ -138,9 +138,11 @@ export class GatewayService {
     const monthPrefix = today.slice(0, 7);
     const settings = this.store.getSettings();
     const paidRows = this.store.all(
-      `SELECT amount_cents, checkout_ref, COALESCE(paid_at, created_at) AS paid_at
-       FROM gateway_charges
-       WHERE status = 'paid'`,
+      `SELECT gc.amount_cents, gc.checkout_ref, COALESCE(gc.paid_at, gc.created_at) AS paid_at,
+              p.method AS paid_method
+       FROM gateway_charges gc
+       LEFT JOIN payments p ON p.id = gc.payment_id
+       WHERE gc.status = 'paid'`,
     );
     const agg = {
       today_cents: 0,
@@ -155,10 +157,20 @@ export class GatewayService {
       total_fee_cents: 0,
       total_net_cents: 0,
       total_count: 0,
+      by_channel: {
+        online_pix: { gross_cents: 0, fee_cents: 0, net_cents: 0, count: 0 },
+        checkout: { gross_cents: 0, fee_cents: 0, net_cents: 0, count: 0 },
+      },
     };
     for (const row of paidRows) {
-      const channelMethod = row.checkout_ref ? 'credit' : 'pix';
-      const feeInfo = calculatePaymentFee(row.amount_cents, channelMethod, settings, { channel: 'online' });
+      const channel = row.checkout_ref ? 'checkout' : 'online';
+      const channelMethod = row.paid_method || (row.checkout_ref ? 'credit' : 'pix');
+      const feeInfo = calculatePaymentFee(row.amount_cents, channelMethod, settings, { channel });
+      const bucket = row.checkout_ref ? agg.by_channel.checkout : agg.by_channel.online_pix;
+      bucket.gross_cents += feeInfo.gross_cents;
+      bucket.fee_cents += feeInfo.fee_cents;
+      bucket.net_cents += feeInfo.net_cents;
+      bucket.count += 1;
       const paidDay = String(row.paid_at || '').slice(0, 10);
       const paidMonth = String(row.paid_at || '').slice(0, 7);
       agg.total_cents += feeInfo.gross_cents;
@@ -181,18 +193,21 @@ export class GatewayService {
 
     const items = this.store.all(
       `SELECT gc.id, gc.member_id, m.name AS member_name, p.name AS plan_name, gc.amount_cents,
-              gc.checkout_ref, gc.batch_items_json, COALESCE(gc.paid_at, gc.created_at) AS paid_at
+              gc.checkout_ref, gc.batch_items_json, COALESCE(gc.paid_at, gc.created_at) AS paid_at,
+              pay.method AS paid_method
        FROM gateway_charges gc
        JOIN members m ON m.id = gc.member_id
        LEFT JOIN plans p ON p.id = gc.plan_id
+       LEFT JOIN payments pay ON pay.id = gc.payment_id
        WHERE gc.status = 'paid'
        ORDER BY COALESCE(gc.paid_at, gc.created_at) DESC, gc.id DESC
        LIMIT ?`,
       [Number(limit)],
     ).map((item) => {
-      const channelMethod = item.checkout_ref ? 'credit' : 'pix';
-      const feeInfo = calculatePaymentFee(item.amount_cents, channelMethod, settings, { channel: 'online' });
-      return { ...item, fee_cents: feeInfo.fee_cents, net_cents: feeInfo.net_cents, fee_pct: feeInfo.fee_pct };
+      const channel = item.checkout_ref ? 'checkout' : 'online';
+      const channelMethod = item.paid_method || (item.checkout_ref ? 'credit' : 'pix');
+      const feeInfo = calculatePaymentFee(item.amount_cents, channelMethod, settings, { channel });
+      return { ...item, channel, fee_cents: feeInfo.fee_cents, net_cents: feeInfo.net_cents, fee_pct: feeInfo.fee_pct };
     });
     return { ...agg, items };
   }
