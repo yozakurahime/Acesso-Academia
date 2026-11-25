@@ -117,8 +117,21 @@ export class GymService {
     const allowEmptyLegacyCpf =
       !normalizeCpf(data.document) &&
       !normalizeCpf(existing.document);
+    const nextBirthDate = Object.hasOwn(data, 'birth_date') ? (data.birth_date || null) : existing.birth_date;
+    const nextPhoneRaw = Object.hasOwn(data, 'phone') ? data.phone : existing.phone;
+    const guardianCheck = this.assertValidGuardianData({
+      birth_date: nextBirthDate,
+      guardian_name: Object.hasOwn(data, 'guardian_name') ? data.guardian_name : existing.guardian_name,
+      guardian_cpf: Object.hasOwn(data, 'guardian_cpf') ? data.guardian_cpf : existing.guardian_cpf,
+      guardian_phone: Object.hasOwn(data, 'guardian_phone') ? data.guardian_phone : existing.guardian_phone,
+      guardian_relationship: Object.hasOwn(data, 'guardian_relationship') ? data.guardian_relationship : existing.guardian_relationship,
+      phone: nextPhoneRaw,
+      document: Object.hasOwn(data, 'document') ? data.document : existing.document,
+      memberId: id,
+      allowEmptyLegacyCpf: allowEmptyLegacyCpf && !Object.hasOwn(data, 'document'),
+    });
     const nextDocument = Object.hasOwn(data, 'document')
-      ? (allowEmptyLegacyCpf ? (existing.document || null) : this.assertValidAndUniqueCpf(data.document, id))
+      ? guardianCheck.document
       : existing.document;
     const nextStatus =
       existing.access_role === 'student' && nextPartner.partner_provider && existing.status !== 'active'
@@ -129,19 +142,24 @@ export class GymService {
       `UPDATE members
        SET name = ?, document = ?, phone = ?, email = ?,
            birth_date = ?, sex = ?, address = ?, emergency_contact = ?, notes = ?,
+           guardian_name = ?, guardian_cpf = ?, guardian_phone = ?, guardian_relationship = ?,
            modality_id = ?, plan_id = ?, partner_provider = ?, wellhub_id = ?, status = ?,
            updated_at = datetime('now', 'localtime')
        WHERE id = ?`,
       [
         name,
         nextDocument,
-        data.phone ?? existing.phone,
+        guardianCheck.phone ?? existing.phone,
         data.email ?? existing.email,
-        Object.hasOwn(data, 'birth_date') ? data.birth_date || null : existing.birth_date,
+        nextBirthDate,
         Object.hasOwn(data, 'sex') ? data.sex || null : existing.sex,
         data.address ?? existing.address,
         data.emergency_contact ?? existing.emergency_contact,
         data.notes ?? existing.notes,
+        guardianCheck.guardian_name,
+        guardianCheck.guardian_cpf,
+        guardianCheck.guardian_phone,
+        guardianCheck.guardian_relationship,
         Object.hasOwn(data, 'modality_id') ? (data.modality_id ? Number(data.modality_id) : null) : existing.modality_id,
         Object.hasOwn(data, 'plan_id') ? (data.plan_id ? Number(data.plan_id) : null) : existing.plan_id,
         nextPartner.partner_provider,
@@ -234,6 +252,88 @@ export class GymService {
       throw err;
     }
     return formatCpf(digits);
+  }
+
+  calculateAgeYears(birthDate) {
+    const raw = String(birthDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+    const [by, bm, bd] = raw.split('-').map(Number);
+    const todayStr = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const [ty, tm, td] = todayStr.split('-').map(Number);
+    let age = ty - by;
+    if (tm < bm || (tm === bm && td < bd)) age -= 1;
+    return Number.isFinite(age) && age >= 0 ? age : null;
+  }
+
+  assertValidGuardianData({
+    birth_date = null,
+    guardian_name = null,
+    guardian_cpf = null,
+    guardian_phone = null,
+    guardian_relationship = null,
+    phone = null,
+    document = null,
+    memberId = 0,
+    allowEmptyLegacyCpf = false,
+  } = {}) {
+    const age = this.calculateAgeYears(birth_date);
+    const isMinor = age !== null && age < 14;
+    const cleanGuardianName = String(guardian_name || '').trim() || null;
+    const cleanGuardianPhone = String(guardian_phone || '').trim() || null;
+    const cleanGuardianRel = String(guardian_relationship || '').trim() || null;
+    const cleanPhone = String(phone || '').trim() || cleanGuardianPhone || null;
+
+    const guardianCpfDigits = normalizeCpf(guardian_cpf);
+    if (guardianCpfDigits && !isValidCpf(guardianCpfDigits)) {
+      const err = new Error('CPF do responsável inválido. Confira os dígitos informados.');
+      err.statusCode = 400;
+      throw err;
+    }
+    const formattedGuardianCpf = guardianCpfDigits ? formatCpf(guardianCpfDigits) : null;
+
+    if (isMinor) {
+      if (!cleanGuardianName || cleanGuardianName.length < 3) {
+        const err = new Error('Para menores de 14 anos, informe o nome completo do responsável.');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (!formattedGuardianCpf) {
+        const err = new Error('Para menores de 14 anos, o CPF do responsável é obrigatório.');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (!cleanPhone) {
+        const err = new Error('Para menores de 14 anos, informe o WhatsApp do responsável.');
+        err.statusCode = 400;
+        throw err;
+      }
+      const childCpfDigits = normalizeCpf(document);
+      const formattedChildDoc = childCpfDigits ? this.assertValidAndUniqueCpf(childCpfDigits, memberId) : null;
+      return {
+        age,
+        isMinor: true,
+        document: formattedChildDoc,
+        phone: cleanPhone,
+        guardian_name: cleanGuardianName,
+        guardian_cpf: formattedGuardianCpf,
+        guardian_phone: cleanGuardianPhone || cleanPhone,
+        guardian_relationship: cleanGuardianRel,
+      };
+    }
+
+    const formattedDoc = allowEmptyLegacyCpf
+      ? null
+      : this.assertValidAndUniqueCpf(document, memberId);
+    return {
+      age,
+      isMinor: false,
+      document: formattedDoc,
+      phone: cleanPhone,
+      guardian_name: cleanGuardianName,
+      guardian_cpf: formattedGuardianCpf,
+      guardian_phone: cleanGuardianPhone,
+      guardian_relationship: cleanGuardianRel,
+    };
   }
 
   checkMemberCpf(cpf, excludeId = 0) {

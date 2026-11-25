@@ -3197,6 +3197,11 @@ window.openProfile = async (id) => {
     document.getElementById('profEmergency').value = m.emergency_contact || '';
     document.getElementById('profAddress').value = m.address || '';
     document.getElementById('profNotes').value = m.notes || '';
+    if (document.getElementById('profGuardianName')) document.getElementById('profGuardianName').value = m.guardian_name || '';
+    if (document.getElementById('profGuardianCpf')) document.getElementById('profGuardianCpf').value = m.guardian_cpf || '';
+    if (document.getElementById('profGuardianPhone')) document.getElementById('profGuardianPhone').value = m.guardian_phone || '';
+    if (document.getElementById('profGuardianRel')) document.getElementById('profGuardianRel').value = m.guardian_relationship || '';
+    syncProfileGuardianVisibility(Boolean(m.guardian_name || m.guardian_cpf));
     const profPartner = document.getElementById('profPartnerProvider');
     const profWellhubWrap = document.getElementById('profWellhubWrap');
     const profWellhubId = document.getElementById('profWellhubId');
@@ -3968,6 +3973,10 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
           partner_provider: document.getElementById('profPartnerProvider')?.value || null,
           wellhub_id: document.getElementById('profWellhubId')?.value.trim() || null,
           notes: document.getElementById('profNotes').value,
+          guardian_name: document.getElementById('profGuardianName')?.value.trim() || null,
+          guardian_cpf: document.getElementById('profGuardianCpf')?.value.trim() || null,
+          guardian_phone: document.getElementById('profGuardianPhone')?.value.trim() || null,
+          guardian_relationship: document.getElementById('profGuardianRel')?.value || null,
         }),
       });
       showToast('Perfil atualizado!');
@@ -5685,6 +5694,54 @@ async function checkMemberNameDuplicate({ silent = false } = {}) {
   }
 }
 
+function calculateAgeYearsLocal(birthStr) {
+  const raw = String(birthStr || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [by, bm, bd] = raw.split('-').map(Number);
+  const todayStr = new Intl.DateTimeFormat('sv-SE').format(new Date());
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age -= 1;
+  return Number.isFinite(age) && age >= 0 ? age : null;
+}
+
+function syncMemberGuardianVisibility() {
+  const age = calculateAgeYearsLocal(document.getElementById('mBirth')?.value);
+  const isMinor = age !== null && age < 14;
+  document.getElementById('mGuardianBox')?.classList.toggle('hidden', !isMinor);
+  const docEl = document.getElementById('mDoc');
+  const docLabel = document.getElementById('mDocLabel');
+  if (docEl) docEl.required = !isMinor;
+  if (docLabel) docLabel.textContent = isMinor ? 'CPF da criança (opcional)' : 'CPF *';
+  ['mGuardianName', 'mGuardianCpf', 'mGuardianPhone'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.required = isMinor;
+  });
+}
+
+function syncProfileGuardianVisibility(hasExistingGuardian = false) {
+  const age = calculateAgeYearsLocal(document.getElementById('profBirth')?.value);
+  const isMinor = age !== null && age < 14;
+  const hasFilled = hasExistingGuardian
+    || Boolean(document.getElementById('profGuardianName')?.value.trim())
+    || Boolean(document.getElementById('profGuardianCpf')?.value.trim());
+  document.getElementById('profGuardianBox')?.classList.toggle('hidden', !(isMinor || hasFilled));
+}
+
+document.getElementById('mBirth')?.addEventListener('change', syncMemberGuardianVisibility);
+document.getElementById('mBirth')?.addEventListener('input', syncMemberGuardianVisibility);
+document.getElementById('profBirth')?.addEventListener('change', () => syncProfileGuardianVisibility());
+document.getElementById('profBirth')?.addEventListener('input', () => syncProfileGuardianVisibility());
+['mGuardianCpf', 'profGuardianCpf'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('input', (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 11);
+    e.target.value = digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  });
+});
+
 async function verifyAndAdvanceMemberStep1() {
   const nameInput = document.getElementById('mName');
   const name = nameInput.value.trim();
@@ -5693,6 +5750,28 @@ async function verifyAndAdvanceMemberStep1() {
     nameInput.focus();
     return;
   }
+  const age = calculateAgeYearsLocal(document.getElementById('mBirth')?.value);
+  const isMinor = age !== null && age < 14;
+  if (isMinor) {
+    const gName = document.getElementById('mGuardianName')?.value.trim() || '';
+    const gCpf = document.getElementById('mGuardianCpf')?.value.replace(/\D/g, '') || '';
+    const gPhone = document.getElementById('mGuardianPhone')?.value.trim() || document.getElementById('mPhone')?.value.trim() || '';
+    if (gName.length < 3) {
+      showToast('Para menores de 14 anos, informe o nome do responsável.', true);
+      document.getElementById('mGuardianName')?.focus();
+      return;
+    }
+    if (gCpf.length !== 11) {
+      showToast('Para menores de 14 anos, informe o CPF válido do responsável.', true);
+      document.getElementById('mGuardianCpf')?.focus();
+      return;
+    }
+    if (gPhone.length < 8) {
+      showToast('Para menores de 14 anos, informe o WhatsApp do responsável.', true);
+      document.getElementById('mGuardianPhone')?.focus();
+      return;
+    }
+  }
   const btn = document.getElementById('btnMemberStep1Next');
   await withLoading(btn, async () => {
     const nameResult = await checkMemberNameDuplicate({ silent: false });
@@ -5700,15 +5779,18 @@ async function verifyAndAdvanceMemberStep1() {
       nameInput.focus();
       return;
     }
-    const cpfCheck = await validateCpfField('mDoc', 'mDocFeedback', {
-      excludeId: 0,
-      remoteCheck: true,
-      showEmptyError: true,
-    });
-    if (!cpfCheck.valid) {
-      showToast(cpfCheck.message, true);
-      document.getElementById('mDoc').focus();
-      return;
+    const rawChildCpf = document.getElementById('mDoc')?.value.replace(/\D/g, '') || '';
+    if (!isMinor || rawChildCpf.length > 0) {
+      const cpfCheck = await validateCpfField('mDoc', 'mDocFeedback', {
+        excludeId: 0,
+        remoteCheck: true,
+        showEmptyError: !isMinor,
+      });
+      if (!cpfCheck.valid) {
+        showToast(cpfCheck.message, true);
+        document.getElementById('mDoc').focus();
+        return;
+      }
     }
     setMemberWizardStep(2);
   });
@@ -5806,6 +5888,10 @@ async function submitMemberWizard({ addToCart = false, triggerEl = null } = {}) 
           birth_date: document.getElementById('mBirth').value || null,
           sex: document.getElementById('mSex').value || null,
           phone: document.getElementById('mPhone').value,
+          guardian_name: document.getElementById('mGuardianName')?.value.trim() || null,
+          guardian_cpf: document.getElementById('mGuardianCpf')?.value.trim() || null,
+          guardian_phone: document.getElementById('mGuardianPhone')?.value.trim() || null,
+          guardian_relationship: document.getElementById('mGuardianRel')?.value || null,
           modality_id: document.getElementById('mModality').value || null,
           class_id: document.getElementById('mClass').value || null,
           plan_id: partnerProvider ? null : selectedPlanId,

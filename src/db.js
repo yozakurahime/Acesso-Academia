@@ -893,6 +893,16 @@ export class DatabaseStore {
       is_visitor: 'INTEGER NOT NULL DEFAULT 0',
       visitor_expires_at: 'TEXT',
       whatsapp_opt_out: 'INTEGER NOT NULL DEFAULT 0',
+      guardian_name: 'TEXT',
+      guardian_cpf: 'TEXT',
+      guardian_phone: 'TEXT',
+      guardian_relationship: 'TEXT',
+    });
+    this.ensureColumns('online_enrollment_requests', {
+      guardian_name: 'TEXT',
+      guardian_cpf: 'TEXT',
+      guardian_phone: 'TEXT',
+      guardian_relationship: 'TEXT',
     });
     this.ensureColumns('payments', {
       staff_id: 'INTEGER',

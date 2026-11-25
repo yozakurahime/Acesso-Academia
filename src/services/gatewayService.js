@@ -445,7 +445,7 @@ export class GatewayService {
     const parts = String(member.name || 'Aluno').trim().split(/\s+/);
     const firstName = parts[0] || 'Aluno';
     const lastName = parts.slice(1).join(' ') || 'Academia';
-    const cpf = digitsOnly(member.document);
+    const cpf = digitsOnly(member.document || member.guardian_cpf);
 
     const cleanEmail = String(member.email || '').trim();
     const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
@@ -796,7 +796,7 @@ export class GatewayService {
     const { plan, cents, charge } = this.resolveBillableMember(member, plan_id);
     const rawEmail = String(payer_email || member.email || '').trim();
     const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : `aluno${member.id}@academiaoxigenio.com`;
-    const cpfDigits = String(identification_number || member.document || '').replace(/\D/g, '');
+    const cpfDigits = String(identification_number || member.document || member.guardian_cpf || '').replace(/\D/g, '');
     const idType = identification_type || (cpfDigits.length === 14 ? 'CNPJ' : 'CPF');
     const externalRef = `ox_card:${member.id}:${crypto.randomUUID().slice(0, 8)}`;
     const description = `${settings.gym_name || 'Academia Oxigênio'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 250);
@@ -1307,7 +1307,7 @@ export class GatewayService {
     }
 
     const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
-    const doc = digitsOnly(member.document);
+    const doc = digitsOnly(member.document || member.guardian_cpf);
     const stoneType = payment_method === 'debit' ? 'debit' : payment_method === 'pix' ? 'pix' : 'credit';
 
     const res = await this.fetch('https://api.pagar.me/core/v5/orders', {

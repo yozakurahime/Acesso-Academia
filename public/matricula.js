@@ -356,6 +356,33 @@
   document.getElementById('phoneInput')?.addEventListener('input', (e) => {
     e.target.value = formatPhoneMask(e.target.value);
   });
+  document.getElementById('guardianPhoneInput')?.addEventListener('input', (e) => {
+    e.target.value = formatPhoneMask(e.target.value);
+  });
+  document.getElementById('guardianCpfInput')?.addEventListener('input', (e) => {
+    e.target.value = formatCpfMask(e.target.value);
+  });
+  function calcAgeLocal(birthStr) {
+    const raw = String(birthStr || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+    const [by, bm, bd] = raw.split('-').map(Number);
+    const todayStr = new Intl.DateTimeFormat('sv-SE').format(new Date());
+    const [ty, tm, td] = todayStr.split('-').map(Number);
+    let age = ty - by;
+    if (tm < bm || (tm === bm && td < bd)) age -= 1;
+    return Number.isFinite(age) && age >= 0 ? age : null;
+  }
+  function syncOnlineGuardianFields() {
+    const age = calcAgeLocal(document.getElementById('birthInput')?.value);
+    const isMinor = age !== null && age < 14;
+    const gWrap = document.getElementById('guardianWrap');
+    if (gWrap) gWrap.hidden = !isMinor;
+    const docLbl = document.querySelector('label[for="docInput"]');
+    if (docLbl) docLbl.textContent = isMinor ? 'CPF da criança (opcional)' : 'CPF *';
+    if (docInput && !docWrap.hidden) docInput.required = !isMinor;
+  }
+  document.getElementById('birthInput')?.addEventListener('change', syncOnlineGuardianFields);
+  document.getElementById('birthInput')?.addEventListener('input', syncOnlineGuardianFields);
   docInput?.addEventListener('input', (e) => {
     e.target.value = formatCpfMask(e.target.value);
   });
@@ -507,7 +534,32 @@
       phoneInput.focus();
       return;
     }
-    if (!docWrap.hidden && !isValidCpf(docDigits)) {
+    const age = calcAgeLocal(document.getElementById('birthInput')?.value);
+    const isMinor = age !== null && age < 14;
+    const guardianName = document.getElementById('guardianNameInput')?.value.trim() || '';
+    const guardianCpf = document.getElementById('guardianCpfInput')?.value.trim() || '';
+    const guardianCpfDigits = guardianCpf.replace(/\D/g, '');
+    const guardianPhone = document.getElementById('guardianPhoneInput')?.value.trim() || '';
+    const guardianPhoneDigits = guardianPhone.replace(/\D/g, '');
+
+    if (isMinor) {
+      if (guardianName.length < 3) {
+        showFormError('Para menores de 14 anos, informe o nome completo do responsável.');
+        document.getElementById('guardianNameInput')?.focus();
+        return;
+      }
+      if (!isValidCpf(guardianCpfDigits)) {
+        showFormError('Para menores de 14 anos, informe um CPF válido do responsável.');
+        document.getElementById('guardianCpfInput')?.focus();
+        return;
+      }
+      if (guardianPhoneDigits.length < 10 || guardianPhoneDigits.length > 13) {
+        showFormError('Para menores de 14 anos, informe um WhatsApp válido do responsável.');
+        document.getElementById('guardianPhoneInput')?.focus();
+        return;
+      }
+    }
+    if (!docWrap.hidden && (!isMinor || docDigits.length > 0) && !isValidCpf(docDigits)) {
       showFormError('Informe um CPF válido.');
       docInput.focus();
       return;
@@ -528,6 +580,10 @@
       phone,
       document: docValue,
       birth_date: document.getElementById('birthInput').value || null,
+      guardian_name: guardianName || null,
+      guardian_cpf: guardianCpf || null,
+      guardian_phone: guardianPhone || null,
+      guardian_relationship: document.getElementById('guardianRelInput')?.value || null,
       modality_id: Number(modalitySelect.value) || null,
       modality_name: mod?.name || '',
       class_id: !classWrap.hidden && classSelect.value ? Number(classSelect.value) : null,

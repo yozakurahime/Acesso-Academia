@@ -855,3 +855,45 @@ test('savePlanEnrollment atualiza o valor da cobranca em aberto ao trocar de pla
   assert.equal(after.id, before.id);
   assert.equal(after.amount, 10000);
 });
+
+test('createMember exige dados do responsavel apenas para menores de 14 anos e deixa CPF da crianca opcional', async () => {
+  const { service } = await createTestEnv();
+  const plan = service.createPlan({ name: 'Natação Kids', price_cents: 11000, duration_days: 30 });
+  const childBirth = '2018-05-10';
+  const parentCpf = nextCpf();
+
+  await assert.rejects(
+    () => service.createMember({ name: 'Criança Sem Responsavel', birth_date: childBirth, plan_id: plan.id }),
+    /menores de 14 anos/i,
+  );
+
+  const child1 = await service.createMember({
+    name: 'Pedro Filho',
+    birth_date: childBirth,
+    guardian_name: 'Ana Mãe',
+    guardian_cpf: parentCpf,
+    guardian_phone: '62999990001',
+    guardian_relationship: 'Mãe',
+    plan_id: plan.id,
+  });
+  assert.equal(child1.document, null);
+  assert.equal(child1.guardian_name, 'Ana Mãe');
+  assert.equal(child1.phone, '62999990001');
+
+  const child2 = await service.createMember({
+    name: 'Julia Filha',
+    birth_date: '2020-02-15',
+    guardian_name: 'Ana Mãe',
+    guardian_cpf: parentCpf,
+    guardian_phone: '62999990001',
+    guardian_relationship: 'Mãe',
+    plan_id: plan.id,
+  });
+  assert.equal(child2.document, null);
+  assert.equal(child2.guardian_cpf, child1.guardian_cpf);
+
+  await assert.rejects(
+    () => service.createMember({ name: 'Adulto Sem CPF', birth_date: '1995-01-01', plan_id: plan.id }),
+    /CPF é obrigatório/i,
+  );
+});

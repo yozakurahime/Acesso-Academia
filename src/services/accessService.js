@@ -702,7 +702,7 @@ export class AccessService {
     return withoutPortalCredentials(member);
   }
 
-  async createMember({ name, document, phone, email, plan_id, modality_id, class_id, birth_date, sex, address, emergency_contact, notes, access_role = 'student', partner_provider = null, wellhub_id = null }, { backgroundSync = false } = {}) {
+  async createMember({ name, document, phone, email, plan_id, modality_id, class_id, birth_date, sex, address, emergency_contact, notes, guardian_name = null, guardian_cpf = null, guardian_phone = null, guardian_relationship = null, access_role = 'student', partner_provider = null, wellhub_id = null }, { backgroundSync = false } = {}) {
     if (!name?.trim()) {
       throw new Error('Nome do aluno e obrigatorio.');
     }
@@ -711,7 +711,15 @@ export class AccessService {
     const memberId = this.store.transaction(() => {
       const gym = new GymService(this.store);
       gym.assertUniqueMemberName(name);
-      const formattedDocument = gym.assertValidAndUniqueCpf(document);
+      const guardianCheck = gym.assertValidGuardianData({
+        birth_date,
+        guardian_name,
+        guardian_cpf,
+        guardian_phone,
+        guardian_relationship,
+        phone,
+        document,
+      });
       const partner = access_role === 'student'
         ? normalizePartnerInput({ partner_provider, wellhub_id })
         : { partner_provider: null, wellhub_id: null };
@@ -724,12 +732,12 @@ export class AccessService {
         gym.validateEnrollment(0, modalityId, classId);
       }
       const res = this.store.run(
-        `INSERT INTO members (name, document, phone, email, plan_id, modality_id, birth_date, sex, address, emergency_contact, notes, access_role, partner_provider, wellhub_id, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO members (name, document, phone, email, plan_id, modality_id, birth_date, sex, address, emergency_contact, notes, guardian_name, guardian_cpf, guardian_phone, guardian_relationship, access_role, partner_provider, wellhub_id, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name.trim(),
-          formattedDocument,
-          phone?.trim() || null,
+          guardianCheck.document,
+          guardianCheck.phone,
           email?.trim() || null,
           partner.partner_provider ? null : (plan_id ? Number(plan_id) : null),
           modalityId,
@@ -738,6 +746,10 @@ export class AccessService {
           address?.trim() || null,
           emergency_contact?.trim() || null,
           notes?.trim() || null,
+          guardianCheck.guardian_name,
+          guardianCheck.guardian_cpf,
+          guardianCheck.guardian_phone,
+          guardianCheck.guardian_relationship,
           access_role,
           partner.partner_provider,
           partner.wellhub_id,

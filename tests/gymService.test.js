@@ -163,6 +163,7 @@ test('matrículas validam modalidade e lotação, permitem troca e persistem jun
   const member = await accessService.createMember({
     name: 'João Teste', document: nextCpf(), phone: '11999990000',
     birth_date: '2020-04-13', sex: 'masculino', modality_id: swim.id, class_id: morning.id,
+    guardian_name: 'Maria Teste', guardian_cpf: nextCpf(), guardian_phone: '11999990000', guardian_relationship: 'Mãe',
   });
   assert.equal(member.birth_date, '2020-04-13');
   assert.equal(member.sex, 'masculino');

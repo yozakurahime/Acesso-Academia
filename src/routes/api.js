@@ -392,6 +392,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     const childAge = body.child_age ? String(body.child_age).trim() : null;
     const preferredSchedule = body.preferred_schedule ? String(body.preferred_schedule).trim() : null;
     const notes = body.notes ? String(body.notes).trim() : null;
+    const guardianName = body.guardian_name ? String(body.guardian_name).trim() : null;
+    const guardianCpf = body.guardian_cpf ? String(body.guardian_cpf).replace(/\D/g, '') : null;
+    const guardianPhone = body.guardian_phone ? String(body.guardian_phone).trim() : null;
+    const guardianRelationship = body.guardian_relationship ? String(body.guardian_relationship).trim() : null;
 
     if (!name || !phone) {
       return res.status(400).json({ error: 'Informe nome completo e WhatsApp.' });
@@ -481,6 +485,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       phone,
       document,
       birth_date: birthDate,
+      guardian_name: guardianName,
+      guardian_cpf: guardianCpf,
+      guardian_phone: guardianPhone,
+      guardian_relationship: guardianRelationship,
       modality_id: modality?.id || cls?.modality_id || null,
       class_id: cls?.id || null,
       plan_id: plan.id,

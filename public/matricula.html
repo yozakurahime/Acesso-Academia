@@ -167,6 +167,32 @@
           </div>
         </div>
 
+        <div id="guardianWrap" class="grid" hidden>
+          <div class="field">
+            <label for="guardianNameInput">Nome do responsável *</label>
+            <input id="guardianNameInput" type="text" placeholder="Nome completo do pai, mãe ou responsável" />
+          </div>
+          <div class="field">
+            <label for="guardianCpfInput">CPF do responsável *</label>
+            <input id="guardianCpfInput" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" />
+          </div>
+          <div class="field">
+            <label for="guardianPhoneInput">WhatsApp do responsável *</label>
+            <input id="guardianPhoneInput" type="tel" inputmode="numeric" maxlength="15" placeholder="(62) 99999-9999" />
+          </div>
+          <div class="field">
+            <label for="guardianRelInput">Parentesco</label>
+            <select id="guardianRelInput">
+              <option value="">Não informado</option>
+              <option value="Mãe">Mãe</option>
+              <option value="Pai">Pai</option>
+              <option value="Avô/Avó">Avô / Avó</option>
+              <option value="Tio(a)">Tio(a)</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+        </div>
+
         <div id="kidsWrap" class="grid" hidden>
           <div class="field">
             <label for="childAgeInput">Idade da criança</label>
