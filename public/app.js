@@ -1410,9 +1410,33 @@ function selectMemberPlan(member) {
 
 document.getElementById('pPlan').addEventListener('change', updatePaymentAmountFromPlan);
 
+const PAYMENT_METHOD_PT = {
+  pix: 'Pix',
+  cash: 'Dinheiro',
+  dinheiro: 'Dinheiro',
+  credit: 'Cartão de Crédito',
+  credito: 'Cartão de Crédito',
+  credit_card: 'Cartão de Crédito',
+  debit: 'Cartão de Débito',
+  debito: 'Cartão de Débito',
+  debit_card: 'Cartão de Débito',
+  prepaid_card: 'Cartão Pré-pago',
+  account_money: 'Saldo Mercado Pago',
+  boleto: 'Boleto',
+  ticket: 'Boleto',
+  transfer: 'Transferência',
+  split: 'Dividido',
+  point: 'Maquininha',
+  online: 'Online',
+};
+
 function methodName(code) {
-  const found = state.paymentMethods.find((pm) => pm.code === code);
-  return found ? found.name : String(code || '-').toUpperCase();
+  const raw = String(code || '').trim();
+  if (!raw) return '—';
+  const key = raw.toLowerCase();
+  const found = (state.paymentMethods || []).find((pm) => String(pm.code || '').toLowerCase() === key);
+  if (found?.name) return found.name;
+  return PAYMENT_METHOD_PT[key] || raw.toUpperCase();
 }
 
 function billingMethodCardMeta(pm) {
