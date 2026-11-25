@@ -6,7 +6,9 @@ const EDGE_SAFE_SETTINGS = [
   'antipassback_minutes',
   'max_capacity',
   'require_daily_checkin',
+  'wellhub_enabled',
   'wellhub_require_checkin',
+  'totalpass_enabled',
   'totalpass_require_checkin',
 ];
 
