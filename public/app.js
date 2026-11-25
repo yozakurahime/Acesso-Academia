@@ -2576,30 +2576,37 @@ function renderBillingSummary() {
   const quickConfirmBox = document.getElementById('quickConfirmMethods');
   if (typeof renderBillingPlanPicker === 'function') renderBillingPlanPicker();
   const isDisabled = !member || team || finalPaidCents <= 0 || !splitValid;
-  const pointDisabled = !member || team || finalPaidCents <= 0;
+  const actionDisabled = !member || team || finalPaidCents <= 0;
+  const splitPointTarget = resolvePointSplitTarget();
+  const pointDisabled = !member || team || (splitPointTarget.active ? !splitPointTarget.single : finalPaidCents <= 0);
   if (pointBtn) {
     pointBtn.disabled = pointDisabled;
-    pointBtn.textContent = pointDisabled
-      ? 'Enviar para a maquininha'
-      : `Enviar para a maquininha · ${fmtMoney(finalPaidCents)}`;
+    if (pointDisabled) {
+      pointBtn.textContent = splitPointTarget.active ? 'Enviar para a maquininha (adicione cartão/Pix)' : 'Enviar para a maquininha';
+    } else if (splitPointTarget.active && splitPointTarget.single) {
+      const prefix = splitPointTarget.parts.length > 1 ? 'Enviar 1ª parcela p/ maquininha' : 'Enviar para a maquininha';
+      pointBtn.textContent = `${prefix} · ${fmtMoney(splitPointTarget.single.amount_cents)} (${methodName(splitPointTarget.single.method)})`;
+    } else {
+      pointBtn.textContent = `Enviar para a maquininha · ${fmtMoney(finalPaidCents)}`;
+    }
   }
   if (waBtn) {
-    waBtn.disabled = pointDisabled;
-    waBtn.textContent = pointDisabled
+    waBtn.disabled = actionDisabled;
+    waBtn.textContent = actionDisabled
       ? '📲 Enviar Pix para WhatsApp'
       : `📲 Enviar Pix para WhatsApp · ${fmtMoney(finalPaidCents)}`;
   }
   const waCheckoutBtn = document.getElementById('btnSendBillingCheckoutWhatsapp');
   const waSubBtn = document.getElementById('btnSendBillingSubWhatsapp');
-  if (waCheckoutBtn) waCheckoutBtn.disabled = pointDisabled;
-  if (waSubBtn) waSubBtn.disabled = pointDisabled;
+  if (waCheckoutBtn) waCheckoutBtn.disabled = actionDisabled;
+  if (waSubBtn) waSubBtn.disabled = actionDisabled;
   if (addCartBtn) {
-    addCartBtn.disabled = pointDisabled;
+    addCartBtn.disabled = actionDisabled;
   }
   if (quickConfirmBox) {
     quickConfirmBox.classList.toggle('hidden', splitActive);
     quickConfirmBox.querySelectorAll('button[data-quick-confirm]').forEach((btn) => {
-      btn.disabled = pointDisabled;
+      btn.disabled = actionDisabled;
     });
   }
   if (submitBtn) {
@@ -7660,6 +7667,18 @@ document.getElementById('btnPointWaitCancel')?.addEventListener('click', async (
   });
 });
 
+function resolvePointSplitTarget() {
+  const splitActive = Boolean(document.getElementById('pSplitToggle')?.checked);
+  if (!splitActive || typeof readSplitState !== 'function') {
+    return { active: false, parts: [], single: null };
+  }
+  const splitData = readSplitState();
+  const parts = (splitData?.splitPayments || []).filter(
+    (p) => ['credit', 'debit', 'pix'].includes(String(p?.method || '').toLowerCase()) && Number(p?.amount_cents) > 0,
+  );
+  return { active: true, parts, single: parts[0] || null };
+}
+
 document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e) => {
   const memberId = document.getElementById('pMember').value;
   if (!memberId) {
@@ -7667,14 +7686,22 @@ document.getElementById('btnSendPointOrder')?.addEventListener('click', async (e
     document.getElementById('pMemberSearch')?.focus();
     return;
   }
+  const splitTarget = resolvePointSplitTarget();
+  if (splitTarget.active && !splitTarget.single) {
+    showToast('Adicione uma linha de Débito, Crédito ou Pix na divisão para enviar à maquininha.', true);
+    return;
+  }
   const asideCents = toCents(document.getElementById('billingAsideFinalAmount')?.value);
-  const amountCents = asideCents > 0 ? asideCents : toCents(document.getElementById('pAmount').value);
+  const fallbackCents = asideCents > 0 ? asideCents : toCents(document.getElementById('pAmount').value);
+  const amountCents = splitTarget.active && splitTarget.single ? splitTarget.single.amount_cents : fallbackCents;
   if (amountCents <= 0) {
     showToast('Informe um valor válido para enviar à maquininha.', true);
     return;
   }
   const planId = document.getElementById('pPlan').value || null;
-  const paymentMethod = document.getElementById('pMethod')?.value || 'credit';
+  const paymentMethod = splitTarget.active && splitTarget.single
+    ? splitTarget.single.method
+    : (document.getElementById('pMethod')?.value || 'credit');
   const btn = e.currentTarget;
   const memberObj = state.allMembers.find((m) => Number(m.id) === Number(memberId));
 
