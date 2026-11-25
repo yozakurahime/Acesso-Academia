@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v15';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 
@@ -6,6 +6,10 @@ const SHELL_ASSETS = [
   '/',
   '/index.html',
   '/app.js',
+  '/js/profile-extras.js',
+  '/js/finance-reports.js',
+  '/js/settings-ux.js',
+  '/js/chat.js',
   '/admin.css',
   '/admin-operations.css',
   '/admin-manifest.json',
@@ -28,6 +32,10 @@ const NETWORK_FIRST_SHELL_ASSETS = new Set([
   '/',
   '/index.html',
   '/app.js',
+  '/js/profile-extras.js',
+  '/js/finance-reports.js',
+  '/js/settings-ux.js',
+  '/js/chat.js',
   '/admin.css',
   '/admin-operations.css',
   '/aluno.css',
