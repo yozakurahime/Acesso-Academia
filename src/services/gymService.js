@@ -123,9 +123,10 @@ export class GymService {
     if (nextPartner.partner_provider === 'wellhub') {
       this.assertUniqueWellhubId(nextPartner.wellhub_id, id);
     }
+    const existingCpfDigits = normalizeCpf(existing.document);
     const allowEmptyLegacyCpf =
       !normalizeCpf(data.document) &&
-      !normalizeCpf(existing.document);
+      (!existingCpfDigits || !isValidCpf(existingCpfDigits));
     const nextBirthDate = Object.hasOwn(data, 'birth_date') ? (data.birth_date || null) : existing.birth_date;
     const nextPhoneRaw = Object.hasOwn(data, 'phone') ? data.phone : existing.phone;
     const guardianCheck = this.assertValidGuardianData({

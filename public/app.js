@@ -3994,8 +3994,8 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
   const id = state.selectedProfileId;
   const partnerVal = document.getElementById('profPartnerProvider')?.value || '';
   const wellhubVal = document.getElementById('profWellhubId')?.value.trim() || '';
-  const hadCpfBefore = Boolean(cpfDigits(state.selectedProfileMember?.document));
-  const allowEmptyCpf = partnerVal === 'wellhub' || !hadCpfBefore;
+  const hadValidCpfBefore = isValidCpf(cpfDigits(state.selectedProfileMember?.document));
+  const allowEmptyCpf = partnerVal === 'wellhub' || !hadValidCpfBefore;
   const cpfCheck = await validateCpfField('profDoc', 'profDocFeedback', {
     excludeId: id,
     remoteCheck: true,
