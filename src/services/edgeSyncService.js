@@ -78,6 +78,8 @@ export class EdgeCloudHub {
     if (!Array.isArray(logs) || logs.length === 0) return { inserted: 0 };
     let inserted = 0;
     let latestItem = null;
+    const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
+    const partnerMemberIds = new Set();
     this.store.transaction(() => {
       for (const item of logs) {
         const edgeEventId = String(item?.edge_event_id || '').trim();
@@ -123,11 +125,24 @@ export class EdgeCloudHub {
             event_label: String(item.event_label || 'Acesso'),
             occurred_at: String(item.occurred_at || new Date().toISOString()),
           };
+          if (
+            safeMemberId &&
+            latestItem.occurred_at.slice(0, 10) === today &&
+            /^Acesso negado \(Aguarde a liberação na recepção/.test(latestItem.event_label)
+          ) {
+            partnerMemberIds.add(safeMemberId);
+          }
         }
       }
     });
     if (inserted > 0) {
       this.accessService?.emitAccessLog?.({ inserted, latest: latestItem });
+      for (const memberId of partnerMemberIds) {
+        const member = this.accessService?.getMember?.(memberId);
+        if (member?.partner_provider) {
+          this.accessService.createOrTouchPartnerRequest(member);
+        }
+      }
     }
     return { inserted };
   }
