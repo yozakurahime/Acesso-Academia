@@ -2586,9 +2586,13 @@ function renderBillingSummary() {
   if (waBtn) {
     waBtn.disabled = pointDisabled;
     waBtn.textContent = pointDisabled
-      ? '📲 Enviar para WhatsApp'
-      : `📲 Enviar para WhatsApp · ${fmtMoney(finalPaidCents)}`;
+      ? '📲 Enviar Pix para WhatsApp'
+      : `📲 Enviar Pix para WhatsApp · ${fmtMoney(finalPaidCents)}`;
   }
+  const waCheckoutBtn = document.getElementById('btnSendBillingCheckoutWhatsapp');
+  const waSubBtn = document.getElementById('btnSendBillingSubWhatsapp');
+  if (waCheckoutBtn) waCheckoutBtn.disabled = pointDisabled;
+  if (waSubBtn) waSubBtn.disabled = pointDisabled;
   if (addCartBtn) {
     addCartBtn.disabled = pointDisabled;
   }
@@ -7599,6 +7603,65 @@ document.getElementById('btnSendBillingWhatsapp')?.addEventListener('click', asy
       if (res?.charge?.id && typeof startPaymentAutoPoll === 'function') {
         startPaymentAutoPoll({ type: 'charge', id: res.charge.id });
       }
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('btnSendBillingCheckoutWhatsapp')?.addEventListener('click', async (e) => {
+  const memberId = document.getElementById('pMember').value;
+  if (!memberId) return;
+  const asideCents = toCents(document.getElementById('billingAsideFinalAmount')?.value);
+  const amountCents = asideCents > 0 ? asideCents : toCents(document.getElementById('pAmount').value);
+  if (amountCents <= 0) {
+    showToast('Informe um valor válido para enviar no WhatsApp.', true);
+    return;
+  }
+  const planId = document.getElementById('pPlan').value || null;
+  const btn = e.currentTarget;
+  const memberObj = state.allMembers.find((m) => Number(m.id) === Number(memberId));
+  await withLoading(btn, async () => {
+    try {
+      const res = await api('/api/gateways/mp/send-whatsapp-charge', {
+        method: 'POST',
+        body: JSON.stringify({ member_id: memberId, plan_id: planId, amount_cents: amountCents, mode: 'checkout' }),
+      });
+      showToast(`Link de cartão/checkout enviado no WhatsApp de ${memberObj?.name || 'aluno'}!`);
+      const box = document.getElementById('whatsappCheckoutBox');
+      const amountEl = document.getElementById('whatsappCheckoutAmount');
+      const linkEl = document.getElementById('whatsappCheckoutLink');
+      const targetUrl = res?.charge?.payment_url || res?.payPageUrl;
+      if (box && amountEl && linkEl && targetUrl) {
+        amountEl.textContent = `Link de ${fmtMoney(res.charge.amount_cents)} enviado no WhatsApp!`;
+        linkEl.href = targetUrl;
+        linkEl.textContent = 'Abrir link de pagamento';
+        box.classList.remove('hidden');
+      }
+      if (res?.charge?.id && typeof startPaymentAutoPoll === 'function') {
+        startPaymentAutoPoll({ type: 'charge', id: res.charge.id });
+      }
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('btnSendBillingSubWhatsapp')?.addEventListener('click', async (e) => {
+  const memberId = document.getElementById('pMember').value;
+  if (!memberId) return;
+  const planId = document.getElementById('pPlan').value || null;
+  const btn = e.currentTarget;
+  const memberObj = state.allMembers.find((m) => Number(m.id) === Number(memberId));
+  await withLoading(btn, async () => {
+    try {
+      const sub = await api('/api/gateways/mp/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify({ member_id: memberId, plan_id: planId }),
+      });
+      await api(`/api/gateways/mp/subscriptions/${sub.id}/send-whatsapp`, { method: 'POST' });
+      showToast(`Link de assinatura recorrente enviado no WhatsApp de ${memberObj?.name || 'aluno'}!`);
+      if (typeof loadMpSubscriptions === 'function') loadMpSubscriptions().catch(() => {});
     } catch (err) {
       showToast(err.message, true);
     }

@@ -913,7 +913,14 @@
                     <div id="billingAsideExtra" class="billing-aside-extra hidden"></div>
                     <div class="billing-aside-actions">
                       <button type="button" id="btnSendPointOrder" class="btn btn-primary billing-submit-btn" disabled>Enviar para a maquininha</button>
-                      <button type="button" id="btnSendBillingWhatsapp" class="btn btn-success billing-submit-btn" disabled>📲 Enviar para WhatsApp</button>
+                      <button type="button" id="btnSendBillingWhatsapp" class="btn btn-success billing-submit-btn" disabled>📲 Enviar Pix para WhatsApp</button>
+                      <details class="pix-qr-details" style="margin:2px 0 4px;">
+                        <summary style="font-size:12.5px;">Outras opções no WhatsApp (Cartão / Recorrente)</summary>
+                        <div class="form-stack" style="gap:6px;margin-top:6px;">
+                          <button type="button" id="btnSendBillingCheckoutWhatsapp" class="btn btn-secondary btn-sm billing-submit-btn" disabled>💳 Enviar Cartão / Link no WhatsApp</button>
+                          <button type="button" id="btnSendBillingSubWhatsapp" class="btn btn-secondary btn-sm billing-submit-btn" disabled>🔁 Enviar Assinatura Recorrente</button>
+                        </div>
+                      </details>
                       <div id="quickConfirmMethods" class="billing-aside-secondary" role="group" aria-label="Confirmar recebimento por forma de pagamento">
                         <button type="button" class="btn btn-secondary" data-quick-confirm="pix" disabled>💠 Confirmar Pix</button>
                         <button type="button" class="btn btn-secondary" data-quick-confirm="credit" disabled>💳 Confirmar Crédito</button>
