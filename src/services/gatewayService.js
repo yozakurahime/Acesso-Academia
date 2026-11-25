@@ -223,7 +223,10 @@ export class GatewayService {
     const charge = this.store.get('SELECT id, amount FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due, id LIMIT 1', [member.id]);
     const plan = this.store.get('SELECT * FROM plans WHERE id = ?', [charge ? member.plan_id : Number(planId || member.plan_id)]);
     if (!plan) throw this._badRequest('Selecione um plano para cobrar.');
-    const cents = charge?.amount ?? Number(amount ?? plan.price_cents);
+    const customCents = amount !== null && amount !== undefined && String(amount).trim() !== '' ? Number(amount) : NaN;
+    const cents = Number.isSafeInteger(customCents) && customCents > 0
+      ? customCents
+      : (charge?.amount ?? Number(plan.price_cents));
     if (!Number.isSafeInteger(cents) || cents <= 0) throw this._badRequest('Valor da cobrança inválido.');
     return { plan, cents, charge };
   }
@@ -1127,6 +1130,61 @@ export class GatewayService {
         order: this.getPointOrderById(order.id),
         paymentResult: paymentResults[0] || null,
         paymentResults,
+      };
+    }
+
+    const openCharge = order.membership_charge_id
+      ? this.store.get('SELECT * FROM membership_charges WHERE id = ? AND payment_id IS NULL', [order.membership_charge_id])
+      : this.store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL ORDER BY due ASC, id ASC LIMIT 1', [order.member_id]);
+
+    if (openCharge && Number(order.amount_cents) > 0 && Number(order.amount_cents) < Number(openCharge.amount)) {
+      const existingPartial = externalId
+        ? this.store.get('SELECT * FROM payments WHERE external_id = ?', [externalId])
+        : null;
+      if (existingPartial) {
+        return {
+          paid: true,
+          alreadyPaid: true,
+          partial: true,
+          remaining_cents: openCharge.amount,
+          order: this.getPointOrderById(order.id),
+          paymentResult: { payment: existingPartial, member: this.accessService.getMember(order.member_id), alreadyRecorded: true },
+        };
+      }
+
+      const { paymentId, remainingCents } = this.store.transaction(() => {
+        const payRes = this.store.run(
+          `INSERT INTO payments (member_id, plan_id, amount_cents, method, external_id, notes, status, paid_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'paid', datetime('now', 'localtime'))`,
+          [
+            order.member_id,
+            order.plan_id || null,
+            order.amount_cents,
+            method,
+            externalId,
+            `${notes} (Parcela parcial)`,
+          ],
+        );
+        const newRemaining = Math.max(1, Number(openCharge.amount) - Number(order.amount_cents));
+        this.store.run(
+          `UPDATE membership_charges SET amount = ? WHERE id = ? AND payment_id IS NULL`,
+          [newRemaining, openCharge.id],
+        );
+        this.store.run(
+          `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+          [method, payRes.lastInsertRowid, order.id],
+        );
+        return { paymentId: payRes.lastInsertRowid, remainingCents: newRemaining };
+      });
+      const payment = this.store.get('SELECT * FROM payments WHERE id = ?', [paymentId]);
+      const member = this.accessService.getMember(order.member_id);
+      return {
+        paid: true,
+        alreadyPaid: false,
+        partial: true,
+        remaining_cents: remainingCents,
+        order: this.getPointOrderById(order.id),
+        paymentResult: { payment, member, alreadyRecorded: false },
       };
     }
 

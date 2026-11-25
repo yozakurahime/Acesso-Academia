@@ -605,3 +605,71 @@ test('Taxas separam maquininha, Pix online direto, Link/Checkout e assinatura co
   assert.equal(calculatePaymentFee(10000, 'credit', settings, { channel: 'checkout' }).fee_cents, 549);
   assert.equal(calculatePaymentFee(10000, 'credit', settings, { channel: 'subscription' }).fee_cents, 449);
 });
+
+test('Point Smart suporta pagamento dividido em duas ordens (50 credito + 50 debito) e so libera acesso ao quitar o total', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    mp_point_access_token: 'APP_USR_POINT',
+    mp_point_terminal_id: 'TERM_SPLIT_1',
+  });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.duration_days === 30);
+  const member = await access.createMember({
+    name: 'Aluno Dividido POS',
+    document: '52998224725',
+    phone: '62999991111',
+    plan_id: plan.id,
+  });
+  const openCharge = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  const halfCents = Math.floor(openCharge.amount / 2);
+  const restCents = openCharge.amount - halfCents;
+
+  let seq = 0;
+  let lastOrderMethod = 'credit';
+  let lastAmountStr = '0.00';
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, options = {}) => {
+      if (url === 'https://api.mercadopago.com/v1/orders' && options.method === 'POST') {
+        seq += 1;
+        const body = JSON.parse(options.body);
+        lastOrderMethod = body.config?.payment_method?.default_type === 'debit_card' ? 'debit' : 'credit';
+        lastAmountStr = String(body.transactions?.payments?.[0]?.amount || '0.00');
+        return {
+          ok: true,
+          json: async () => ({ id: `ORD_SPLIT_${seq}`, status: 'created' }),
+        };
+      }
+      if (url.startsWith('https://api.mercadopago.com/v1/orders/ORD_SPLIT_')) {
+        return {
+          ok: true,
+          json: async () => ({
+            id: url.split('/').pop(),
+            status: 'processed',
+            transactions: {
+              payments: [{ id: `PAY_${seq}`, status: 'processed', amount: lastAmountStr, payment_method: { type: `${lastOrderMethod}_card` } }],
+            },
+          }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const o1 = await gw.createPointOrder({ member_id: member.id, plan_id: plan.id, amount_cents: halfCents, payment_method: 'credit' });
+  const r1 = await gw.checkPointOrder(o1.id);
+  assert.equal(r1.paid, true);
+  assert.equal(r1.partial, true);
+  assert.equal(r1.remaining_cents, restCents);
+  assert.equal(access.getMember(member.id).status, 'pending');
+
+  const o2 = await gw.createPointOrder({ member_id: member.id, plan_id: plan.id, amount_cents: restCents, payment_method: 'debit' });
+  const r2 = await gw.checkPointOrder(o2.id);
+  assert.equal(r2.paid, true);
+  assert.equal(Boolean(r2.partial), false);
+  assert.equal(access.getMember(member.id).status, 'active');
+
+  const pays = store.all('SELECT method, amount_cents FROM payments WHERE member_id = ? ORDER BY id ASC', [member.id]);
+  assert.equal(pays.length, 2);
+  assert.deepEqual(pays.map((p) => [p.method, p.amount_cents]), [['credit', halfCents], ['debit', restCents]]);
+});

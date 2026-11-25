@@ -7032,11 +7032,12 @@ function startPaymentAutoPoll({ type, id, stayOnMember = false, isCart = false }
             state.billingCart = [];
             renderBillingCart();
           }
-          const keepMember = !wasCart && (stayOnMember || Boolean(document.getElementById('pSplitToggle')?.checked));
+          const keepMember = !wasCart && (stayOnMember || Boolean(res.partial) || Boolean(document.getElementById('pSplitToggle')?.checked));
           showToast(wasCart
             ? 'Pagamento do carrinho confirmado e baixado para todos os alunos!'
-            : (keepMember ? 'Pagamento na maquininha confirmado! Finalize o restante na tela.' : 'Pagamento na Point Smart confirmado e baixado!'));
+            : (keepMember ? 'Parcela na maquininha confirmada! Finalize o restante na tela.' : 'Pagamento na Point Smart confirmado e baixado!'));
           await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
+          if (keepMember) advanceSplitAfterPointPaid(res);
           const firstPayment = res.payment || res.paymentResult?.payment || res.paymentResults?.[0]?.payment;
           if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
           if (!keepMember) finishPaymentAndReturnHome();
@@ -7634,11 +7635,15 @@ document.getElementById('btnPointWaitCheck')?.addEventListener('click', async (e
           state.billingCart = [];
           renderBillingCart();
         }
-        showToast(wasCart ? 'Pagamento do carrinho confirmado!' : 'Pagamento na Point Smart confirmado e baixado!');
+        const keepMember = !wasCart && (Boolean(res.partial) || Boolean(document.getElementById('pSplitToggle')?.checked));
+        showToast(wasCart
+          ? 'Pagamento do carrinho confirmado!'
+          : (keepMember ? 'Parcela na maquininha confirmada! Finalize o restante na tela.' : 'Pagamento na Point Smart confirmado e baixado!'));
         await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
+        if (keepMember) advanceSplitAfterPointPaid(res);
         const firstPayment = res.payment || res.paymentResult?.payment || res.paymentResults?.[0]?.payment;
         if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
-        if (wasCart || !Boolean(document.getElementById('pSplitToggle')?.checked)) finishPaymentAndReturnHome();
+        if (!keepMember) finishPaymentAndReturnHome();
       } else if (statusEl) {
         statusEl.textContent = `Status atual: ${res.status || 'aguardando na maquininha'}`;
       }
@@ -7666,6 +7671,35 @@ document.getElementById('btnPointWaitCancel')?.addEventListener('click', async (
     }
   });
 });
+
+function advanceSplitAfterPointPaid(res) {
+  const splitActive = Boolean(document.getElementById('pSplitToggle')?.checked);
+  if (!splitActive) {
+    renderBillingSummary();
+    return;
+  }
+  const rows = [...document.querySelectorAll('#pSplitRows .split-row')];
+  const firstPosRow = rows.find((row) => {
+    const m = String(row.querySelector('.split-method')?.value || '').toLowerCase();
+    const val = toCents(row.querySelector('.split-amount')?.value);
+    return ['credit', 'debit', 'pix'].includes(m) && val > 0;
+  });
+  if (firstPosRow) firstPosRow.remove();
+  state.billingFinalAmountEdited = false;
+  const remainingRows = [...document.querySelectorAll('#pSplitRows .split-row')];
+  if (remainingRows.length <= 1 && Number(res?.remaining_cents || 0) > 0) {
+    const onlyRow = remainingRows[0];
+    if (onlyRow) {
+      const m = onlyRow.querySelector('.split-method')?.value || 'cash';
+      const pMethod = document.getElementById('pMethod');
+      if (pMethod) pMethod.value = m;
+    }
+    if (remainingRows.length === 0) {
+      document.getElementById('pSplitToggle').checked = false;
+    }
+  }
+  renderBillingSummary();
+}
 
 function resolvePointSplitTarget() {
   const splitActive = Boolean(document.getElementById('pSplitToggle')?.checked);
