@@ -3243,6 +3243,8 @@ window.openProfile = async (id) => {
 
     state.selectedProfilePayments = data.payments || [];
     state.selectedProfileGatewayCharges = data.gatewayCharges || [];
+    state.selectedProfileSubscriptions = data.mpSubscriptions || [];
+    renderProfileSubscriptionBox(m, data.mpSubscriptions || []);
     state.selectedProfilePointOrders = data.pointOrders || [];
     state.profilePaymentFilter = 'all';
     document.querySelectorAll('#profPaymentFilters [data-prof-pay-filter]').forEach((btn) => {
@@ -7137,15 +7139,23 @@ function subStatusBadge(status) {
   return '<span class="badge badge-pending">Aguardando autorização</span>';
 }
 
-async function loadMpSubscriptions() {
+let mpSubscriptionsCache = [];
+let mpSubFilterMode = 'all';
+
+function renderMpSubscriptionsList() {
   const container = document.getElementById('mpSubscriptionsList');
   if (!container) return;
-  const subs = await api('/api/gateways/mp/subscriptions?limit=30');
-  if (!subs.length) {
-    container.innerHTML = '<div class="muted">Nenhuma assinatura recorrente criada ainda.</div>';
+  const q = String(document.getElementById('subSearchInput')?.value || '').trim().toLowerCase();
+  const filtered = mpSubscriptionsCache.filter((s) => {
+    if (mpSubFilterMode !== 'all' && String(s.status || 'pending') !== mpSubFilterMode) return false;
+    if (!q) return true;
+    return String(s.member_name || '').toLowerCase().includes(q) || String(s.plan_name || '').toLowerCase().includes(q);
+  });
+  if (!filtered.length) {
+    container.innerHTML = '<div class="muted">Nenhuma assinatura recorrente encontrada.</div>';
     return;
   }
-  container.innerHTML = subs
+  container.innerHTML = filtered
     .map(
       (s) => {
         const nextDate = s.next_payment_date ? ` · próx.: ${fmtDate(String(s.next_payment_date).slice(0, 10))}` : '';
@@ -7174,6 +7184,123 @@ async function loadMpSubscriptions() {
     )
     .join('');
 }
+
+async function loadMpSubscriptions() {
+  const container = document.getElementById('mpSubscriptionsList');
+  if (!container) return;
+  mpSubscriptionsCache = await api('/api/gateways/mp/subscriptions?limit=50');
+  renderMpSubscriptionsList();
+}
+
+document.getElementById('subSearchInput')?.addEventListener('input', () => renderMpSubscriptionsList());
+document.getElementById('subFilterBar')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-sub-filter]');
+  if (!btn) return;
+  mpSubFilterMode = btn.dataset.subFilter || 'all';
+  document.querySelectorAll('#subFilterBar [data-sub-filter]').forEach((b) => b.classList.toggle('active', b === btn));
+  renderMpSubscriptionsList();
+});
+
+function renderProfileSubscriptionBox(member, subs = []) {
+  const body = document.getElementById('profSubscriptionBody');
+  const createBtn = document.getElementById('btnCreateProfileSubscription');
+  if (!body) return;
+  const hasOpenSub = subs.some((s) => s.status !== 'canceled');
+  if (createBtn) {
+    createBtn.classList.toggle('hidden', hasOpenSub || !member?.plan_id || member?.access_role !== 'student');
+  }
+  if (!subs.length) {
+    body.innerHTML = '<div class="muted">Nenhuma assinatura recorrente vinculada a este aluno.</div>';
+    return;
+  }
+  body.innerHTML = subs.map((s) => {
+    const safeUrl = s.status !== 'canceled' ? sanitizeHttpUrl(s.init_point) : '';
+    const nextDate = s.next_payment_date ? ` · próx.: ${fmtDate(String(s.next_payment_date).slice(0, 10))}` : '';
+    return `
+      <div class="billing-member" style="cursor:default;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+        <div>
+          <strong>${fmtMoney(s.amount_cents)}</strong> · ${escapeHtml(s.plan_name || 'Mensalidade')} (${escapeHtml(subFrequencyLabel(s))})
+          ${subStatusBadge(s.status)}
+          <div class="muted" style="font-size:12px;">${escapeHtml(s.payer_email || '-')}${escapeHtml(nextDate)}</div>
+        </div>
+        <div class="inline-actions">
+          ${safeUrl ? `<button type="button" class="btn btn-secondary btn-sm" data-copy-sub-link="${escapeHtml(safeUrl)}">Copiar link</button><button type="button" class="btn btn-primary btn-sm" data-wa-sub="${s.id}">Enviar WhatsApp</button>` : ''}
+          ${s.status !== 'canceled' ? `<button type="button" class="btn btn-success btn-sm" data-sync-sub="${s.id}">Sincronizar</button><button type="button" class="btn btn-danger btn-sm" data-cancel-sub="${s.id}">Cancelar</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('btnCreateProfileSubscription')?.addEventListener('click', async (e) => {
+  const member = state.selectedProfileMember;
+  if (!member?.id) return;
+  await withLoading(e.currentTarget, async () => {
+    try {
+      const sub = await api('/api/gateways/mp/subscriptions', {
+        method: 'POST',
+        body: JSON.stringify({ member_id: member.id, plan_id: member.plan_id }),
+      });
+      showToast(sub?.reused ? 'Assinatura recorrente existente carregada!' : 'Assinatura recorrente criada!');
+      if (state.selectedProfileId) await openProfile(state.selectedProfileId);
+      loadMpSubscriptions().catch(() => {});
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('profSubscriptionBody')?.addEventListener('click', async (e) => {
+  const copyBtn = e.target.closest('button[data-copy-sub-link]');
+  if (copyBtn) {
+    try {
+      await navigator.clipboard.writeText(copyBtn.dataset.copySubLink);
+      showToast('Link da assinatura copiado!');
+    } catch {
+      showToast('Não foi possível copiar automaticamente.', true);
+    }
+    return;
+  }
+  const waBtn = e.target.closest('button[data-wa-sub]');
+  if (waBtn) {
+    await withLoading(waBtn, async () => {
+      try {
+        await api(`/api/gateways/mp/subscriptions/${waBtn.dataset.waSub}/send-whatsapp`, { method: 'POST' });
+        showToast('Link da assinatura enviado no WhatsApp!');
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
+  const syncBtn = e.target.closest('button[data-sync-sub]');
+  if (syncBtn) {
+    await withLoading(syncBtn, async () => {
+      try {
+        const res = await api(`/api/gateways/mp/subscriptions/${syncBtn.dataset.syncSub}/sync`, { method: 'POST' });
+        showToast(res.settledCount > 0 ? `${res.settledCount} pagamento(s) baixado(s)!` : 'Assinatura sincronizada.');
+        if (state.selectedProfileId) await openProfile(state.selectedProfileId);
+        loadMpSubscriptions().catch(() => {});
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
+  const cancelBtn = e.target.closest('button[data-cancel-sub]');
+  if (cancelBtn) {
+    if (!confirm('Cancelar esta assinatura recorrente no Mercado Pago?')) return;
+    await withLoading(cancelBtn, async () => {
+      try {
+        await api(`/api/gateways/mp/subscriptions/${cancelBtn.dataset.cancelSub}`, { method: 'DELETE' });
+        showToast('Assinatura cancelada.');
+        if (state.selectedProfileId) await openProfile(state.selectedProfileId);
+        loadMpSubscriptions().catch(() => {});
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+  }
+});
 
 document.getElementById('btnRefreshSubscriptions')?.addEventListener('click', () => {
   loadMpSubscriptions().catch((err) => showToast(err.message, true));

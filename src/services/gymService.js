@@ -95,7 +95,16 @@ export class GymService {
        ORDER BY due ASC, id ASC`,
       [id],
     );
-    return { member: { ...profileMember, has_portal_password: Boolean(portal_password_hash) }, payments, gatewayCharges, pointOrders, logs, classes, modalities, planEnrollment, inGrace, weeklyGoal, openCharges };
+    const mpSubscriptions = this.store.all(
+      `SELECT s.*, p.name AS plan_name
+       FROM mp_subscriptions s
+       LEFT JOIN plans p ON p.id = s.plan_id
+       WHERE s.member_id = ?
+       ORDER BY s.id DESC
+       LIMIT 5`,
+      [id],
+    );
+    return { member: { ...profileMember, has_portal_password: Boolean(portal_password_hash) }, payments, gatewayCharges, pointOrders, logs, classes, modalities, planEnrollment, inGrace, weeklyGoal, openCharges, mpSubscriptions };
   }
 
   updateMember(memberId, data) {

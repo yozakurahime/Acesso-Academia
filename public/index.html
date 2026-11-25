@@ -675,34 +675,6 @@
             </table>
           </div>
         </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <h2>Assinaturas do Mercado Pago</h2>
-            <button type="button" id="btnRefreshSubscriptions" class="btn btn-secondary btn-sm">Atualizar</button>
-          </div>
-          <p class="muted" style="margin-top:0;">Selecione o aluno, plano e valor na aba Recebimento e gere um link de assinatura automática no Mercado Pago.</p>
-          <div class="form-grid" style="margin-bottom:10px;">
-            <label>Ciclo
-              <select id="subCycle">
-                <option value="MONTHLY">Mensal</option>
-                <option value="WEEKLY">Semanal</option>
-                <option value="BIWEEKLY">Quinzenal</option>
-                <option value="BIMONTHLY">Bimestral</option>
-                <option value="QUARTERLY">Trimestral</option>
-                <option value="SEMIANNUALLY">Semestral</option>
-                <option value="YEARLY">Anual</option>
-              </select>
-            </label>
-            <label>E-mail do pagador (opcional)
-              <input type="email" id="subPayerEmail" placeholder="Usa e-mail do cadastro se vazio" />
-            </label>
-          </div>
-          <div class="inline-actions" style="margin-bottom:12px;">
-            <button type="button" id="btnCreateSubscription" class="btn btn-primary btn-sm">Criar Assinatura Mercado Pago</button>
-          </div>
-          <div id="mpSubscriptionsList" class="billing-queue"></div>
-        </div>
       </section>
 
       <!-- ATENDIMENTO / CHAT WHATSAPP -->
@@ -963,6 +935,45 @@
               </div>
               <div id="openDebtsQueue" class="billing-queue"></div>
             </div>
+          </div>
+
+          <div class="panel" style="margin-top:16px;">
+            <div class="panel-header" style="flex-wrap:wrap;gap:8px;">
+              <div>
+                <h2 style="margin:0;">Assinaturas Recorrentes (Cartão · Mercado Pago)</h2>
+                <p class="muted" style="margin:2px 0 0;font-size:12.5px;">Selecione o aluno, plano e valor acima e gere ou envie o link de cobrança mensal automática.</p>
+              </div>
+              <button type="button" id="btnRefreshSubscriptions" class="btn btn-secondary btn-sm">Atualizar</button>
+            </div>
+            <div class="form-grid" style="margin-bottom:10px;">
+              <label>Ciclo
+                <select id="subCycle">
+                  <option value="MONTHLY">Mensal</option>
+                  <option value="WEEKLY">Semanal</option>
+                  <option value="BIWEEKLY">Quinzenal</option>
+                  <option value="BIMONTHLY">Bimestral</option>
+                  <option value="QUARTERLY">Trimestral</option>
+                  <option value="SEMIANNUALLY">Semestral</option>
+                  <option value="YEARLY">Anual</option>
+                </select>
+              </label>
+              <label>E-mail do pagador (opcional)
+                <input type="email" id="subPayerEmail" placeholder="Usa e-mail do cadastro se vazio" />
+              </label>
+              <div style="align-self:end;">
+                <button type="button" id="btnCreateSubscription" class="btn btn-primary btn-sm">Criar Assinatura Recorrente</button>
+              </div>
+            </div>
+            <div class="inline-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+              <div id="subFilterBar" class="prof-enr-filters">
+                <button type="button" class="prof-enr-filter active" data-sub-filter="all">Todas</button>
+                <button type="button" class="prof-enr-filter" data-sub-filter="active">Ativas</button>
+                <button type="button" class="prof-enr-filter" data-sub-filter="pending">Pendentes</button>
+                <button type="button" class="prof-enr-filter" data-sub-filter="canceled">Canceladas</button>
+              </div>
+              <input type="search" id="subSearchInput" placeholder="Buscar aluno na assinatura…" autocomplete="off" style="max-width:240px;padding:6px 10px;font-size:12.5px;" />
+            </div>
+            <div id="mpSubscriptionsList" class="billing-queue"></div>
           </div>
         </div>
       </section>
@@ -2509,6 +2520,14 @@
             <button type="submit" class="btn btn-primary" style="align-self:end;">Salvar crédito</button>
           </form>
           <ul id="profCreditLogsList" class="simple-list" style="margin-top:8px;"></ul>
+        </section>
+
+        <section id="profSubscriptionSection" class="panel" style="margin-top:16px;">
+          <div class="panel-header" style="flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+            <h3 style="margin:0;">Assinatura Recorrente (Cartão)</h3>
+            <button type="button" id="btnCreateProfileSubscription" class="btn btn-secondary btn-sm hidden">+ Criar assinatura recorrente</button>
+          </div>
+          <div id="profSubscriptionBody" class="muted" style="font-size:13px;">Nenhuma assinatura recorrente cadastrada.</div>
         </section>
 
         <section class="panel" style="margin-top:16px;">
