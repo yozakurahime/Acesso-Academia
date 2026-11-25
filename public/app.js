@@ -10451,6 +10451,10 @@ function renderChatList() {
     return name.includes(q) || String(c.phone || '').includes(q);
   });
 
+  const renderKey = `${activeChatPhone || ''}|${chatFilterMode}|${q}|${filtered.map((c) => `${c.phone}:${c.last_message_at || ''}:${c.unread_count || 0}:${c.needs_human || 0}:${c.internal_note ? 1 : 0}`).join(';')}`;
+  if (listEl.dataset.renderKey === renderKey) return;
+  listEl.dataset.renderKey = renderKey;
+
   if (filtered.length === 0) {
     listEl.innerHTML = '<div class="muted" style="padding:12px;">Nenhuma conversa encontrada.</div>';
     return;
@@ -10460,14 +10464,15 @@ function renderChatList() {
     const title = c.member_name || c.contact_name || c.phone;
     const initials = memberInitials(title);
     const activeClass = c.phone === activeChatPhone ? ' active' : '';
-    const humanTag = Number(c.needs_human) === 1
+    const isHuman = Number(c.needs_human) === 1;
+    const humanTag = isHuman
       ? '<span class="badge badge-pending">Atendente</span>'
       : (Number(c.unread_count) > 0 ? `<span class="badge badge-active">${Number(c.unread_count)}</span>` : '');
-    const noteBadge = c.internal_note ? '<span title="Possui nota interna" style="font-size:11px;opacity:0.75;">📝</span>' : '';
+    const noteBadge = c.internal_note ? '<span title="Possui nota interna" aria-label="Possui nota interna" style="font-size:11px;opacity:0.75;">📝</span>' : '';
     const timeStr = formatChatItemTime(c.last_message_at);
     return `
       <button type="button" class="chat-item${activeClass}" data-chat-phone="${escapeHtml(c.phone)}">
-        <div class="chat-item-avatar">${escapeHtml(initials)}</div>
+        <div class="chat-item-avatar${isHuman ? ' is-human' : ''}">${escapeHtml(initials)}</div>
         <div class="chat-item-body">
           <div class="chat-item-top">
             <strong class="chat-item-name">${escapeHtml(title)}</strong>
@@ -10488,13 +10493,16 @@ async function openChat(phone) {
   if (!quickRepliesCache.length) {
     loadQuickReplies();
   }
+  const isNewChatSelection = activeChatPhone !== phone;
   activeChatPhone = phone;
+  document.getElementById('chatLayout')?.classList.add('has-active-chat');
   renderChatList();
   const data = await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/messages`);
   const chat = data.chat || { phone };
   const title = chat.member_name || chat.contact_name || chat.phone;
   const paused = Number(chat.bot_paused) === 1;
   const needsHuman = Number(chat.needs_human) === 1;
+  const hasNote = Boolean(String(chat.internal_note || '').trim());
   const headerEl = document.getElementById('chatHeader');
   if (headerEl) {
     const toggleLabel = needsHuman ? 'Resolver e retomar bot' : (paused ? 'Retomar bot' : 'Pausar bot');
@@ -10504,23 +10512,35 @@ async function openChat(phone) {
       : '';
     headerEl.innerHTML = `
       <div class="chat-header-info">
-        <div class="chat-item-avatar">${escapeHtml(memberInitials(title))}</div>
+        <button type="button" id="btnChatBackMobile" class="btn btn-secondary btn-sm chat-back-btn" aria-label="Voltar para a lista">←</button>
+        <div class="chat-item-avatar${needsHuman ? ' is-human' : ''}">${escapeHtml(memberInitials(title))}</div>
         <div>
           <strong>${escapeHtml(title)}</strong>
           <div class="muted" style="font-size:12px;">${escapeHtml(chat.phone)}${chat.member_status ? ` · ${escapeHtml(chat.member_status)}` : ''}${escapeHtml(validLabel)}</div>
         </div>
       </div>
       <div class="inline-actions">
+        <button type="button" id="btnToggleChatNote" class="btn btn-secondary btn-sm" title="Nota interna">${hasNote ? '📝 Nota' : 'Nota'}</button>
         ${memberBtnHtml}
         <button type="button" id="btnToggleChatBot" class="btn ${needsHuman ? 'btn-primary' : 'btn-secondary'} btn-sm">${toggleLabel}</button>
       </div>
     `;
+    document.getElementById('btnChatBackMobile')?.addEventListener('click', () => {
+      document.getElementById('chatLayout')?.classList.remove('has-active-chat');
+    });
+    document.getElementById('btnToggleChatNote')?.addEventListener('click', () => {
+      const noteBar = document.getElementById('chatNoteBar');
+      if (!noteBar) return;
+      const hiddenNow = noteBar.classList.toggle('hidden');
+      if (!hiddenNow) document.getElementById('chatNoteInput')?.focus();
+    });
     document.getElementById('btnChatMemberBilling')?.addEventListener('click', async () => {
       try {
-        if (!Array.isArray(state.allMembers) || !state.allMembers.length) {
-          await loadMembers();
+        let member = (state.allMembers || []).find((m) => Number(m.id) === Number(chat.member_id));
+        if (!member) {
+          const prof = await api(`/api/members/${Number(chat.member_id)}/profile`);
+          member = prof?.member || null;
         }
-        const member = (state.allMembers || []).find((m) => Number(m.id) === Number(chat.member_id));
         if (!member) {
           showToast('Cadastro do aluno não encontrado.', true);
           return;
@@ -10562,8 +10582,10 @@ async function openChat(phone) {
     const msgs = data.messages || [];
     const renderKey = `${phone}:${msgs.length}:${msgs[msgs.length - 1]?.id || 0}`;
     if (msgsEl.dataset.renderKey !== renderKey) {
+      const nearBottom = isNewChatSelection || (msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight) < 80;
       msgsEl.dataset.renderKey = renderKey;
       let lastDateKey = '';
+      let prevSenderKey = '';
       msgsEl.innerHTML = msgs.map((m) => {
         const cls = m.direction === 'in' ? 'in' : 'out';
         const roleCls = m.direction === 'out' ? (m.sender_type === 'bot' ? 'bot' : 'human') : '';
@@ -10573,13 +10595,16 @@ async function openChat(phone) {
         const dividerLabel = dateKey && dateKey !== lastDateKey ? formatChatDateDivider(rawDate) : '';
         if (dateKey) lastDateKey = dateKey;
         const dividerHtml = dividerLabel ? `<div class="chat-date-divider">${escapeHtml(dividerLabel)}</div>` : '';
+        const senderKey = `${dateKey}:${cls}:${m.sender_type || ''}`;
+        const groupedCls = !dividerLabel && prevSenderKey === senderKey ? ' chat-bubble--grouped' : '';
+        prevSenderKey = senderKey;
         const time = rawDate.length >= 16 ? rawDate.slice(11, 16) : rawDate;
         let mediaHtml = '';
         if (m.media_url) {
           if (m.media_type === 'image') {
-            mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem" style="max-width:240px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank','noopener,noreferrer')" />`;
+            mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Imagem enviada" loading="lazy" width="240" height="180" style="width:auto;height:auto;max-width:240px;max-height:260px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer;" onclick="window.open(this.src,'_blank','noopener,noreferrer')" />`;
           } else if (m.media_type === 'sticker') {
-            mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Figurinha" style="max-width:140px;display:block;margin-bottom:6px;" />`;
+            mediaHtml = `<img src="${escapeHtml(m.media_url)}" alt="Figurinha" loading="lazy" width="140" height="140" style="max-width:140px;height:auto;display:block;margin-bottom:6px;" />`;
           } else if (m.media_type === 'audio') {
             mediaHtml = `<audio controls preload="none" src="${escapeHtml(m.media_url)}" style="max-width:240px;height:36px;display:block;margin-bottom:6px;"></audio>`;
           }
@@ -10587,20 +10612,24 @@ async function openChat(phone) {
         const cleanText = String(m.body || '').replace(/^\[ts=\d+\]\s*/i, '');
         const bodyHtml = cleanText ? `<div>${formatWhatsappTextHtml(cleanText)}</div>` : '';
         return `${dividerHtml}
-          <div class="chat-bubble ${cls} ${roleCls}">
+          <div class="chat-bubble ${cls} ${roleCls}${groupedCls}">
             ${mediaHtml}${bodyHtml}
             <div class="chat-bubble-meta">${escapeHtml(who)} · ${escapeHtml(time)}</div>
           </div>
         `;
       }).join('');
-      msgsEl.scrollTop = msgsEl.scrollHeight;
+      if (nearBottom) {
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+      }
     }
   }
 
   const noteBarEl = document.getElementById('chatNoteBar');
   const noteInputEl = document.getElementById('chatNoteInput');
   if (noteBarEl && noteInputEl) {
-    noteBarEl.classList.remove('hidden');
+    if (isNewChatSelection) {
+      noteBarEl.classList.toggle('hidden', !hasNote);
+    }
     if (document.activeElement !== noteInputEl) {
       noteInputEl.value = chat.internal_note || '';
     }
@@ -10611,12 +10640,22 @@ async function openChat(phone) {
 }
 
 async function loadChats({ skipActiveReload = false } = {}) {
+  const prevActive = activeChatPhone
+    ? chatItemsCache.find((c) => c.phone === activeChatPhone)
+    : null;
   const data = await api('/api/whatsapp/chats');
   chatItemsCache = data.items || [];
   updateChatNavBadge(data);
   renderChatList();
   if (!skipActiveReload && activeChatPhone) {
-    await openChat(activeChatPhone);
+    const nextActive = chatItemsCache.find((c) => c.phone === activeChatPhone);
+    const activeChanged = !prevActive || !nextActive
+      || prevActive.last_message_at !== nextActive.last_message_at
+      || Number(prevActive.unread_count || 0) !== Number(nextActive.unread_count || 0)
+      || Number(prevActive.needs_human || 0) !== Number(nextActive.needs_human || 0);
+    if (activeChanged) {
+      await openChat(activeChatPhone);
+    }
   }
   clearTimeout(chatPollTimer);
   if (state.activeTab === 'chat' && !document.hidden) {
@@ -10624,14 +10663,18 @@ async function loadChats({ skipActiveReload = false } = {}) {
       if (state.activeTab === 'chat' && !document.hidden) {
         loadChats().catch(() => {});
       }
-    }, 5000);
+    }, 8000);
   }
 }
 
 document.getElementById('btnRefreshChats')?.addEventListener('click', () => {
   loadChats().catch((err) => showToast(err.message, true));
 });
-document.getElementById('chatSearchInput')?.addEventListener('input', renderChatList);
+let chatSearchTimer = null;
+document.getElementById('chatSearchInput')?.addEventListener('input', () => {
+  clearTimeout(chatSearchTimer);
+  chatSearchTimer = setTimeout(renderChatList, 150);
+});
 document.getElementById('chatFilterBar')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.chat-filter-btn');
   if (!btn) return;
@@ -10752,6 +10795,21 @@ document.getElementById('chatList')?.addEventListener('click', (e) => {
   if (!btn) return;
   openChat(btn.dataset.chatPhone).catch((err) => showToast(err.message, true));
 });
+const chatReplyInputEl = document.getElementById('chatReplyInput');
+if (chatReplyInputEl) {
+  const autoResizeReply = () => {
+    chatReplyInputEl.style.height = 'auto';
+    chatReplyInputEl.style.height = `${Math.min(chatReplyInputEl.scrollHeight, 120)}px`;
+  };
+  chatReplyInputEl.addEventListener('input', autoResizeReply);
+  chatReplyInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('chatReplyForm')?.requestSubmit();
+    }
+  });
+}
+
 document.getElementById('chatReplyForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!activeChatPhone) return;
@@ -10764,6 +10822,7 @@ document.getElementById('chatReplyForm')?.addEventListener('submit', async (e) =
       body: JSON.stringify({ text }),
     });
     input.value = '';
+    input.style.height = 'auto';
     await Promise.all([openChat(activeChatPhone), loadChats({ skipActiveReload: true })]);
   } catch (err) {
     showToast(err.message, true);

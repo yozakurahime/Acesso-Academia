@@ -321,10 +321,14 @@ export class WhatsappBotService {
     );
     const messages = this.store.all(
       `SELECT id, phone, direction, sender_type, body, media_type, media_url, created_at
-       FROM whatsapp_chat_messages
-       WHERE phone = ?
-       ORDER BY id ASC
-       LIMIT 200`,
+       FROM (
+         SELECT id, phone, direction, sender_type, body, media_type, media_url, created_at
+         FROM whatsapp_chat_messages
+         WHERE phone = ?
+         ORDER BY id DESC
+         LIMIT 200
+       )
+       ORDER BY id ASC`,
       [normalized],
     );
     return { chat: chat || null, messages };

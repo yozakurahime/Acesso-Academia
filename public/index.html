@@ -666,9 +666,9 @@
             <button type="button" id="btnRefreshChats" class="btn btn-secondary"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-button-label>Atualizar</span></button>
           </div>
         </div>
-        <div class="chat-layout">
+        <div class="chat-layout" id="chatLayout">
           <aside class="card chat-sidebar">
-            <input id="chatSearchInput" type="search" placeholder="Buscar nome ou telefone..." style="margin-bottom:8px;" />
+            <input id="chatSearchInput" type="search" aria-label="Buscar conversa por nome ou telefone" placeholder="Buscar nome ou telefone…" autocomplete="off" style="margin-bottom:8px;" />
             <div id="chatFilterBar" class="inline-actions" style="margin-bottom:10px;gap:6px;flex-wrap:wrap;">
               <button type="button" class="btn btn-primary btn-sm chat-filter-btn" data-chat-filter="all">Todos</button>
               <button type="button" class="btn btn-secondary btn-sm chat-filter-btn" data-chat-filter="human">Atendente</button>
@@ -680,12 +680,14 @@
             <div id="chatHeader" class="chat-header">
               <div class="muted">Selecione uma conversa ao lado para visualizar e responder.</div>
             </div>
-            <div id="chatHandoffBanner" class="chat-handoff-banner hidden"></div>
+            <div id="chatHandoffBanner" class="chat-handoff-banner hidden" aria-live="polite"></div>
             <div id="chatNoteBar" class="chat-note-bar hidden">
-              <input id="chatNoteInput" type="text" placeholder="Nota interna da recepção (não é enviada ao cliente)..." maxlength="500" />
+              <input id="chatNoteInput" type="text" aria-label="Nota interna da recepção" placeholder="Nota interna da recepção (não é enviada ao cliente)…" maxlength="500" autocomplete="off" />
               <button type="button" id="btnSaveChatNote" class="btn btn-secondary btn-sm">Salvar nota</button>
             </div>
-            <div id="chatMessages" class="chat-messages"></div>
+            <div id="chatMessages" class="chat-messages">
+              <div class="chat-empty-state muted">Escolha um contato na lista para abrir o histórico e responder pelo WhatsApp.</div>
+            </div>
             <div id="chatQuickReplies" class="inline-actions chat-quick-replies hidden"></div>
             <div id="chatQuickRepliesEditor" class="chat-quick-editor hidden">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -699,7 +701,7 @@
               </div>
             </div>
             <form id="chatReplyForm" class="chat-reply-form hidden">
-              <input id="chatReplyInput" type="text" placeholder="Digite sua resposta para o WhatsApp..." autocomplete="off" required />
+              <textarea id="chatReplyInput" rows="1" aria-label="Mensagem para o WhatsApp" placeholder="Digite sua resposta para o WhatsApp… (Enter envia, Shift+Enter quebra linha)" autocomplete="off" required></textarea>
               <button type="submit" class="btn btn-primary">Enviar</button>
             </form>
           </div>
