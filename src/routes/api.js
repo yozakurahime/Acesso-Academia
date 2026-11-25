@@ -597,7 +597,8 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     router.use((req, res, next) => {
       const cleanPath = String(req.path || '').replace(/\/+$/, '') || '/';
       if (cleanPath.startsWith('/edge/') && cleanPath !== '/edge/status') return next();
-      if (req.method === 'POST' && req.path === '/device/release' && isLocalDeviceRequest(req) &&
+      const isLocalPartnerAction = req.method === 'POST' && /^\/partner-requests\/\d+\/(approve|cancel)$/.test(cleanPath);
+      if (((req.method === 'POST' && req.path === '/device/release') || isLocalPartnerAction) && isLocalDeviceRequest(req) &&
           equalSecret(req.get('x-oxigenio-hotkey'), hotkeyToken)) {
         req.authUser = 'hotkey';
         req.authRole = 'reception';

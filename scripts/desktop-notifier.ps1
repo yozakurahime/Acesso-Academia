@@ -2,7 +2,8 @@
   [int]$ServerPid = 0,
   [string]$IconPath = '',
   [int]$Port = 3000,
-  [string]$PanelUrl = 'https://sistema.academiaoxigenio.com'
+  [string]$PanelUrl = 'https://sistema.academiaoxigenio.com',
+  [string]$HotkeyToken = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -159,7 +160,9 @@ function Show-DesktopToast {
     [string]$Body,
     [int]$TimeoutMs = 6000,
     [string]$Level = 'info',
-    [int]$MemberId = 0
+    [int]$MemberId = 0,
+    [int]$PartnerRequestId = 0,
+    [bool]$Persistent = $false
   )
 
   $clickHandler = if ($MemberId -gt 0) {
@@ -182,10 +185,14 @@ function Show-DesktopToast {
   }
 
   $isError = ($Level -eq 'error')
-  $accentColor = if ($isError) { [System.Drawing.Color]::FromArgb(239, 68, 68) } else { [System.Drawing.Color]::FromArgb(16, 185, 129) }
-  $titleColor = if ($isError) { [System.Drawing.Color]::FromArgb(248, 113, 113) } else { [System.Drawing.Color]::FromArgb(52, 211, 153) }
+  $isWarning = ($Level -eq 'warning')
+  $accentColor = if ($isError) { [System.Drawing.Color]::FromArgb(239, 68, 68) } elseif ($isWarning) { [System.Drawing.Color]::FromArgb(245, 158, 11) } else { [System.Drawing.Color]::FromArgb(16, 185, 129) }
+  $titleColor = if ($isError) { [System.Drawing.Color]::FromArgb(248, 113, 113) } elseif ($isWarning) { [System.Drawing.Color]::FromArgb(251, 191, 36) } else { [System.Drawing.Color]::FromArgb(52, 211, 153) }
 
   $popup = New-Object ToastPopupForm
+  if ($PartnerRequestId -gt 0) {
+    $popup.Size = New-Object System.Drawing.Size(360, 128)
+  }
   $popup.ApplyRoundedCorners(12)
 
   $accent = New-Object System.Windows.Forms.Panel
@@ -270,13 +277,59 @@ function Show-DesktopToast {
 
   $btnClose.add_Click($closePopup)
   $closeTimer.add_Tick($closePopup)
-  $popup.add_Click($clickHandler)
+
+  if ($PartnerRequestId -gt 0) {
+    $reqIdCopy = $PartnerRequestId
+    $btnYes = New-Object System.Windows.Forms.Button
+    $btnYes.Text = 'Sim'
+    $btnYes.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btnYes.FlatAppearance.BorderSize = 0
+    $btnYes.BackColor = [System.Drawing.Color]::FromArgb(16, 185, 129)
+    $btnYes.ForeColor = [System.Drawing.Color]::White
+    $btnYes.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnYes.Location = New-Object System.Drawing.Point(16, 86)
+    $btnYes.Size = New-Object System.Drawing.Size(158, 30)
+    $btnYes.Cursor = [System.Windows.Forms.Cursors]::Hand
+
+    $btnNo = New-Object System.Windows.Forms.Button
+    $btnNo.Text = 'Não'
+    $btnNo.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btnNo.FlatAppearance.BorderSize = 0
+    $btnNo.BackColor = [System.Drawing.Color]::FromArgb(51, 65, 85)
+    $btnNo.ForeColor = [System.Drawing.Color]::White
+    $btnNo.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
+    $btnNo.Location = New-Object System.Drawing.Point(184, 86)
+    $btnNo.Size = New-Object System.Drawing.Size(158, 30)
+    $btnNo.Cursor = [System.Windows.Forms.Cursors]::Hand
+
+    $sendPartnerAction = {
+      param([string]$action)
+      $btnYes.Enabled = $false
+      $btnNo.Enabled = $false
+      try {
+        $headers = @{}
+        if ($HotkeyToken) { $headers['x-oxigenio-hotkey'] = $HotkeyToken }
+        Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/partner-requests/$reqIdCopy/$action" -Method Post -Headers $headers -TimeoutSec 8 | Out-Null
+      } catch {
+      }
+      & $closePopup
+    }.GetNewClosure()
+
+    $btnYes.add_Click({ & $sendPartnerAction 'approve' }.GetNewClosure())
+    $btnNo.add_Click({ & $sendPartnerAction 'cancel' }.GetNewClosure())
+    $popup.Controls.Add($btnYes)
+    $popup.Controls.Add($btnNo)
+  } else {
+    $popup.add_Click($clickHandler)
+  }
 
   $activePopups.Add($popup)
   Reposition-Popups
   $popup.Show()
   [void][NativeWinHelper]::SetWindowPos($popup.Handle, [IntPtr](-1), 0, 0, 0, 0, (0x0001 -bor 0x0002 -bor 0x0010 -bor 0x0040))
-  $closeTimer.Start()
+  if (-not $Persistent) {
+    $closeTimer.Start()
+  }
 }
 
 $contextMenu = New-Object System.Windows.Forms.ContextMenuStrip
@@ -310,7 +363,9 @@ $timer.add_Tick({
       $timeoutMs = if ($payload.timeoutMs) { [int]$payload.timeoutMs } else { 6000 }
       $level = if ($payload.level) { [string]$payload.level } else { 'info' }
       $memberId = if ($payload.memberId) { [int]$payload.memberId } else { 0 }
-      Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs -Level $level -MemberId $memberId
+      $partnerReqId = if ($payload.partnerRequestId) { [int]$payload.partnerRequestId } else { 0 }
+      $persistent = [bool]($payload.persistent)
+      Show-DesktopToast -Title $title -Body $body -TimeoutMs $timeoutMs -Level $level -MemberId $memberId -PartnerRequestId $partnerReqId -Persistent $persistent
     } catch {
       [Console]::Error.WriteLine($_.Exception.Message)
     }

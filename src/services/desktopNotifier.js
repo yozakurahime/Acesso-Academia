@@ -53,9 +53,11 @@ export function formatPartnerRequestNotification(req = {}) {
   });
   return {
     title: `Confirma o check-in? (${providerLabel}) · ${timeText}`,
-    body: `${name}${req?.member_id ? ` (#${req.member_id})` : ''}\nClique para abrir o painel e liberar`,
+    body: `${name}${req?.member_id ? ` (#${req.member_id})` : ''}\nConfirma o check-in?`,
     level: 'warning',
-    timeoutMs: 10000,
+    timeoutMs: 0,
+    persistent: true,
+    partnerRequestId: Number(req?.id) > 0 ? Number(req.id) : null,
     memberId: Number(req?.member_id) > 0 ? Number(req.member_id) : null,
   };
 }
@@ -68,6 +70,7 @@ export function createDesktopNotifier({
   rootDir,
   port = 3000,
   panelUrl = process.env.EDGE_CLOUD_URL || 'https://sistema.academiaoxigenio.com',
+  hotkeyToken = '',
   platform = process.platform,
   enabled = process.env.OXIGENIO_DESKTOP_NOTIFICATIONS !== '0' && process.env.NODE_ENV !== 'test',
   spawnFn = spawn,
@@ -112,6 +115,9 @@ export function createDesktopNotifier({
   ];
   if (panelUrl && String(panelUrl).trim()) {
     args.push('-PanelUrl', String(panelUrl).trim());
+  }
+  if (hotkeyToken && String(hotkeyToken).trim()) {
+    args.push('-HotkeyToken', String(hotkeyToken).trim());
   }
   if (fs.existsSync(iconPath)) {
     args.push('-IconPath', iconPath);

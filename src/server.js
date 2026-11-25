@@ -293,7 +293,7 @@ async function start() {
     console.log(`Sistema de Academia rodando em http://localhost:${port} (modo: ${edgeRole})`);
     console.log(`Banco de dados local: ${dbPath}`);
     startGlobalHotkey(rootDir, port, hotkeyToken);
-    desktopNotifier = createDesktopNotifier({ rootDir, port });
+    desktopNotifier = createDesktopNotifier({ rootDir, port, hotkeyToken });
     unsubscribeDesktopNotifier = accessService.onTurnstileRelease((event) => {
       desktopNotifier.notifyTurnstileRelease(event);
       if (edgeSyncClient) {
