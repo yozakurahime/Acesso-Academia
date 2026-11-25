@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Enviar Foto FaceID | Academia Oxigênio</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #111827;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+      --primary: #f97316;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 20px 14px;
+    }
+    .wrap { width: 100%; max-width: 480px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+    }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    .muted { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+    .rules {
+      background: rgba(249,115,22,0.08);
+      border: 1px solid rgba(249,115,22,0.28);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .rules ul { margin: 8px 0 0; padding-left: 18px; }
+    .rules li { margin-bottom: 4px; }
+    .preview-box {
+      width: 100%;
+      min-height: 240px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #060913;
+      margin-bottom: 14px;
+    }
+    .preview-box video, .preview-box img { width: 100%; max-height: 360px; object-fit: cover; display: block; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .btn {
+      flex: 1;
+      min-width: 140px;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      background: #1f2937;
+      text-align: center;
+    }
+    .btn-primary { background: var(--primary); color: #111827; }
+    .btn-success { background: var(--success); color: #06281c; width: 100%; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .msg { padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-top: 12px; }
+    .msg-error { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fecaca; }
+    .msg-ok { background: rgba(16,185,129,0.14); border: 1px solid rgba(16,185,129,0.4); color: #a7f3d0; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 id="titleEl">Foto para Catraca (FaceID)</h1>
+      <p id="subtitleEl" class="muted">Carregando dados...</p>
+
+      <div id="contentBox" hidden>
+        <div class="rules">
+          <strong>Instruções para a catraca reconhecer seu rosto:</strong>
+          <ul>
+            <li>Rosto centralizado, olhando para a câmera</li>
+            <li>Boa iluminação (evite luz forte atrás de você)</li>
+            <li>Sem óculos escuros, boné, chapéu ou máscara</li>
+          </ul>
+        </div>
+
+        <div class="preview-box">
+          <span id="emptyHint" class="muted">Nenhuma foto selecionada</span>
+          <video id="videoEl" autoplay playsinline muted hidden></video>
+          <img id="imgPreview" alt="Prévia da foto" hidden />
+        </div>
+
+        <div class="actions">
+          <button type="button" id="btnCam" class="btn">📷 Abrir Câmera</button>
+          <button type="button" id="btnCapture" class="btn btn-primary" hidden>📸 Tirar Foto</button>
+          <label class="btn" for="fileInput" style="display:inline-flex;align-items:center;justify-content:center;">
+            🖼️ Enviar / Tirar Foto
+          </label>
+          <input id="fileInput" type="file" accept="image/*" capture="user" hidden />
+        </div>
+
+        <button type="button" id="btnSubmit" class="btn btn-success" disabled>Enviar Foto para Catraca</button>
+      </div>
+
+      <div id="errorBox" class="msg msg-error" hidden></div>
+      <div id="okBox" class="msg msg-ok" hidden></div>
+    </div>
+  </div>
+
+  <script>
+    (async () => {
+      const token = new URLSearchParams(location.search).get('t') || '';
+      const titleEl = document.getElementById('titleEl');
+      const subtitleEl = document.getElementById('subtitleEl');
+      const contentBox = document.getElementById('contentBox');
+      const errorBox = document.getElementById('errorBox');
+      const okBox = document.getElementById('okBox');
+      const emptyHint = document.getElementById('emptyHint');
+      const videoEl = document.getElementById('videoEl');
+      const imgPreview = document.getElementById('imgPreview');
+      const btnCam = document.getElementById('btnCam');
+      const btnCapture = document.getElementById('btnCapture');
+      const fileInput = document.getElementById('fileInput');
+      const btnSubmit = document.getElementById('btnSubmit');
+
+      let stream = null;
+      let photoBase64 = '';
+
+      function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.hidden = false;
+      }
+      function stopCam() {
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+          stream = null;
+        }
+        videoEl.hidden = true;
+        btnCapture.hidden = true;
+      }
+      function setPreview(dataUrl) {
+        photoBase64 = dataUrl;
+        imgPreview.src = dataUrl;
+        imgPreview.hidden = false;
+        emptyHint.hidden = true;
+        btnSubmit.disabled = !photoBase64;
+      }
+      function resizeToJpeg(source, w, h) {
+        const maxSide = 720;
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', 0.88);
+      }
+
+      if (!token) {
+        subtitleEl.textContent = '';
+        showError('Link inválido. Peça um novo link para a recepção.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/public/face-upload-info?t=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Link inválido ou expirado.');
+        titleEl.textContent = `Foto FaceID · ${data.gymName}`;
+        subtitleEl.textContent = `Cadastro de: ${data.memberName}`;
+        contentBox.hidden = false;
+      } catch (err) {
+        subtitleEl.textContent = '';
+        showError(err.message);
+        return;
+      }
+
+      btnCam.addEventListener('click', async () => {
+        errorBox.hidden = true;
+        stopCam();
+        if (!navigator.mediaDevices?.getUserMedia) {
+          showError('Seu navegador não abriu a câmera direto. Use o botão "Enviar / Tirar Foto".');
+          return;
+        }
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+          videoEl.srcObject = stream;
+          videoEl.hidden = false;
+          imgPreview.hidden = true;
+          emptyHint.hidden = true;
+          btnCapture.hidden = false;
+        } catch {
+          showError('Permissão de câmera negada. Use o botão "Enviar / Tirar Foto".');
+        }
+      });
+
+      btnCapture.addEventListener('click', () => {
+        if (!videoEl.videoWidth) return;
+        const dataUrl = resizeToJpeg(videoEl, videoEl.videoWidth, videoEl.videoHeight);
+        stopCam();
+        setPreview(dataUrl);
+      });
+
+      fileInput.addEventListener('change', () => {
+        errorBox.hidden = true;
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => {
+            stopCam();
+            setPreview(resizeToJpeg(img, img.width, img.height));
+          };
+          img.src = String(reader.result || '');
+        };
+        reader.readAsDataURL(file);
+      });
+
+      btnSubmit.addEventListener('click', async () => {
+        if (!photoBase64) return;
+        errorBox.hidden = true;
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Enviando foto...';
+        try {
+          const res = await fetch('/api/public/face-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, photo_base64: photoBase64 }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.error || 'Não foi possível salvar a foto.');
+          contentBox.hidden = true;
+          okBox.textContent = `✅ Foto de ${data.memberName} cadastrada com sucesso! O acesso pelo FaceID na catraca já será sincronizado.`;
+          okBox.hidden = false;
+        } catch (err) {
+          showError(err.message);
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = 'Enviar Foto para Catraca';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

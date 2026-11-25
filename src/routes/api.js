@@ -2537,6 +2537,62 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (authService?.isEnabled() && !req.authUser) return res.status(403).json({ error: 'Entre como administrador para gerar convites.' });
     res.set('Cache-Control', 'no-store').json(portalService.issueInvite(req.params.id));
   }));
+
+  router.post('/members/:id/face-link', requireReception, handle(async (req, res) => {
+    if (!authService) throw new Error('AuthService não configurado.');
+    const member = accessService.getMember(req.params.id);
+    if (!member) throw Object.assign(new Error('Aluno não encontrado.'), { statusCode: 404 });
+    const settings = store.getSettings();
+    const portalBase = String(settings.portal_url || process.env.PORTAL_URL || 'https://sistema.academiaoxigenio.com')
+      .trim()
+      .replace(/\/+$/, '');
+    const ttlMs = 48 * 60 * 60 * 1000;
+    const token = authService.signFaceUploadToken(member.id, ttlMs);
+    const url = `${portalBase}/foto-faceid.html?t=${encodeURIComponent(token)}`;
+    const wantsWhatsapp = Boolean(req.body?.sendWhatsapp);
+    let sentWhatsapp = false;
+    let whatsappError = null;
+    if (wantsWhatsapp) {
+      const phone = String(member.phone || member.guardian_phone || '').trim();
+      if (!phone) {
+        whatsappError = 'Aluno sem WhatsApp cadastrado.';
+      } else if (!whatsappService) {
+        whatsappError = 'Serviço WhatsApp não inicializado.';
+      } else {
+        try {
+          const firstName = String(member.name || 'Aluno').trim().split(/\s+/)[0];
+          const gym = settings.gym_name || 'Academia Oxigênio';
+          const message = `Olá, ${firstName}! Para liberar seu acesso na catraca da ${gym} pelo FaceID, tire e envie sua foto por este link:\n\n${url}\n\n_(O link vale por 48 horas.)_`;
+          await whatsappService.sendImmediate(phone, message, { kind: 'face_link', memberId: member.id, senderType: 'human' });
+          sentWhatsapp = true;
+        } catch (err) {
+          whatsappError = err.message;
+        }
+      }
+    }
+    res.set('Cache-Control', 'no-store').json({ ok: true, url, expiresAt: Date.now() + ttlMs, sentWhatsapp, whatsappError });
+  }));
+
+  router.get('/public/face-upload-info', limitExpensive, handle(async (req, res) => {
+    const parsed = authService?.verifyFaceUploadToken(req.query?.t);
+    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado. Solicite um novo link à recepção.' });
+    const member = accessService.getMember(parsed.memberId);
+    if (!member) return res.status(404).json({ error: 'Cadastro do aluno não encontrado.' });
+    res.set('Cache-Control', 'no-store').json({
+      gymName: store.getSettings().gym_name || 'Academia Oxigênio',
+      memberName: member.name,
+      hasPhoto: Boolean(member.profile_photo),
+    });
+  }));
+
+  router.post('/public/face-upload', limitExpensive, handle(async (req, res) => {
+    const parsed = authService?.verifyFaceUploadToken(req.body?.token);
+    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado. Solicite um novo link à recepção.' });
+    const imageBase64 = typeof req.body?.photo_base64 === 'string' ? req.body.photo_base64.trim() : '';
+    if (!imageBase64) return res.status(400).json({ error: 'Envie uma foto válida para cadastrar o FaceID.' });
+    const member = await accessService.registerFace(parsed.memberId, imageBase64);
+    res.json({ ok: true, memberName: member?.name || 'Aluno' });
+  }));
   const requireStudentAuth = authService
     ? authService.studentMiddleware()
     : (_req, res) => res.status(500).json({ error: 'AuthService não configurado.' });

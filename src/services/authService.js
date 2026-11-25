@@ -104,6 +104,38 @@ export class AuthService {
     return crypto.createHmac('sha256', this.getSecret()).update('professor-session-v1').digest();
   }
 
+  getFaceUploadSecret() {
+    return crypto.createHmac('sha256', this.getSecret()).update('face-upload-v1').digest();
+  }
+
+  signFaceUploadToken(memberId, ttlMs = 48 * 60 * 60 * 1000) {
+    const id = Number(memberId);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('Aluno inválido.');
+    const exp = Date.now() + Math.max(60_000, Number(ttlMs) || 48 * 60 * 60 * 1000);
+    const payload = Buffer.from(JSON.stringify({ m: id, purpose: 'face_upload', exp })).toString('base64url');
+    const sig = crypto.createHmac('sha256', this.getFaceUploadSecret()).update(payload).digest('base64url');
+    return `${payload}.${sig}`;
+  }
+
+  verifyFaceUploadToken(token) {
+    if (!token || !String(token).includes('.')) return null;
+    const [payload, sig] = String(token).trim().split('.');
+    if (!payload || !sig) return null;
+    const expectedSig = crypto.createHmac('sha256', this.getFaceUploadSecret()).update(payload).digest('base64url');
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expectedSig);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+      const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      if (data?.purpose !== 'face_upload' || !data?.exp || Date.now() > Number(data.exp)) return null;
+      const memberId = Number(data.m);
+      if (!Number.isInteger(memberId) || memberId <= 0) return null;
+      return { memberId, exp: Number(data.exp) };
+    } catch {
+      return null;
+    }
+  }
+
   rotateSessionSecret() {
     const generated = crypto.randomBytes(32).toString('hex');
     this.store.updateSettings({ auth_session_secret: generated });

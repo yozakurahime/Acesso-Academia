@@ -180,3 +180,14 @@ test('AuthService suporta tempo de sessao, bloqueio por inatividade, lista de op
   assert.equal(switchedStatus.username, 'recepcao1');
   assert.equal(switchedStatus.role, 'reception');
 });
+
+test('AuthService assina e valida token temporario para envio de foto FaceID', async () => {
+  const store = await DatabaseStore.create(null);
+  const auth = new AuthService(store);
+  const token = auth.signFaceUploadToken(42, 60_000);
+  const verified = auth.verifyFaceUploadToken(token);
+  assert.equal(verified?.memberId, 42);
+
+  assert.equal(auth.verifyFaceUploadToken(`${token}tampered`), null);
+  assert.equal(auth.verifyFaceUploadToken(auth.signStudentToken(42)), null);
+});

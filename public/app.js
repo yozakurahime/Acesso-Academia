@@ -3867,6 +3867,35 @@ document.getElementById('btnProfChangePhoto').addEventListener('click', () => {
   }
 });
 
+document.getElementById('btnSendFaceLinkWhatsapp')?.addEventListener('click', async (e) => {
+  const memberId = Number(state.selectedProfileId || 0);
+  if (!memberId) return;
+  const btn = e.currentTarget;
+  await withLoading(btn, async () => {
+    try {
+      const res = await api(`/api/members/${memberId}/face-link`, {
+        method: 'POST',
+        body: JSON.stringify({ sendWhatsapp: true }),
+      });
+      if (res?.sentWhatsapp) {
+        showToast('Link de envio da foto enviado no WhatsApp!');
+        return;
+      }
+      if (res?.url && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(res.url).catch(() => {});
+      }
+      showToast(
+        res?.whatsappError
+          ? `${res.whatsappError} Link copiado para enviar manualmente.`
+          : 'Link da foto copiado!',
+        Boolean(res?.whatsappError),
+      );
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
 document.getElementById('btnProfPay').addEventListener('click', () => {
   if (state.selectedProfileMember) jumpToPaymentForMember(state.selectedProfileMember);
 });
