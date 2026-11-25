@@ -356,15 +356,22 @@
         <label>Periodicidade (Mensal, Bimestral, etc.)
           <select id="stPayPlan"></select>
         </label>
-        <label class="hidden">E-mail (para assinatura no cartão)
-          <input type="email" id="stPayEmail" autocomplete="email" />
-        </label>
       </div>
       <div class="student-action-grid">
         <button type="button" id="btnStGeneratePix" class="btn btn-primary" style="grid-column:1 / -1;padding:14px 16px;font-size:16px;font-weight:700;">💠 Gerar Pix para Pagar</button>
-        <button type="button" id="btnStCardBrick" class="btn btn-secondary hidden">Pagar no cartão</button>
-        <button type="button" id="btnStSubscribeCard" class="btn btn-secondary hidden">Assinar no cartão</button>
       </div>
+      <details class="pix-qr-details" style="margin-top:10px;">
+        <summary>Prefere pagar no cartão ou assinatura recorrente?</summary>
+        <div style="margin-top:10px;">
+          <label>E-mail (para assinatura no cartão)
+            <input type="email" id="stPayEmail" autocomplete="email" />
+          </label>
+          <div class="student-action-grid" style="margin-top:8px;">
+            <button type="button" id="btnStCardBrick" class="btn btn-secondary">Pagar no cartão</button>
+            <button type="button" id="btnStSubscribeCard" class="btn btn-secondary">Assinar no cartão</button>
+          </div>
+        </div>
+      </details>
 
       <div id="stCardBox" class="pix-box hidden" aria-live="polite">
         <div class="card-trust-banner">
