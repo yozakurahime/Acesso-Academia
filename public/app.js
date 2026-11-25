@@ -4449,10 +4449,16 @@ async function loadCurrentCash() {
     balcaoCashBadge.className = `badge ${session ? 'badge-active' : 'badge-pending'}`;
   }
 
+  document.getElementById('btnToggleCashMovForm')?.classList.toggle('hidden', !session);
+  document.getElementById('btnToggleCashCloseForm')?.classList.toggle('hidden', !session);
+  document.getElementById('btnPrintCurrentCash')?.classList.toggle('hidden', !session);
+
   if (!session) {
     badge.textContent = 'Fechado';
     badge.className = 'badge badge-pending';
     document.getElementById('statCash').textContent = 'Fechado';
+    document.getElementById('cashMovementDrawer')?.classList.add('hidden');
+    document.getElementById('cashCloseDrawer')?.classList.add('hidden');
     closedView.classList.remove('hidden');
     openView.classList.add('hidden');
   } else {
@@ -4538,7 +4544,9 @@ async function loadOnlineCash() {
 }
 
 
+let activeCashSubtab = 'current';
 function activateCashSubtab(sub = 'current') {
+  activeCashSubtab = sub;
   document.querySelectorAll('#cashSubNav [data-cash-subtab]').forEach((btn) => {
     const active = btn.dataset.cashSubtab === sub;
     btn.classList.toggle('active', active);
@@ -4547,7 +4555,31 @@ function activateCashSubtab(sub = 'current') {
   document.querySelectorAll('#tab-cash [data-cash-subpanel]').forEach((panel) => {
     panel.classList.toggle('hidden', panel.dataset.cashSubpanel !== sub);
   });
+  if (sub === 'online') loadOnlineCash().catch(() => {});
+  else if (sub === 'history') loadCashHistory().catch(() => {});
 }
+
+document.getElementById('btnToggleCashMovForm')?.addEventListener('click', () => {
+  const drawer = document.getElementById('cashMovementDrawer');
+  document.getElementById('cashCloseDrawer')?.classList.add('hidden');
+  if (!drawer) return;
+  const hiddenNow = drawer.classList.toggle('hidden');
+  if (!hiddenNow) document.getElementById('movAmount')?.focus();
+});
+
+document.getElementById('btnToggleCashCloseForm')?.addEventListener('click', () => {
+  const drawer = document.getElementById('cashCloseDrawer');
+  document.getElementById('cashMovementDrawer')?.classList.add('hidden');
+  if (!drawer) return;
+  const hiddenNow = drawer.classList.toggle('hidden');
+  if (!hiddenNow) document.getElementById('closeCashAmount')?.focus();
+});
+
+document.addEventListener('click', (e) => {
+  const closeBtn = e.target.closest('[data-close-cash-drawer]');
+  if (!closeBtn) return;
+  document.getElementById(closeBtn.dataset.closeCashDrawer)?.classList.add('hidden');
+});
 
 document.getElementById('cashSubNav')?.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-cash-subtab]');
@@ -4613,8 +4645,11 @@ document.getElementById('btnPrintCashDetail')?.addEventListener('click', () => {
 });
 
 async function loadCash() {
-  if (!state.allMembers.length) await loadMembers().catch(() => {});
-  await Promise.all([loadCurrentCash(), loadOnlineCash(), loadCashHistory()]);
+  if (!state.allMembers.length) loadMembers().catch(() => {});
+  const tasks = [loadCurrentCash()];
+  if (activeCashSubtab === 'online') tasks.push(loadOnlineCash());
+  else if (activeCashSubtab === 'history') tasks.push(loadCashHistory());
+  await Promise.all(tasks);
 }
 
 let selectedClosedCashSession = null;
@@ -4766,7 +4801,11 @@ document.getElementById('btnRefreshCash')?.addEventListener('click', (event) => 
 }));
 
 document.getElementById('cashMovFilterType')?.addEventListener('change', renderCashMovements);
-document.getElementById('cashMovSearch')?.addEventListener('input', renderCashMovements);
+let cashMovSearchTimer = null;
+document.getElementById('cashMovSearch')?.addEventListener('input', () => {
+  clearTimeout(cashMovSearchTimer);
+  cashMovSearchTimer = setTimeout(renderCashMovements, 150);
+});
 
 document.getElementById('btnFillExpectedCash')?.addEventListener('click', () => {
   const expected = Number(state.cashSession?.expected_cents || 0);

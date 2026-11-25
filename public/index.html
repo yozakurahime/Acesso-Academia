@@ -449,7 +449,9 @@
         <div class="panel" id="cashPanel" data-cash-subpanel="current">
           <div class="panel-header">
             <h2>Turno atual</h2>
-            <div class="inline-actions">
+            <div class="inline-actions" style="flex-wrap:wrap;gap:6px;">
+              <button type="button" id="btnToggleCashMovForm" class="btn btn-secondary btn-sm hidden">+ Suprimento / Sangria</button>
+              <button type="button" id="btnToggleCashCloseForm" class="btn btn-danger btn-sm hidden">Fechar Caixa</button>
               <button type="button" id="btnPrintCurrentCash" class="btn btn-secondary btn-sm hidden">Imprimir parcial</button>
               <span id="cashBadge" class="badge badge-pending">Fechado</span>
             </div>
@@ -464,7 +466,7 @@
                 <input type="number" step="0.01" id="openCashAmount" value="0.00" required />
               </label>
               <label>Observação
-                <input type="text" id="openCashNotes" placeholder="Turno manhã/tarde..." />
+                <input type="text" id="openCashNotes" placeholder="Turno manhã/tarde…" />
               </label>
               <button type="submit" class="btn btn-success">Abrir Caixa</button>
             </form>
@@ -475,39 +477,67 @@
               <div class="card"><span class="card-label">Entradas (Bruto)</span><strong id="cashInVal" class="card-value">R$ 0,00</strong><small id="cashNetInVal" class="card-sub">Líquido: R$ 0,00</small></div>
               <div class="card"><span class="card-label">Saídas / Sangrias</span><strong id="cashOutVal" class="card-value">R$ 0,00</strong></div>
               <div class="card"><span class="card-label">Dinheiro esperado na gaveta</span><strong id="cashExpectedVal" class="card-value">R$ 0,00</strong></div>
-              <div class="card card-accent-amber"><span class="card-label">Reserva 5% (sugerida)</span><strong id="cashReserveVal" class="card-value">R$ 0,00</strong></div>
             </div>
-            <div id="cashMethodsSummary" class="cash-methods-grid"></div>
-            <div class="grid-2 cash-operation-forms">
+            <div class="cash-summary-strip">
+              <div id="cashMethodsSummary" class="cash-methods-grid"></div>
+              <span class="cash-reserve-note">Reserva 5% sugerida: <strong id="cashReserveVal">R$ 0,00</strong></span>
+            </div>
+            <div id="cashMovementDrawer" class="cash-drawer-panel hidden">
               <form id="cashMovementForm" class="form-stack">
-                <h3>Suprimento ou sangria</h3>
-                <select id="movType" aria-label="Tipo de movimentação">
-                  <option value="in">Suprimento (Entrada)</option>
-                  <option value="out">Sangria (Retirada)</option>
-                </select>
-                <input type="number" step="0.01" id="movAmount" aria-label="Valor da movimentação (R$)" placeholder="Valor (R$)" required />
-                <div id="cashMovQuickReasons" class="inline-actions" style="flex-wrap:wrap;gap:6px;">
-                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="in" data-mov-desc="Troco inicial">+ Troco</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Água / Café">Água/Café</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Material de limpeza">Limpeza</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Vale funcionário">Vale</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Sangria p/ banco">Sangria banco</button>
-                </div>
-                <input type="text" id="movDesc" aria-label="Descrição da movimentação" placeholder="Descrição" required />
-                <button type="submit" class="btn btn-primary">Registrar movimentação</button>
-              </form>
-              <form id="closeCashForm" class="form-stack">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                  <h3 style="margin:0;">Fechar Caixa</h3>
-                  <button type="button" id="btnFillExpectedCash" class="btn btn-secondary btn-sm">Usar esperado</button>
+                  <h3 style="margin:0;">Suprimento ou sangria</h3>
+                  <button type="button" class="btn btn-secondary btn-sm" data-close-cash-drawer="cashMovementDrawer">Fechar</button>
                 </div>
-                <input type="number" step="0.01" id="closeCashAmount" aria-label="Valor conferido na gaveta (R$)" placeholder="Valor conferido na gaveta (R$)" required />
-                <div id="closeCashDiff" class="summary-pill hidden"></div>
-                <input type="text" id="closeCashNotes" aria-label="Observações do fechamento" placeholder="Observações do fechamento" />
-                <button type="submit" class="btn btn-danger">Encerrar turno</button>
+                <div class="form-grid">
+                  <label>Tipo
+                    <select id="movType" aria-label="Tipo de movimentação">
+                      <option value="in">Suprimento (Entrada)</option>
+                      <option value="out">Sangria (Retirada)</option>
+                    </select>
+                  </label>
+                  <label>Valor (R$)
+                    <input type="number" step="0.01" id="movAmount" aria-label="Valor da movimentação (R$)" placeholder="0,00" required />
+                  </label>
+                  <label>Descrição
+                    <input type="text" id="movDesc" aria-label="Descrição da movimentação" placeholder="Ex.: Troco, Água/Café…" required />
+                  </label>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                  <div id="cashMovQuickReasons" class="inline-actions" style="flex-wrap:wrap;gap:6px;">
+                    <button type="button" class="btn btn-secondary btn-sm" data-mov-type="in" data-mov-desc="Troco inicial">+ Troco</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Água / Café">Água/Café</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Material de limpeza">Limpeza</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Vale funcionário">Vale</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-mov-type="out" data-mov-desc="Sangria p/ banco">Sangria banco</button>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Registrar movimentação</button>
+                </div>
               </form>
             </div>
-            <div class="panel-header" style="margin-top:18px;">
+            <div id="cashCloseDrawer" class="cash-drawer-panel cash-drawer-panel--danger hidden">
+              <form id="closeCashForm" class="form-stack">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <h3 style="margin:0;">Fechar Caixa</h3>
+                  <div class="inline-actions" style="gap:6px;">
+                    <button type="button" id="btnFillExpectedCash" class="btn btn-secondary btn-sm">Usar esperado</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-close-cash-drawer="cashCloseDrawer">Cancelar</button>
+                  </div>
+                </div>
+                <div class="form-grid">
+                  <label>Valor conferido na gaveta (R$)
+                    <input type="number" step="0.01" id="closeCashAmount" aria-label="Valor conferido na gaveta (R$)" placeholder="0,00" required />
+                  </label>
+                  <label>Observações do fechamento
+                    <input type="text" id="closeCashNotes" aria-label="Observações do fechamento" placeholder="Opcional…" />
+                  </label>
+                </div>
+                <div id="closeCashDiff" class="summary-pill hidden"></div>
+                <div style="display:flex;justify-content:flex-end;">
+                  <button type="submit" class="btn btn-danger">Encerrar turno</button>
+                </div>
+              </form>
+            </div>
+            <div class="panel-header" style="margin-top:16px;">
               <div>
                 <h3 style="margin:0;">Movimentações do turno</h3>
                 <small id="cashMovementsSummary" class="muted"></small>
@@ -520,7 +550,7 @@
                   <option value="in">Suprimentos</option>
                   <option value="out">Sangrias</option>
                 </select>
-                <input type="search" id="cashMovSearch" placeholder="Buscar descrição ou forma..." style="width:190px;padding:6px 10px;font-size:12px;" />
+                <input type="search" id="cashMovSearch" aria-label="Buscar movimentação" placeholder="Buscar descrição ou forma…" style="width:200px;padding:6px 10px;font-size:12px;" />
                 <button type="button" id="btnExportCashCsv" class="btn btn-secondary btn-sm">Exportar CSV</button>
               </div>
             </div>
