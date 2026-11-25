@@ -356,14 +356,14 @@
         <label>Periodicidade (Mensal, Bimestral, etc.)
           <select id="stPayPlan"></select>
         </label>
-        <label>E-mail (para assinatura no cartão)
+        <label class="hidden">E-mail (para assinatura no cartão)
           <input type="email" id="stPayEmail" autocomplete="email" />
         </label>
       </div>
       <div class="student-action-grid">
-        <button type="button" id="btnStGeneratePix" class="btn btn-primary">Pagar com Pix</button>
-        <button type="button" id="btnStCardBrick" class="btn btn-secondary">Pagar no cartão</button>
-        <button type="button" id="btnStSubscribeCard" class="btn btn-secondary">Assinar no cartão</button>
+        <button type="button" id="btnStGeneratePix" class="btn btn-primary" style="grid-column:1 / -1;padding:14px 16px;font-size:16px;font-weight:700;">💠 Gerar Pix para Pagar</button>
+        <button type="button" id="btnStCardBrick" class="btn btn-secondary hidden">Pagar no cartão</button>
+        <button type="button" id="btnStSubscribeCard" class="btn btn-secondary hidden">Assinar no cartão</button>
       </div>
 
       <div id="stCardBox" class="pix-box hidden" aria-live="polite">
@@ -383,19 +383,23 @@
       </div>
 
       <div id="stPixBox" class="pix-box hidden">
-        <h3 style="margin-top:0;">Pix gerado</h3>
-        <p id="stPixInfo" class="muted"></p>
-        <label>Pix Copia e Cola
-          <input type="text" id="stPixCode" readonly />
-        </label>
-        <div class="student-action-grid">
-          <button type="button" id="btnStCopyPix" class="btn btn-primary">Copiar código Pix</button>
-          <button type="button" id="btnStCheckPix" class="btn btn-secondary">Já paguei (Verificar)</button>
+        <h3 style="margin-top:0;">Pix pronto para pagar</h3>
+        <p id="stPixInfo" class="muted" style="font-size:15px;"></p>
+        <button type="button" id="btnStCopyPix" class="btn btn-primary" style="width:100%;padding:16px;font-size:17px;font-weight:800;margin-bottom:10px;">📋 COPIAR CÓDIGO PIX</button>
+        <p id="stPixCopyFeedback" class="muted hidden" style="margin:0 0 12px;color:#4ade80;font-weight:600;">✅ Código Pix copiado! Abra o app do seu banco, escolha Pix Copia e Cola e cole.</p>
+        <div style="text-align:center;margin:10px 0;">
+          <img id="stPixQr" class="pix-qr hidden" width="220" height="220" alt="QR Code Pix" style="background:#fff;padding:10px;border-radius:12px;" />
         </div>
         <details class="pix-qr-details">
-          <summary>Mostrar QR Code (para pagar com outro aparelho)</summary>
-          <img id="stPixQr" class="pix-qr hidden" width="220" height="220" alt="QR Code Pix" />
+          <summary>Ver código Pix completo / instruções</summary>
+          <label style="margin-top:8px;">Pix Copia e Cola
+            <input type="text" id="stPixCode" readonly />
+          </label>
+          <p class="muted" style="font-size:13px;margin:6px 0 0;">1. Toque em <strong>COPIAR CÓDIGO PIX</strong>.<br />2. Abra o app do seu banco &rarr; <strong>Pix Copia e Cola</strong>.<br />3. Cole e confirme. A catraca libera sozinha!</p>
         </details>
+        <div class="student-action-grid" style="margin-top:10px;">
+          <button type="button" id="btnStCheckPix" class="btn btn-secondary" style="grid-column:1 / -1;">Já paguei — verificar agora</button>
+        </div>
       </div>
 
       <div id="stSubBox" class="pix-box hidden">

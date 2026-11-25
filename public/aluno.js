@@ -1780,6 +1780,7 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
       document.getElementById('stPixBox').classList.remove('hidden');
       document.getElementById('stPixInfo').textContent = `Valor: ${fmtMoney(charge.amount_cents)} · Aguardando pagamento (verificação automática ativa)`;
       document.getElementById('stPixCode').value = charge.qr_code || charge.qr_code_text || '';
+      document.getElementById('stPixCopyFeedback')?.classList.add('hidden');
       const qrImg = document.getElementById('stPixQr');
       const qrSrc = sanitizeQrImageSrc(charge.qr_base64 || charge.qr_code_base64);
       if (qrSrc) {
@@ -1801,13 +1802,21 @@ document.getElementById('btnStGeneratePix').addEventListener('click', async (e) 
 document.getElementById('btnStCopyPix').addEventListener('click', async () => {
   const input = document.getElementById('stPixCode');
   if (!input.value) return;
+  const feedbackEl = document.getElementById('stPixCopyFeedback');
   try {
     await navigator.clipboard.writeText(input.value);
-    showToast('Código Pix copiado!');
+    if (feedbackEl) feedbackEl.classList.remove('hidden');
+    showToast('Código Pix copiado! Cole no app do seu banco.');
   } catch {
     input.focus();
     input.select();
-    showToast('Código Pix selecionado. Toque em Copiar.');
+    try {
+      document.execCommand('copy');
+      if (feedbackEl) feedbackEl.classList.remove('hidden');
+      showToast('Código Pix copiado! Cole no app do seu banco.');
+    } catch {
+      showToast('Código Pix selecionado. Toque em Copiar.');
+    }
   }
 });
 
