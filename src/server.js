@@ -287,6 +287,7 @@ async function start() {
   let desktopNotifier = { stop() {} };
   let unsubscribeDesktopNotifier = () => {};
   let unsubscribeDesktopDenied = () => {};
+  let unsubscribeDesktopPartner = () => {};
   let edgeSyncClient = null;
   const mainServer = app.listen(port, '0.0.0.0', () => {
     console.log(`Sistema de Academia rodando em http://localhost:${port} (modo: ${edgeRole})`);
@@ -300,9 +301,16 @@ async function start() {
       }
     });
     unsubscribeDesktopDenied = accessService.onTurnstileDenied((event) => {
-      desktopNotifier.notifyTurnstileDenied(event);
+      if (!/^Aguarde a liberação na recepção/i.test(String(event?.reason || ''))) {
+        desktopNotifier.notifyTurnstileDenied(event);
+      }
       if (edgeSyncClient) {
         edgeSyncClient.pushPendingLogs().catch(() => {});
+      }
+    });
+    unsubscribeDesktopPartner = accessService.onPartnerRequest((type, payload) => {
+      if (type === 'partner_request') {
+        desktopNotifier.notifyPartnerRequest(payload);
       }
     });
     if (edgeRole === 'edge' && process.env.EDGE_CLOUD_URL && process.env.EDGE_SYNC_TOKEN) {
@@ -458,6 +466,7 @@ async function start() {
     try { edgeSyncClient?.stop(); } catch {}
     try { unsubscribeDesktopNotifier(); } catch {}
     try { unsubscribeDesktopDenied(); } catch {}
+    try { unsubscribeDesktopPartner(); } catch {}
     try { desktopNotifier.stop(); } catch {}
     try { tunnelHandle.stop(); } catch {}
     try { store.save(); } catch {}

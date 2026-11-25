@@ -43,6 +43,23 @@ export function formatTurnstileDeniedNotification(event = {}) {
   };
 }
 
+export function formatPartnerRequestNotification(req = {}) {
+  const name = String(req?.member_name || '').trim() || 'Aluno de convênio';
+  const providerLabel = req?.provider === 'totalpass' ? 'TotalPass' : 'Wellhub';
+  const timeText = new Date().toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return {
+    title: `Confirma o check-in? (${providerLabel}) · ${timeText}`,
+    body: `${name}${req?.member_id ? ` (#${req.member_id})` : ''}\nClique para abrir o painel e liberar`,
+    level: 'warning',
+    timeoutMs: 10000,
+    memberId: Number(req?.member_id) > 0 ? Number(req.member_id) : null,
+  };
+}
+
 /**
  * Exibe notificações nativas na área de trabalho do Windows (independente do navegador)
  * usando um processo PowerShell persistente com NotifyIcon.
@@ -61,6 +78,7 @@ export function createDesktopNotifier({
       notify: () => false,
       notifyTurnstileRelease: () => false,
       notifyTurnstileDenied: () => false,
+      notifyPartnerRequest: () => false,
       stop: () => {},
     };
   }
@@ -73,6 +91,7 @@ export function createDesktopNotifier({
       notify: () => false,
       notifyTurnstileRelease: () => false,
       notifyTurnstileDenied: () => false,
+      notifyPartnerRequest: () => false,
       stop: () => {},
     };
   }
@@ -147,6 +166,7 @@ export function createDesktopNotifier({
 
   const notifyTurnstileRelease = (event) => notify(formatTurnstileReleaseNotification(event));
   const notifyTurnstileDenied = (event) => notify(formatTurnstileDeniedNotification(event));
+  const notifyPartnerRequest = (req) => notify(formatPartnerRequestNotification(req));
 
   const stop = () => {
     if (stopped) return;
@@ -172,6 +192,7 @@ export function createDesktopNotifier({
     notify,
     notifyTurnstileRelease,
     notifyTurnstileDenied,
+    notifyPartnerRequest,
     stop,
   };
 }
