@@ -2703,7 +2703,12 @@ function renderMembersTable() {
     pending: '<span class="badge badge-pending">Pendente</span>',
   };
 
-  document.getElementById('membersBody').innerHTML = visible.length
+  const listRenderKey = `${state.memberFilter}|${q}|${state.memberLimit}|${visible.map((m) => `${m.id}:${m.status}:${m.valid_until || ''}:${m.face_registered ? 1 : 0}:${m.last_sync_error ? 1 : 0}`).join(',')}`;
+  const membersBodyEl = document.getElementById('membersBody');
+  if (membersBodyEl.dataset.renderKey === listRenderKey) return;
+  membersBodyEl.dataset.renderKey = listRenderKey;
+
+  membersBodyEl.innerHTML = visible.length
     ? visible
         .map((m) => {
           const partnerLabel =
@@ -2719,7 +2724,7 @@ function renderMembersTable() {
             : '';
           return `
             <tr data-member-id="${m.id}">
-              <td><strong>${escapeHtml(m.name)}</strong><br><span class="muted">#${m.id}${escapeHtml(m.document ? ` · ${m.document}` : m.phone ? ` · ${m.phone}` : '')}</span></td>
+              <td><button type="button" class="member-jump-link" data-action="profile"><strong>${escapeHtml(m.name)}</strong></button><br><span class="muted">#${m.id}${escapeHtml(m.document ? ` · ${m.document}` : m.phone ? ` · ${m.phone}` : '')}</span></td>
               <td>${escapeHtml(modPlan)}</td>
               <td class="${isExpired ? 'text-danger' : ''}">${m.partner_provider ? '<span class="muted">Convênio</span>' : escapeHtml(fmtDate(m.valid_until))}</td>
               <td>${m.face_registered ? 'Cadastrado' : '<span class="muted">Sem foto</span>'}</td>
@@ -3037,10 +3042,15 @@ if (saleMemberSearchEl) {
 }
 
 const pMemberSearchEl = document.getElementById('pMemberSearch');
+let billingMemberSearchTimer = null;
 pMemberSearchEl.addEventListener('input', (e) => {
   document.getElementById('whatsappCheckoutBox').classList.add('hidden');
   document.getElementById('pMember').value = '';
-  renderBillingMemberSearchResults(e.target.value);
+  const query = e.target.value;
+  clearTimeout(billingMemberSearchTimer);
+  billingMemberSearchTimer = setTimeout(() => {
+    renderBillingMemberSearchResults(query);
+  }, 100);
 });
 pMemberSearchEl.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
@@ -3225,19 +3235,16 @@ window.openProfile = async (id) => {
     document.getElementById('studentInviteCode').textContent = '';
     document.getElementById('btnStudentInvite').classList.toggle('hidden', m.has_portal_password);
     document.getElementById('workoutForm').classList.add('hidden');
+    state.profileLoadedTabs = new Set(['finance', 'personal', 'enrollments']);
+    showModal('profileModal', 'btnCloseProfile');
     if (m.access_role === 'student') {
-      await Promise.all([
-        loadMemberWorkouts(m.id),
+      Promise.all([
         loadMemberCredit(m.id),
-        loadMemberAssessments(m.id),
         loadMemberOpenDebts(m.id),
-        loadWorkoutTemplates().catch(() => {}),
-      ]);
+      ]).catch(() => {});
     } else {
       document.getElementById('profDebtsCountBadge')?.classList.add('hidden');
     }
-
-    showModal('profileModal', 'btnCloseProfile');
   } catch (err) {
     showToast(err.message, true);
   }
@@ -10287,6 +10294,16 @@ function activateProfileTab(tabName = 'personal') {
   document.querySelectorAll('#profileModal [data-prof-tab-panel]').forEach((panel) => {
     panel.classList.toggle('hidden', panel.dataset.profTabPanel !== tabName);
   });
+  const m = state.selectedProfileMember;
+  if (!m || m.access_role !== 'student') return;
+  if (!state.profileLoadedTabs) state.profileLoadedTabs = new Set();
+  if (tabName === 'workouts' && !state.profileLoadedTabs.has('workouts')) {
+    state.profileLoadedTabs.add('workouts');
+    Promise.all([loadMemberWorkouts(m.id), loadWorkoutTemplates().catch(() => {})]).catch(() => {});
+  } else if (tabName === 'assessments' && !state.profileLoadedTabs.has('assessments')) {
+    state.profileLoadedTabs.add('assessments');
+    loadMemberAssessments(m.id).catch(() => {});
+  }
 }
 
 document.getElementById('profileTabs')?.addEventListener('click', (e) => {

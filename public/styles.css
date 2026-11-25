@@ -3175,7 +3175,19 @@ input.is-cpf-error {
 }
 #cashMovementsBody tr,
 #onlineCashBody tr,
-#cashHistoryBody tr {
+#cashHistoryBody tr,
+#membersBody tr {
   content-visibility: auto;
-  contain-intrinsic-size: 42px;
+  contain-intrinsic-size: 52px;
+}
+.modal-content {
+  overscroll-behavior: contain;
+}
+#membersBody td:nth-child(3),
+#profKpiDebt,
+#profKpiCredit,
+#profPaymentsList strong,
+#billingSummary,
+#billingCartTotal {
+  font-variant-numeric: tabular-nums;
 }
