@@ -651,14 +651,15 @@ const tabLoaders = {
     loadOnce(loadPaymentMethods).then(loadCurrentCash),
     loadOpenDebts(),
   ]),
-  cash: () => Promise.all([
-    loadOnce(loadSettings), loadOnce(loadStaff), loadCurrentCash(), loadCashHistory(),
-  ]).then(() => {
-    const supplementary = [loadPayments, loadReceipts, loadGatewayCharges, loadPointOrders, loadMpSubscriptions];
-    Promise.allSettled(supplementary.map((load) => load())).then((results) => {
-      if (results.some((result) => result.status === 'rejected')) showToast('Alguns históricos do caixa não carregaram.', true);
-    });
-  }),
+  cash: () => {
+    const tasks = [loadOnce(loadSettings), loadOnce(loadStaff), loadCurrentCash()];
+    if (activeCashSubtab === 'online') tasks.push(loadOnlineCash());
+    else if (activeCashSubtab === 'history') tasks.push(loadCashHistory());
+    else if (activeCashSubtab === 'charges') {
+      tasks.push(Promise.allSettled([loadReceipts(), loadGatewayCharges(), loadPointOrders(), loadMpSubscriptions()]));
+    } else if (activeCashSubtab === 'payments') tasks.push(loadPayments());
+    return Promise.all(tasks);
+  },
   products: () => Promise.all([
     loadOnce(loadMembers), loadOnce(loadSettings), loadOnce(loadPaymentMethods).then(() => Promise.all([loadProducts(), loadCurrentCash()])),
   ]),
@@ -4598,6 +4599,9 @@ function activateCashSubtab(sub = 'current') {
   });
   if (sub === 'online') loadOnlineCash().catch(() => {});
   else if (sub === 'history') loadCashHistory().catch(() => {});
+  else if (sub === 'charges') {
+    Promise.allSettled([loadReceipts(), loadGatewayCharges(), loadPointOrders(), loadMpSubscriptions()]).catch(() => {});
+  } else if (sub === 'payments') loadPayments().catch(() => {});
 }
 
 document.getElementById('btnToggleCashMovForm')?.addEventListener('click', () => {
@@ -4690,6 +4694,9 @@ async function loadCash() {
   const tasks = [loadCurrentCash()];
   if (activeCashSubtab === 'online') tasks.push(loadOnlineCash());
   else if (activeCashSubtab === 'history') tasks.push(loadCashHistory());
+  else if (activeCashSubtab === 'charges') {
+    tasks.push(Promise.allSettled([loadReceipts(), loadGatewayCharges(), loadPointOrders(), loadMpSubscriptions()]));
+  } else if (activeCashSubtab === 'payments') tasks.push(loadPayments());
   await Promise.all(tasks);
 }
 

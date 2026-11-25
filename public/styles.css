@@ -3199,11 +3199,14 @@ input.is-cpf-error {
 #tab-settings tbody tr,
 #classesBody tr,
 #stockBody tr,
-#salesHistoryBody tr {
+#salesHistoryBody tr,
+#paymentsBody tr {
   content-visibility: auto;
   contain-intrinsic-size: 46px;
 }
 #stockBody td,
-#salesHistoryBody td {
+#salesHistoryBody td,
+#paymentsBody td:first-child,
+#paymentsBody td:nth-child(5) {
   font-variant-numeric: tabular-nums;
 }

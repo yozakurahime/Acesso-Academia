@@ -444,6 +444,7 @@
           <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="online">Caixa Online (MP)</button>
           <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="history">Turnos Encerrados</button>
           <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="charges">Acompanhar Cobranças</button>
+          <button type="button" class="settings-subnav-btn" role="tab" aria-selected="false" data-cash-subtab="payments">Histórico de Mensalidades</button>
         </div>
 
         <div class="panel" id="cashPanel" data-cash-subpanel="current">
@@ -646,7 +647,7 @@
           </div>
         </div>
 
-        <div class="panel">
+        <div class="panel hidden" id="cashPaymentsPanel" data-cash-subpanel="payments">
           <div class="panel-header">
             <h2 style="margin:0;">Histórico de mensalidades</h2>
             <input type="search" id="paymentsSearch" class="search-input" style="max-width:280px;" placeholder="Buscar recibo por aluno ou CPF…" aria-label="Buscar pagamento por aluno ou CPF" />
