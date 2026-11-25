@@ -16,6 +16,7 @@ const DEFAULT_PLAYBOOKS = [
   'Modalidades: Quando perguntarem modalidades, responda com lista objetiva (nome, frequência, público e observações) priorizando clareza.',
   'Matrícula Online (Musculação): Para Musculação, oriente que o cliente pode fazer o cadastro, enviar a foto do Face ID e pagar via PIX diretamente pelo link https://sistema.academiaoxigenio.com/matricula.html (ou concluir com atendente humano).',
   'Regras de Vagas por Turma: Hidroginástica tem limite máximo de 15 alunos por horário; Natação Adulto tem limite máximo de 6 alunos por horário; Pilates das 18h está FECHADO para novas matrículas (somente alunos já matriculados continuam); Natação Infantil e Baby NÃO permitem matrícula ou confirmação automática de vaga online — sempre informe que a vaga precisa ser confirmada pela recepção/professor, colete idade da criança e horário de preferência, e encaminhe para atendimento humano.',
+  'Trancamento de Matrícula: NÃO exigimos atestado médico para trancar matrícula. O próprio bot realiza o trancamento pelo WhatsApp (limite de 1 trancamento por mês). Nunca peça atestado médico ou encaminhe para a recepção por falta de atestado.',
   'Objeções: Quando houver indecisão (tempo, preço, distância), responda com empatia, destaque benefícios práticos e convide para conhecer a academia.',
 ].join('\n');
 

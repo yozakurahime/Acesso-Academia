@@ -4,6 +4,8 @@ const PAYMENT_ACTION_REGEX = /^(?:pix|pagar|pagamento|renovar|renova[cç][aã]o|
 const PAYMENT_NON_ACTION_REGEX = /\b(?:consigo\s+(?:treinar|ir|entrar|passar)|posso\s+(?:treinar|ir|entrar|passar)|ainda\s+(?:consigo|posso)|libera(?:r|do|da)?\s+(?:a\s+)?catraca|venceu|vencid[oa]|atrasad[oa]|toler[âa]ncia|s[óo]\s+(?:consigo|posso|vou)\s+pagar|pagar\s+(?:amanh[ãa]|depois|outro\s+dia|semana\s+que\s+vem|m[êe]s\s+que\s+vem|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|dia\s+\d+)|qual\s+(?:[ée]\s+)?(?:o\s+)?valor|quanto\s+(?:custa|[ée]|fica|t[áa]|esta|est[áa])|quais\s+(?:s[ãa]o\s+)?(?:as\s+)?formas|aceita(?:m)?\s+(?:pix|cart[aã]o|dinheiro|boleto)|como\s+funciona)\b/i;
 const NON_LOOKUP_PHRASE_REGEX = /\b(?:hoje|amanha|ontem|posso|consigo|treinar|entao|quando|quanto|qual|quais|como|onde|porque|ainda|horario|funciona|abre|fecha|venceu|vencida|vencido|parcela|atraso|atrasado|ir|entrar|passar|valor|preco|aceita|aceitam|obrigado|obrigada|valeu|bom dia|boa tarde|boa noite)\b/;
 const ENROLLMENT_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|vamos|preciso|posso|queria)\s+(?:me\s+)?(?:matricular|cadastrar)|(?:fazer|fechar|concluir|realizar|abrir|iniciar|nova)\s+(?:a\s+|uma\s+)?(?:matr[ií]cula|cadastro|inscri[cç][aã]o)|me\s+(?:matricular|cadastrar)|matricular\s+(?:meu|minha|o|a|um|uma|ele|ela))\b/i;
+const FREEZE_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|preciso|queria|pode|poderia|vou|vamos|faz|fazer|pedi\s+(?:pra|para))\s+(?:trancar|pausar|congelar)(?:\s+(?:a\s+|minha\s+|o\s+)?(?:matr[ií]cula|plano|academia))?|trancar\s+(?:a\s+|minha\s+|o\s+)?(?:matr[ií]cula|plano|academia)|trancamento(?:\s+(?:da|de)\s+(?:matr[ií]cula|plano))?)\b/i;
+const FREEZE_NON_ACTION_REGEX = /\b(?:como\s+funciona|tem\s+taxa|cobra\s+taxa|quanto\s+(?:custa|[ée])|qual\s+(?:[ée]\s+)?a\s+regra)\b/i;
 const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)|baby|infantil)\b/i;
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
 const CONFIRM_YES_REGEX = /^(1|sim|s|confirmar|confirmo|certo|ok|correto|isso)$/i;
@@ -708,14 +710,110 @@ export class OnlineSalesBotService {
     return null;
   }
 
+  async _executeFreezeForMember({ phone, member, days = null, reason = null }) {
+    try {
+      const result = await this.accessService.freezeMember(
+        member.id,
+        { days, reason: reason || 'Trancamento via WhatsApp' },
+        { backgroundSync: true },
+      );
+      this._sessions.delete(phone);
+      const frozenUntil = result?.member?.frozen_until;
+      const untilText = frozenUntil && frozenUntil !== '9999-12-31'
+        ? `até *${frozenUntil.split('-').reverse().join('/')}*`
+        : 'por tempo indeterminado (até você pedir para destrancar na recepção ou por aqui)';
+      const reply = [
+        `✅ Matrícula de *${member.name}* trancada com sucesso ${untilText}!`,
+        'Não é necessário enviar atestado médico.',
+      ].join('\n\n');
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false, member: result.member };
+    } catch (err) {
+      this._sessions.delete(phone);
+      const msg = String(err?.message || 'Não foi possível trancar a matrícula agora.');
+      const reply = `${msg}\n\n_(Não exigimos atestado médico para trancamento. Se precisar de ajuda da recepção, responda *atendente*.)_`;
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+  }
+
+  async _handleFreezeFlow({ phone, userText, session }) {
+    if (!this.accessService) return null;
+
+    if (!session) {
+      const daysMatch = String(userText || '').match(/\b(\d{1,3})\s*dias?\b/i);
+      const days = daysMatch ? Math.max(1, Number(daysMatch[1])) : null;
+      const cleanReason = String(userText || '').trim().slice(0, 120) || 'Trancamento via WhatsApp';
+
+      const phoneMembers = this.store
+        .all("SELECT * FROM members WHERE access_role = 'student'")
+        .filter((m) => normalizeBrPhone(m.phone) === phone);
+
+      if (phoneMembers.length === 1) {
+        return this._executeFreezeForMember({ phone, member: phoneMembers[0], days, reason: cleanReason });
+      }
+
+      this._setSession(phone, {
+        kind: 'freeze',
+        step: 'awaiting_cpf',
+        days,
+        reason: cleanReason,
+      });
+      const reply = 'Claro! Não precisa de atestado médico para trancar. Para localizar seu cadastro e realizar o trancamento agora, informe seu *CPF (11 dígitos)* (ou responda *cancelar*).';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    if (!looksLikeMemberLookupQuery(userText)) {
+      this._sessions.delete(phone);
+      return null;
+    }
+
+    const cpfDigits = extractCpfDigits(userText);
+    if (!cpfDigits || !isValidCpfDigits(cpfDigits)) {
+      const reply = 'Por favor, informe um *CPF válido (11 dígitos)* para confirmar seu cadastro e trancar a matrícula, ou responda *cancelar*.';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    const matched = this.store
+      .all("SELECT * FROM members WHERE access_role = 'student'")
+      .filter((m) => String(m.document || '').replace(/\D/g, '') === cpfDigits);
+
+    if (!matched.length) {
+      const reply = 'Não encontrei nenhum aluno cadastrado com esse CPF. Confira os 11 dígitos e envie novamente, ou responda *cancelar*.';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    return this._executeFreezeForMember({
+      phone,
+      member: matched[0],
+      days: session.days || null,
+      reason: session.reason || 'Trancamento via WhatsApp',
+    });
+  }
+
   async handleMessage({ phone, userText, settings = this.store.getSettings?.() || {} }) {
     const existing = this._getSession(phone);
     const wantsPayment = PAYMENT_ACTION_REGEX.test(userText) && !PAYMENT_NON_ACTION_REGEX.test(userText);
     const wantsEnroll = ENROLLMENT_INTENT_REGEX.test(userText);
+    const wantsFreeze = FREEZE_INTENT_REGEX.test(userText) && !FREEZE_NON_ACTION_REGEX.test(userText);
     const directCpf = !existing ? extractCpfDigits(userText) : '';
     const hasDirectValidCpf = Boolean(directCpf && isValidCpfDigits(directCpf));
 
-    if (!existing && !wantsPayment && !wantsEnroll && !hasDirectValidCpf) return null;
+    if (!existing && !wantsPayment && !wantsEnroll && !wantsFreeze && !hasDirectValidCpf) return null;
+
+    if (existing && FLOW_CANCEL_REGEX.test(userText)) {
+      this._sessions.delete(phone);
+      const reply = 'Certo, cancelei o fluxo por aqui. Se precisar de outra ajuda, é só chamar!';
+      this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+      return { reply, requiresHuman: false };
+    }
+
+    if (existing?.kind === 'freeze' || (!existing && wantsFreeze && !wantsPayment && !wantsEnroll)) {
+      return this._handleFreezeFlow({ phone, userText, session: existing });
+    }
 
     const mpConfigured = Boolean(this.gatewayService && String(settings.mp_access_token || '').trim());
     if (!mpConfigured) {

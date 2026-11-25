@@ -692,3 +692,41 @@ test('OnlineSalesBotService nao confunde duvida de vencimento/treino ou pergunta
   assert.equal(geminiCalls.length, 3);
   assert.doesNotMatch(followUpQuestion.reply, /Não encontrei nenhum aluno/i);
 });
+
+test('OnlineSalesBotService tranca matricula pelo WhatsApp sem pedir atestado medico', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    controlid_mock_mode: 'true',
+  });
+  const accessService = new AccessService(store, null, null);
+  const planId = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Musculação', 30, 10000)").lastInsertRowid;
+  const member = await accessService.createMember({
+    name: 'Marlene Teste',
+    document: '52998224725',
+    phone: '5562992223344',
+    plan_id: planId,
+  });
+
+  const bot = new WhatsappBotService(store, { accessService });
+
+  const res = await bot.handleIncomingMessage({
+    phone: '5562992223344',
+    text: 'So que eu pedi pra trancar que fiz cirurgia e não posso fazer esforço',
+  });
+  assert.ok(res);
+  assert.match(res.reply, /trancada com sucesso/i);
+  assert.match(res.reply, /Não é necessário enviar atestado médico/i);
+
+  const updated = accessService.getMember(member.id);
+  assert.equal(updated.frozen_until, '9999-12-31');
+
+  const again = await bot.handleIncomingMessage({
+    phone: '5562992223344',
+    text: 'Quero trancar minha matrícula',
+  });
+  assert.ok(again);
+  assert.match(again.reply, /já está trancada/i);
+  assert.match(again.reply, /Não exigimos atestado médico/i);
+});
