@@ -2219,6 +2219,28 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.post(
+    '/gateways/mp/subscriptions/:id/send-whatsapp',
+    requireReception,
+    handle(async (req, res) => {
+      if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
+      if (!whatsappService) throw Object.assign(new Error('WhatsApp não inicializado.'), { statusCode: 400 });
+      const sub = gatewayService.getSubscriptionById(req.params.id);
+      if (!sub) throw Object.assign(new Error('Assinatura não encontrada.'), { statusCode: 404 });
+      if (!sub.init_point) throw Object.assign(new Error('Esta assinatura não possui link de autorização.'), { statusCode: 400 });
+      const member = accessService.getMember(sub.member_id);
+      const phone = String(member?.phone || '').trim();
+      if (!phone) throw Object.assign(new Error('Cadastre um telefone válido no perfil do aluno antes de enviar.'), { statusCode: 400 });
+      const settings = store.getSettings();
+      const firstName = String(member.name || 'Aluno').trim().split(/\s+/)[0];
+      const gym = settings.gym_name || 'Academia Oxigênio';
+      const amount = (Number(sub.amount_cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const message = `Olá, ${firstName}! Segue o link do Mercado Pago para ativar sua assinatura recorrente de ${amount} (${sub.plan_name || 'Mensalidade'}) na ${gym}: ${sub.init_point}`;
+      const result = await whatsappService.sendImmediate(phone, message, { kind: 'subscription_link', memberId: member.id });
+      res.json({ ok: true, subscription: sub, whatsapp: result });
+    }),
+  );
+
   // Mercado Pago Point Smart (Maquininha)
   router.get(
     '/gateways/mp/terminals',

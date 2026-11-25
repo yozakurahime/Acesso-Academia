@@ -7016,27 +7016,30 @@ async function loadMpSubscriptions() {
   }
   container.innerHTML = subs
     .map(
-      (s) => `
+      (s) => {
+        const nextDate = s.next_payment_date ? ` · próx.: ${fmtDate(String(s.next_payment_date).slice(0, 10))}` : '';
+        const planLabel = s.plan_name ? `${escapeHtml(s.plan_name)} · ` : '';
+        const safeUrl = s.status !== 'canceled' ? sanitizeHttpUrl(s.init_point) : '';
+        return `
       <div class="billing-member" style="cursor:default;flex-wrap:wrap;gap:8px;">
         <div>
           <strong>${escapeHtml(s.member_name)}</strong> · ${fmtMoney(s.amount_cents)}
           ${subStatusBadge(s.status)}
           <div class="muted" style="font-size:12px;">
-            ${escapeHtml(subFrequencyLabel(s))} · ${escapeHtml(s.payer_email || '-')}
+            ${planLabel}${escapeHtml(subFrequencyLabel(s))}${escapeHtml(nextDate)} · ${escapeHtml(s.payer_email || '-')}
           </div>
         </div>
         <div class="inline-actions">
-          ${(() => {
-            const safeUrl = s.status !== 'canceled' ? sanitizeHttpUrl(s.init_point) : '';
-            return safeUrl
-              ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener">Abrir link</a>` +
-                `<button type="button" class="btn btn-secondary btn-sm" data-copy-sub-link="${escapeHtml(safeUrl)}">Copiar link</button>`
-              : '';
-          })()}
+          ${safeUrl
+            ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener">Abrir link</a>` +
+              `<button type="button" class="btn btn-secondary btn-sm" data-copy-sub-link="${escapeHtml(safeUrl)}">Copiar link</button>` +
+              `<button type="button" class="btn btn-primary btn-sm" data-wa-sub="${s.id}">Enviar WhatsApp</button>`
+            : ''}
           ${s.status !== 'canceled' ? `<button type="button" class="btn btn-success btn-sm" data-sync-sub="${s.id}">Sincronizar</button>` : ''}
           ${s.status !== 'canceled' ? `<button type="button" class="btn btn-danger btn-sm" data-cancel-sub="${s.id}">Cancelar</button>` : ''}
         </div>
-      </div>`,
+      </div>`;
+      },
     )
     .join('');
 }
@@ -7059,7 +7062,7 @@ document.getElementById('btnCreateSubscription')?.addEventListener('click', asyn
 
   await withLoading(e.currentTarget, async () => {
     try {
-      await api('/api/gateways/mp/subscriptions', {
+      const createdSub = await api('/api/gateways/mp/subscriptions', {
         method: 'POST',
         body: JSON.stringify({
           member_id: memberId,
@@ -7069,7 +7072,7 @@ document.getElementById('btnCreateSubscription')?.addEventListener('click', asyn
           payer_email: payerEmail,
         }),
       });
-      showToast('Assinatura criada! Envie o link para o aluno autorizar.');
+      showToast(createdSub?.reused ? 'Assinatura recorrente já existente reutilizada.' : 'Assinatura criada! Use "Enviar WhatsApp" ou "Copiar link" para o aluno autorizar.');
       await loadMpSubscriptions();
     } catch (err) {
       showToast(err.message, true);
@@ -7086,6 +7089,19 @@ document.getElementById('mpSubscriptionsList')?.addEventListener('click', async 
     } catch {
       showToast('Não foi possível copiar automaticamente.', true);
     }
+    return;
+  }
+
+  const waBtn = e.target.closest('button[data-wa-sub]');
+  if (waBtn) {
+    await withLoading(waBtn, async () => {
+      try {
+        await api(`/api/gateways/mp/subscriptions/${waBtn.dataset.waSub}/send-whatsapp`, { method: 'POST' });
+        showToast('Link da assinatura enviado pelo WhatsApp!');
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
     return;
   }
 

@@ -440,3 +440,90 @@ test('Carrinho Point Smart: createPointOrder em lote soma valores e checkPointOr
   assert.equal(access.getMember(m1.id).status, 'active');
   assert.equal(access.getMember(m2.id).status, 'active');
 });
+
+test('Assinatura Recorrente: evita duplicidade, processa webhook subscription_authorized_payment e syncActiveMpSubscriptions', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST' });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.duration_days === 30);
+  const member = await access.createMember({
+    name: 'Aluno Recorrente',
+    document: '52998224725',
+    phone: '62999990011',
+    plan_id: plan.id,
+  });
+
+  let preapprovalCalls = 0;
+  let extRef = '';
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, options = {}) => {
+      if (url === 'https://api.mercadopago.com/preapproval') {
+        preapprovalCalls += 1;
+        const body = JSON.parse(options.body);
+        extRef = body.external_reference;
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'pre_dup_1',
+            init_point: 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_id=pre_dup_1',
+            status: 'pending',
+          }),
+        };
+      }
+      if (url === 'https://api.mercadopago.com/authorized_payments/auth_pay_99') {
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'auth_pay_99',
+            preapproval_id: 'pre_dup_1',
+            external_reference: extRef,
+          }),
+        };
+      }
+      if (url === 'https://api.mercadopago.com/preapproval/pre_dup_1') {
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'pre_dup_1',
+            status: 'authorized',
+            next_payment_date: '2026-12-25T10:00:00.000-03:00',
+          }),
+        };
+      }
+      if (url.startsWith('https://api.mercadopago.com/v1/payments/search')) {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [
+              {
+                id: 777001,
+                status: 'approved',
+                external_reference: extRef,
+                transaction_amount: Number((plan.price_cents / 100).toFixed(2)),
+                payment_type_id: 'credit_card',
+              },
+            ],
+          }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const s1 = await gw.createMpSubscription({ member_id: member.id, plan_id: plan.id });
+  const s2 = await gw.createMpSubscription({ member_id: member.id, plan_id: plan.id });
+  assert.equal(preapprovalCalls, 1, 'Não deve criar assinatura duplicada no Mercado Pago');
+  assert.equal(s2.id, s1.id);
+  assert.equal(s2.reused, true);
+
+  const webhookRes = await gw.handleWebhook('mercadopago', {
+    type: 'subscription_authorized_payment',
+    data: { id: 'auth_pay_99' },
+  });
+  assert.equal(webhookRes.settledCount, 1);
+  assert.equal(access.getMember(member.id).status, 'active');
+
+  const syncBatch = await gw.syncActiveMpSubscriptions();
+  assert.equal(syncBatch.checked, 1);
+  assert.equal(syncBatch.settledCount, 0);
+});

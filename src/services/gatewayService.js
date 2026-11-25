@@ -703,6 +703,21 @@ export class GatewayService {
       throw badReq('Informe um e-mail válido para assinatura no cartão.');
     }
     const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : `aluno${member.id}@academiaoxigenio.com`;
+
+    if (!card_token_id) {
+      const existingSub = this.store.get(
+        `SELECT id FROM mp_subscriptions
+         WHERE member_id = ? AND COALESCE(plan_id, 0) = ? AND amount_cents = ?
+           AND frequency = ? AND frequency_type = ? AND status IN ('pending', 'active', 'authorized')
+         ORDER BY id DESC LIMIT 1`,
+        [member.id, plan?.id || 0, finalAmount, cycleSpec.frequency, cycleSpec.frequency_type],
+      );
+      if (existingSub) {
+        return { ...this.getSubscriptionById(existingSub.id), reused: true };
+      }
+    }
+
+    const portalBase = String(settings.portal_url || 'https://sistema.academiaoxigenio.com').replace(/\/+$/, '');
     const externalRef = `mp_sub:${member.id}:${crypto.randomUUID().slice(0, 8)}`;
     const reason = `${settings.gym_name || 'Academia Oxigênio'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 120);
     const idempotencyKey = `mp_sub:${member.id}:${plan.id}:${finalAmount}:${cycleKey}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
@@ -711,7 +726,7 @@ export class GatewayService {
       reason,
       external_reference: externalRef,
       payer_email: email,
-      back_url: 'https://academiaoxigenio.com',
+      back_url: `${portalBase}/aluno.html`,
       status: card_token_id ? 'authorized' : 'pending',
       auto_recurring: {
         frequency: cycleSpec.frequency,
@@ -869,7 +884,7 @@ export class GatewayService {
 
   async syncMpSubscription(id) {
     const sub = this.store.get('SELECT * FROM mp_subscriptions WHERE id = ?', [Number(id)]);
-    if (!sub) throw new Error('Assinatura não encontrada.');
+    if (!sub) throw this._badRequest('Assinatura não encontrada.');
 
     const headers = this.getMpAuth();
     const preRes = await this.mpFetchWithRetry(`https://api.mercadopago.com/preapproval/${encodeURIComponent(sub.preapproval_id)}`, {
@@ -878,7 +893,7 @@ export class GatewayService {
     });
     const preData = await this.safeJson(preRes);
     if (!preRes.ok) {
-      throw new Error(preData?.message || `Erro ao consultar assinatura Mercado Pago (${preRes.status})`);
+      throw this._badRequest(preData?.message || `Erro ao consultar assinatura Mercado Pago (${preRes.status})`);
     }
 
     let settledCount = 0;
@@ -919,7 +934,7 @@ export class GatewayService {
 
   async cancelMpSubscription(id) {
     const sub = this.store.get('SELECT * FROM mp_subscriptions WHERE id = ?', [Number(id)]);
-    if (!sub) throw new Error('Assinatura não encontrada.');
+    if (!sub) throw this._badRequest('Assinatura não encontrada.');
     if (sub.status === 'canceled') {
       return { alreadyCanceled: true, subscription: this.getSubscriptionById(sub.id) };
     }
@@ -933,7 +948,7 @@ export class GatewayService {
     });
     if (!res.ok && res.status !== 404) {
       const data = (await this.safeJson(res)) || {};
-      throw new Error(data?.message || `Erro ao cancelar assinatura Mercado Pago (${res.status})`);
+      throw this._badRequest(data?.message || `Erro ao cancelar assinatura Mercado Pago (${res.status})`);
     }
 
     this.store.run(
@@ -1536,6 +1551,23 @@ export class GatewayService {
       return { ignored: true, reason: 'subscription_not_found' };
     }
 
+    if (itemId && (eventType === 'subscription_authorized_payment' || action.includes('authorized_payment'))) {
+      const mpHeaders = this.getMpAuth();
+      const authPayRes = await this.mpFetchWithRetry(`https://api.mercadopago.com/authorized_payments/${encodeURIComponent(String(itemId))}`, {
+        headers: mpHeaders,
+        signal: AbortSignal.timeout(15000),
+      });
+      if (authPayRes.ok) {
+        const authPay = await this.safeJson(authPayRes);
+        const sub = (authPay?.preapproval_id && this.store.get('SELECT * FROM mp_subscriptions WHERE preapproval_id = ?', [String(authPay.preapproval_id)]))
+          || (authPay?.external_reference && this.store.get('SELECT * FROM mp_subscriptions WHERE external_ref = ?', [String(authPay.external_reference)]));
+        if (sub) {
+          return await this.syncMpSubscription(sub.id);
+        }
+      }
+      return { ignored: true, reason: 'authorized_payment_subscription_not_found' };
+    }
+
     const isPaymentEvent = !payload?.type || eventType === 'payment' || action.startsWith('payment');
     if (!itemId || !isPaymentEvent) {
       return { ignored: true };
@@ -1575,5 +1607,29 @@ export class GatewayService {
     }
 
     return { ignored: true, reason: 'charge_not_found' };
+  }
+
+  async syncActiveMpSubscriptions({ limit = 25 } = {}) {
+    const settings = this.store.getSettings();
+    if (!String(process.env.MP_ACCESS_TOKEN || settings?.mp_access_token || '').trim()) {
+      return { checked: 0, settledCount: 0 };
+    }
+    const rows = this.store.all(
+      `SELECT id FROM mp_subscriptions
+       WHERE status IN ('active', 'authorized', 'pending')
+       ORDER BY updated_at ASC, id ASC
+       LIMIT ?`,
+      [Math.max(1, Number(limit) || 25)],
+    );
+    let settledCount = 0;
+    for (const row of rows) {
+      try {
+        const res = await this.syncMpSubscription(row.id);
+        settledCount += Number(res?.settledCount || 0);
+      } catch {
+        // Ignora falha pontual para seguir sincronizando as demais assinaturas
+      }
+    }
+    return { checked: rows.length, settledCount };
   }
 }
