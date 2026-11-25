@@ -128,7 +128,7 @@ export class GymService {
       phone: nextPhoneRaw,
       document: Object.hasOwn(data, 'document') ? data.document : existing.document,
       memberId: id,
-      allowEmptyLegacyCpf: allowEmptyLegacyCpf && !Object.hasOwn(data, 'document'),
+      allowEmptyLegacyCpf,
     });
     const nextDocument = Object.hasOwn(data, 'document')
       ? guardianCheck.document
