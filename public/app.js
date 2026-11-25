@@ -1660,7 +1660,11 @@ async function openClassMembersModal(classId) {
 }
 
 document.getElementById('clsFilterModality')?.addEventListener('change', renderClassesTable);
-document.getElementById('clsSearch')?.addEventListener('input', renderClassesTable);
+let clsSearchTimer = null;
+document.getElementById('clsSearch')?.addEventListener('input', () => {
+  clearTimeout(clsSearchTimer);
+  clsSearchTimer = setTimeout(renderClassesTable, 150);
+});
 document.getElementById('btnNewClassModal')?.addEventListener('click', () => openClassEditModal(null));
 document.getElementById('btnCloseClassEditModal')?.addEventListener('click', () => hideModal('classEditModal'));
 document.getElementById('btnCancelClassEditModal')?.addEventListener('click', () => hideModal('classEditModal'));
@@ -5015,7 +5019,11 @@ function updatePosStats() {
   setTxt('posStatRevenueToday', fmtMoney(revenueToday));
 }
 
-document.getElementById('posProductSearch')?.addEventListener('input', renderPosCatalog);
+let posProductSearchTimer = null;
+document.getElementById('posProductSearch')?.addEventListener('input', () => {
+  clearTimeout(posProductSearchTimer);
+  posProductSearchTimer = setTimeout(renderPosCatalog, 150);
+});
 document.getElementById('posCategoryPills')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.pos-cat-pill');
   if (!btn) return;
@@ -5038,7 +5046,11 @@ document.getElementById('posProductGrid')?.addEventListener('click', (e) => {
   updateSalePreview();
 });
 document.getElementById('stockFilterMode')?.addEventListener('change', renderStockTable);
-document.getElementById('stockSearchInput')?.addEventListener('input', renderStockTable);
+let stockSearchTimer = null;
+document.getElementById('stockSearchInput')?.addEventListener('input', () => {
+  clearTimeout(stockSearchTimer);
+  stockSearchTimer = setTimeout(renderStockTable, 150);
+});
 document.getElementById('btnToggleNewProduct')?.addEventListener('click', () => {
   document.getElementById('newProductPanel')?.classList.toggle('hidden');
   document.getElementById('prodName')?.focus();

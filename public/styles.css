@@ -3196,7 +3196,14 @@ input.is-cpf-error {
 #settings-backup td {
   font-variant-numeric: tabular-nums;
 }
-#tab-settings tbody tr {
+#tab-settings tbody tr,
+#classesBody tr,
+#stockBody tr,
+#salesHistoryBody tr {
   content-visibility: auto;
-  contain-intrinsic-size: 44px;
+  contain-intrinsic-size: 46px;
+}
+#stockBody td,
+#salesHistoryBody td {
+  font-variant-numeric: tabular-nums;
 }
