@@ -320,6 +320,15 @@ function startTurnstileEventsStream() {
   turnstileEventSource = es;
 }
 
+window.addEventListener('focus', () => {
+  if (!window.oxigenioDemo && turnstileEventSource) loadPendingPartnerRequests();
+});
+setInterval(() => {
+  if (!window.oxigenioDemo && !document.hidden && navigator.onLine !== false && turnstileEventSource) {
+    loadPendingPartnerRequests();
+  }
+}, 5000);
+
 if (!window.oxigenioDemo && !window.__liveLogsPollStarted) {
   window.__liveLogsPollStarted = true;
   setInterval(() => {
