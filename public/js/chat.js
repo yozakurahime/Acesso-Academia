@@ -108,7 +108,9 @@ async function openChat(phone) {
   renderChatList();
   const data = await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/messages`);
   const chat = data.chat || { phone };
-  const title = chat.member_name || chat.contact_name || chat.phone;
+  const linkedMembers = Array.isArray(data.linkedMembers) ? data.linkedMembers : [];
+  const primaryMemberId = chat.member_id || linkedMembers[0]?.id || null;
+  const title = chat.member_name || linkedMembers[0]?.name || chat.contact_name || chat.phone;
   const paused = Number(chat.bot_paused) === 1;
   const needsHuman = Number(chat.needs_human) === 1;
   const optOut = Number(chat.opt_out) === 1;
@@ -121,7 +123,10 @@ async function openChat(phone) {
       ? 'Disparos automáticos bloqueados para este número (clique para reativar)'
       : 'Parar disparos automáticos (cobrança, aniversário, inatividade) para este número';
     const validLabel = chat.member_valid_until ? ` · vence ${chat.member_valid_until}` : '';
-    const memberBtnHtml = chat.member_id
+    const singleProfileBtnHtml = linkedMembers.length === 1
+      ? `<button type="button" id="btnChatSingleProfile" class="btn btn-secondary btn-sm" data-open-profile-id="${Number(linkedMembers[0].id)}">Perfil</button>`
+      : '';
+    const memberBtnHtml = primaryMemberId
       ? '<button type="button" id="btnChatMemberBilling" class="btn btn-secondary btn-sm">Cobrar / Plano</button>'
       : '';
     headerEl.innerHTML = `
@@ -135,6 +140,7 @@ async function openChat(phone) {
       </div>
       <div class="inline-actions">
         <button type="button" id="btnToggleChatNote" class="btn btn-secondary btn-sm" title="Nota interna">${hasNote ? '📝 Nota' : 'Nota'}</button>
+        ${singleProfileBtnHtml}
         ${memberBtnHtml}
         <button type="button" id="btnToggleChatOptOut" class="btn ${optOut ? 'btn-danger' : 'btn-secondary'} btn-sm" title="${escapeHtml(optOutTitle)}">${optOutLabel}</button>
         <button type="button" id="btnToggleChatBot" class="btn ${needsHuman ? 'btn-primary' : 'btn-secondary'} btn-sm">${toggleLabel}</button>
@@ -149,11 +155,15 @@ async function openChat(phone) {
       const hiddenNow = noteBar.classList.toggle('hidden');
       if (!hiddenNow) document.getElementById('chatNoteInput')?.focus();
     });
+    document.getElementById('btnChatSingleProfile')?.addEventListener('click', async () => {
+      const targetId = Number(linkedMembers[0]?.id || 0);
+      if (targetId > 0) await openProfile(targetId);
+    });
     document.getElementById('btnChatMemberBilling')?.addEventListener('click', async () => {
       try {
-        let member = (state.allMembers || []).find((m) => Number(m.id) === Number(chat.member_id));
+        let member = (state.allMembers || []).find((m) => Number(m.id) === Number(primaryMemberId));
         if (!member) {
-          const prof = await api(`/api/members/${Number(chat.member_id)}/profile`);
+          const prof = await api(`/api/members/${Number(primaryMemberId)}/profile`);
           member = prof?.member || null;
         }
         if (!member) {
@@ -201,6 +211,26 @@ async function openChat(phone) {
       handoffEl.classList.remove('hidden');
     } else {
       handoffEl.classList.add('hidden');
+    }
+  }
+
+  const profilesBarEl = document.getElementById('chatProfilesBar');
+  if (profilesBarEl) {
+    if (linkedMembers.length > 1) {
+      profilesBarEl.innerHTML = `<span class="muted">Perfis vinculados (${linkedMembers.length}):</span>${linkedMembers.map((m) => {
+        const meta = [m.plan_name, m.status].filter(Boolean).join(' · ');
+        return `<button type="button" class="btn btn-secondary btn-sm" data-open-profile-id="${Number(m.id)}" title="${escapeHtml(meta)}">👤 ${escapeHtml(m.name)}${m.status ? ` (${escapeHtml(m.status)})` : ''}</button>`;
+      }).join('')}`;
+      profilesBarEl.classList.remove('hidden');
+      profilesBarEl.querySelectorAll('[data-open-profile-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = Number(btn.dataset.openProfileId || 0);
+          if (id > 0) openProfile(id);
+        });
+      });
+    } else {
+      profilesBarEl.innerHTML = '';
+      profilesBarEl.classList.add('hidden');
     }
   }
 

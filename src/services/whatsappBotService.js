@@ -320,6 +320,17 @@ export class WhatsappBotService {
        WHERE c.phone = ?`,
       [normalized],
     );
+    const linkedMembers = this._findMembersForExactPhone(normalized);
+    if (chat?.member_id && !linkedMembers.some((m) => Number(m.id) === Number(chat.member_id))) {
+      const linkedById = this.store.get(
+        `SELECT m.id, m.name, m.phone, m.status, m.valid_until, p.name AS plan_name
+         FROM members m
+         LEFT JOIN plans p ON p.id = m.plan_id
+         WHERE m.id = ?`,
+        [chat.member_id],
+      );
+      if (linkedById) linkedMembers.unshift(linkedById);
+    }
     const messages = this.store.all(
       `SELECT id, phone, direction, sender_type, body, media_type, media_url, created_at
        FROM (
@@ -332,7 +343,7 @@ export class WhatsappBotService {
        ORDER BY id ASC`,
       [normalized],
     );
-    return { chat: chat || null, messages };
+    return { chat: chat || null, linkedMembers, messages };
   }
 
   setBotPaused(phone, paused) {

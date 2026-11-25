@@ -777,3 +777,25 @@ test('WhatsappBotService.setCampaignOptOut bloqueia e reativa disparos automatic
   });
   assert.ok(reenabled);
 });
+
+test('WhatsappBotService.getChatMessages retorna todos os perfis vinculados ao mesmo telefone (pais e filhos)', async () => {
+  const store = await DatabaseStore.create(null);
+  const bot = new WhatsappBotService(store);
+  const planId = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Natação Kids', 30, 11000)").lastInsertRowid;
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Filho Um', '52998224725', '5562994445566', 'active', '2026-12-10', ?)",
+    [planId],
+  );
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Filho Dois', '11122233344', '5562994445566', 'active', '2026-12-10', ?)",
+    [planId],
+  );
+  bot.recordChatMessage({ phone: '5562994445566', direction: 'in', senderType: 'customer', body: 'Oi, quero ver as aulas' });
+
+  const thread = bot.getChatMessages('5562994445566');
+  assert.equal(thread.linkedMembers.length, 2);
+  assert.deepEqual(
+    thread.linkedMembers.map((m) => m.name).sort(),
+    ['Filho Dois', 'Filho Um'],
+  );
+});
