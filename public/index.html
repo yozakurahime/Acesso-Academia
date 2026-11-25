@@ -190,7 +190,7 @@
             <h2>Buscar aluno rapidamente</h2>
           </div>
           <form id="balcaoQuickSearchForm" class="quick-search">
-            <div class="quick-search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="balcaoQuickSearch" aria-label="Nome, CPF ou telefone do aluno" placeholder="Digite nome, CPF ou telefone do aluno..." autocomplete="off" /></div>
+            <div class="quick-search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="balcaoQuickSearch" aria-label="Nome, CPF ou telefone do aluno" placeholder="Digite nome, CPF ou telefone do aluno…" autocomplete="off" /></div>
             <button type="submit" class="btn btn-primary">Buscar aluno <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
           </form>
           <div id="balcaoQuickResults" class="balcao-quick-results hidden" aria-live="polite"></div>
@@ -649,7 +649,7 @@
         <div class="panel">
           <div class="panel-header">
             <h2 style="margin:0;">Histórico de mensalidades</h2>
-            <input type="search" id="paymentsSearch" class="search-input" style="max-width:280px;" placeholder="Buscar recibo por aluno ou CPF..." aria-label="Buscar pagamento por aluno ou CPF" />
+            <input type="search" id="paymentsSearch" class="search-input" style="max-width:280px;" placeholder="Buscar recibo por aluno ou CPF…" aria-label="Buscar pagamento por aluno ou CPF" />
           </div>
           <div class="table-wrap">
             <table>
@@ -975,7 +975,7 @@
           <div class="panel">
             <div class="panel-header" style="gap:8px;flex-wrap:wrap;">
               <h2>Catálogo rápido</h2>
-              <input type="search" id="posProductSearch" placeholder="Buscar produto no PDV..." style="width:210px;padding:6px 10px;font-size:12px;" />
+              <input type="search" id="posProductSearch" placeholder="Buscar produto no PDV…" style="width:210px;padding:6px 10px;font-size:12px;" />
             </div>
             <div id="posCategoryPills" class="inline-actions" style="flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
             <div id="posProductGrid" class="pos-product-grid"></div>
@@ -1014,7 +1014,7 @@
                   <option value="low">Baixo (≤ 5)</option>
                   <option value="out">Esgotados</option>
                 </select>
-                <input type="search" id="stockSearchInput" placeholder="Buscar no estoque..." style="width:160px;padding:5px 8px;font-size:12px;" />
+                <input type="search" id="stockSearchInput" placeholder="Buscar no estoque…" style="width:160px;padding:5px 8px;font-size:12px;" />
               </div>
             </div>
             <div class="table-wrap">
@@ -1098,7 +1098,7 @@
               <select id="clsFilterModality" aria-label="Filtrar por modalidade">
                 <option value="">Todas as modalidades</option>
               </select>
-              <input type="search" id="clsSearch" aria-label="Buscar turma" placeholder="Buscar turma, horário ou professor..." />
+              <input type="search" id="clsSearch" aria-label="Buscar turma" placeholder="Buscar turma, horário ou professor…" />
             </div>
           </div>
           <div class="table-wrap">
@@ -1119,7 +1119,7 @@
           </div>
           <form id="cbBookingForm" class="form-grid" style="margin-bottom:12px;align-items:end;">
             <label>Aluno
-              <input type="search" id="cbMemberSearch" list="membersDatalist" placeholder="Nome ou CPF do aluno..." autocomplete="off" required />
+              <input type="search" id="cbMemberSearch" list="membersDatalist" placeholder="Nome ou CPF do aluno…" autocomplete="off" required />
             </label>
             <label>Repetir semanalmente (semanas)
               <input type="number" id="cbWeeks" min="1" max="12" value="1" />
@@ -1152,7 +1152,7 @@
           <p class="muted" style="margin-bottom:10px;">Promova um aluno já cadastrado para Funcionário, Professor ou Usuário da equipe, mantendo histórico e FaceID com acesso permanente sem mensalidade.</p>
           <form id="promoteStudentForm" class="form-grid">
             <label>Buscar aluno (nome, CPF ou ID)
-              <input type="text" id="promoteStudentQuery" list="promoteStudentOptions" placeholder="Digite nome, CPF ou #ID..." autocomplete="off" required />
+              <input type="text" id="promoteStudentQuery" list="promoteStudentOptions" placeholder="Digite nome, CPF ou #ID…" autocomplete="off" required />
               <datalist id="promoteStudentOptions"></datalist>
             </label>
             <label>Novo tipo de acesso
@@ -1306,7 +1306,7 @@
 
           <form id="cancelEnrollmentForm" class="form-grid" style="margin-bottom:16px;">
             <label>Aluno
-              <input type="search" id="cancelMemberSearch" list="membersDatalist" placeholder="Digite o nome ou CPF do aluno..." autocomplete="off" required />
+              <input type="search" id="cancelMemberSearch" list="membersDatalist" placeholder="Digite o nome ou CPF do aluno…" autocomplete="off" required />
               <input type="hidden" id="cancelMemberId" />
             </label>
             <label>Motivo do cancelamento
@@ -1322,7 +1322,7 @@
               </select>
             </label>
             <label>Observação (opcional)
-              <input type="text" id="cancelNotes" placeholder="Detalhes adicionais..." />
+              <input type="text" id="cancelNotes" placeholder="Detalhes adicionais…" />
             </label>
             <div style="display:flex;align-items:flex-end;">
               <button type="submit" class="btn btn-danger">Registrar cancelamento</button>
@@ -1918,7 +1918,7 @@
                     <h4>Atendimento Automático &amp; Base de Conhecimento (Bot IA)</h4>
                     <label class="checkbox-label" style="margin-bottom:10px;"><input type="checkbox" id="waBotEnabled" /> Ativar respostas automáticas do Bot IA no WhatsApp</label>
                     <p class="muted" style="margin:0 0 10px;font-size:12px;">Edite abaixo todas as informações da academia (planos, preços, horários, modalidades e regras de atendimento) que a IA usa para responder os alunos.</p>
-                    <textarea id="waBotContextText" rows="20" style="width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.45;" placeholder="Carregando contexto do bot..."></textarea>
+                    <textarea id="waBotContextText" rows="20" style="width:100%;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.45;" placeholder="Carregando contexto do bot…"></textarea>
                   </div>
                   <div class="settings-form-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
                     <button type="submit" class="btn btn-primary">Salvar contexto do bot</button>
@@ -2596,7 +2596,7 @@
           <input type="number" step="0.01" min="0" id="billingOpenCashAmount" value="0.00" required />
         </label>
         <label>Observação
-          <input type="text" id="billingOpenCashNotes" placeholder="Turno manhã/tarde..." />
+          <input type="text" id="billingOpenCashNotes" placeholder="Turno manhã/tarde…" />
         </label>
         <div class="inline-actions" style="justify-content:flex-end;margin-top:4px;">
           <button type="submit" id="btnConfirmBillingOpenCash" class="btn btn-success">Abrir caixa e continuar</button>
