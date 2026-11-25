@@ -1842,10 +1842,10 @@
                   <div class="form-grid">
                     <label>Avisar vencimento (dias antes) <input type="number" id="waDueDays" min="0" max="7" value="1" /></label>
                     <label>Considerar ausente após (dias) <input type="number" id="waInactiveDays" min="3" max="90" value="10" /></label>
-                    <label>Limite diário anti-ban <input type="number" id="waDailyLimit" min="1" max="100" value="40" /></label>
+                    <label>Limite diário (0 = sem limite) <input type="number" id="waDailyLimit" min="0" max="10000" value="0" /></label>
                     <label>Intervalo mínimo entre envios (seg) <input type="number" id="waMinDelay" min="10" max="120" value="15" /></label>
                     <label>Horário início <input type="time" id="waWindowStart" value="08:00" /></label>
-                    <label>Horário fim <input type="time" id="waWindowEnd" value="20:00" /></label>
+                    <label>Horário fim <input type="time" id="waWindowEnd" value="22:00" /></label>
                   </div>
                 </div>
 

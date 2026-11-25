@@ -5283,10 +5283,10 @@ async function loadSettings() {
   if (document.getElementById('waNotifyWaitlist')) document.getElementById('waNotifyWaitlist').checked = s.whatsapp_notify_waitlist !== '0';
   document.getElementById('waDueDays').value = s.whatsapp_due_days_before || '1';
   document.getElementById('waInactiveDays').value = s.whatsapp_inactive_days || '10';
-  document.getElementById('waDailyLimit').value = s.whatsapp_daily_limit || '40';
+  document.getElementById('waDailyLimit').value = s.whatsapp_daily_limit ?? '0';
   document.getElementById('waMinDelay').value = s.whatsapp_min_delay_sec || '15';
   document.getElementById('waWindowStart').value = s.whatsapp_window_start || '08:00';
-  document.getElementById('waWindowEnd').value = s.whatsapp_window_end || '20:00';
+  document.getElementById('waWindowEnd').value = s.whatsapp_window_end || '22:00';
   document.getElementById('waTplPayment').value = s.whatsapp_tpl_payment || '';
   document.getElementById('waTplDue').value = s.whatsapp_tpl_due || '';
   document.getElementById('waTplInactive').value = s.whatsapp_tpl_inactive || '';

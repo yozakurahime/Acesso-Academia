@@ -1000,10 +1000,10 @@ export class DatabaseStore {
       whatsapp_notify_winback: '1',
       whatsapp_notify_class_reminder: '1',
       whatsapp_notify_waitlist: '1',
-      whatsapp_daily_limit: '40',
+      whatsapp_daily_limit: '0',
       whatsapp_min_delay_sec: '15',
       whatsapp_window_start: '08:00',
-      whatsapp_window_end: '20:00',
+      whatsapp_window_end: '22:00',
       whatsapp_tpl_payment:
         '{saudacao} {primeiro_nome}! Pagamento de {valor} ({plano}) confirmado na {academia}. Acesso liberado até {vencimento}. Bom treino!',
       whatsapp_tpl_due:

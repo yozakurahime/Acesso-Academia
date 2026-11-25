@@ -78,9 +78,21 @@ function sleep(ms) {
 }
 
 function localTimeHHMM(now = new Date()) {
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: process.env.TZ || 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(now);
+    const hh = parts.find((p) => p.type === 'hour')?.value || '00';
+    const mm = parts.find((p) => p.type === 'minute')?.value || '00';
+    return `${hh === '24' ? '00' : hh}:${mm}`;
+  } catch {
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
 }
 
 function localDateIso(offsetDays = 0, now = new Date()) {
@@ -389,9 +401,16 @@ export class WhatsappService {
 
   isWithinAllowedWindow(settings = this.store.getSettings(), now = new Date()) {
     const start = settings.whatsapp_window_start || '08:00';
-    const end = settings.whatsapp_window_end || '20:00';
+    const end = settings.whatsapp_window_end || '22:00';
     const current = localTimeHHMM(now);
     return current >= start && current <= end;
+  }
+
+  _resolveCampaignBatchLimit(settings = this.store.getSettings()) {
+    if (this.isMetaCloudMode(settings)) return 1000;
+    const raw = Number(settings.whatsapp_daily_limit ?? 0);
+    if (!Number.isFinite(raw) || raw <= 0) return 1000;
+    return Math.max(1, raw);
   }
 
   countSentToday() {
@@ -419,7 +438,9 @@ export class WhatsappService {
       queueLength: this.countQueued(),
       queuePausedReason: settings.whatsapp_enabled !== '1' ? 'Envios automáticos desativados.' : null,
       sentToday: this.countSentToday(),
-      dailyLimit: Math.max(1, Number(settings.whatsapp_daily_limit || 40)),
+      dailyLimit: (metaMode || Number(settings.whatsapp_daily_limit ?? 0) <= 0)
+        ? null
+        : Math.max(1, Number(settings.whatsapp_daily_limit)),
       lastError: this.lastError,
       hasSavedSession: this.hasSavedSession(),
     };
@@ -944,7 +965,7 @@ export class WhatsappService {
     const daysBefore = Math.max(0, Math.min(7, Number(settings.whatsapp_due_days_before ?? 1)));
     const todayIso = localDateIso(0, now);
     const maxDueIso = localDateIso(daysBefore, now);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -992,7 +1013,7 @@ export class WhatsappService {
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_due !== '1' || settings.whatsapp_notify_overdue === '0') return 0;
 
     const yesterdayIso = localDateIso(-1, now);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1038,7 +1059,7 @@ export class WhatsappService {
     const settings = this.store.getSettings();
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_due === '0') return 0;
 
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1081,7 +1102,7 @@ export class WhatsappService {
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_welcome !== '1' || settings.whatsapp_notify_onboarding === '0') return 0;
 
     const targetIso = localDateIso(-7, now);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1121,7 +1142,7 @@ export class WhatsappService {
 
     const todayIso = localDateIso(0, now);
     const milestones = new Set([10, 30, 50, 100, 200]);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1169,7 +1190,7 @@ export class WhatsappService {
     const todayIso = localDateIso(0, now);
     const cutoffIso = localDateIso(-inactiveDays, now);
     const cooldownIso = localDateIso(-14, now);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1228,7 +1249,7 @@ export class WhatsappService {
     const todayIso = localDateIso(0, now);
     const mmdd = todayIso.slice(5, 10);
     const year = todayIso.slice(0, 4);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1273,7 +1294,7 @@ export class WhatsappService {
 
     const cutoffIso = localDateIso(-45, now);
     const monthKey = localDateIso(0, now).slice(0, 7);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1328,7 +1349,7 @@ export class WhatsappService {
 
     const minIso = localDateIso(-90, now);
     const maxIso = localDateIso(-30, now);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     const winBackCap = Math.min(remainingBudget, 8);
     if (winBackCap === 0) return 0;
@@ -1377,7 +1398,7 @@ export class WhatsappService {
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_class_reminder === '0') return 0;
 
     const todayIso = localDateIso(0, now);
-    const limit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
+    const limit = this._resolveCampaignBatchLimit(settings);
     const remainingBudget = Math.max(0, limit - this.countSentToday() - this.countQueued());
     if (remainingBudget === 0) return 0;
 
@@ -1550,10 +1571,9 @@ export class WhatsappService {
       while (!this.manualDisconnect && this.isReadyToSend(this.store.getSettings()) && this.store.getSettings().whatsapp_enabled === '1') {
         const settings = this.store.getSettings();
         const metaMode = this.isMetaCloudMode(settings);
-        const dailyLimit = Math.max(1, Number(settings.whatsapp_daily_limit || 40));
-        const allowAutomated = metaMode
-          ? this.isWithinAllowedWindow(settings)
-          : (this.countSentToday() < dailyLimit && this.isWithinAllowedWindow(settings));
+        const dailyLimit = Number(settings.whatsapp_daily_limit ?? 0);
+        const hasDailyCap = !metaMode && Number.isFinite(dailyLimit) && dailyLimit > 0;
+        const allowAutomated = (!hasDailyCap || this.countSentToday() < dailyLimit) && this.isWithinAllowedWindow(settings);
         const next = allowAutomated
           ? this.store.get(`SELECT * FROM whatsapp_logs WHERE status = 'queued' ORDER BY id ASC LIMIT 1`)
           : this.store.get(
