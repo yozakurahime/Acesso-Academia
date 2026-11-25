@@ -1,6 +1,8 @@
 import { normalizeBrPhone } from './whatsappService.js';
 
-const PAYMENT_INTENT_REGEX = /\b(pagar|pagamento|mensalidade|renovar|renova[cç][aã]o|pix|link\s+de\s+pagamento|quero\s+pagar)\b/i;
+const PAYMENT_ACTION_REGEX = /^(?:pix|pagar|pagamento|renovar|renova[cç][aã]o|mensalidade|link\s+de\s+pagamento)$|\b(?:(?:quero|gostaria\s+de|preciso|queria|vou|vamos|me\s+manda|manda|envia|enviar|gera|gerar|fazer|realizar)\s+(?:o\s+|a\s+|meu\s+|minha\s+|um\s+|uma\s+)?(?:pagamento|pagar|mensalidade|renovar|renova[cç][aã]o|pix|link(?:\s+de\s+pagamento)?|c[oó]digo\s+pix|qr\s*code)|pagar\s+(?:a\s+|minha\s+|o\s+|meu\s+)?(?:mensalidade|plano|parcela|fatura|renova[cç][aã]o)|pagar\s+(?:agora|por\s+aqui|online|via\s+pix|no\s+pix|no\s+cart[aã]o)|renovar\s+(?:a\s+|minha\s+|o\s+|meu\s+)?(?:mensalidade|plano|matr[ií]cula)|link\s+de\s+pagamento)\b/i;
+const PAYMENT_NON_ACTION_REGEX = /\b(?:consigo\s+(?:treinar|ir|entrar|passar)|posso\s+(?:treinar|ir|entrar|passar)|ainda\s+(?:consigo|posso)|libera(?:r|do|da)?\s+(?:a\s+)?catraca|venceu|vencid[oa]|atrasad[oa]|toler[âa]ncia|s[óo]\s+(?:consigo|posso|vou)\s+pagar|pagar\s+(?:amanh[ãa]|depois|outro\s+dia|semana\s+que\s+vem|m[êe]s\s+que\s+vem|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|dia\s+\d+)|qual\s+(?:[ée]\s+)?(?:o\s+)?valor|quanto\s+(?:custa|[ée]|fica|t[áa]|esta|est[áa])|quais\s+(?:s[ãa]o\s+)?(?:as\s+)?formas|aceita(?:m)?\s+(?:pix|cart[aã]o|dinheiro|boleto)|como\s+funciona)\b/i;
+const NON_LOOKUP_PHRASE_REGEX = /\b(?:hoje|amanha|ontem|posso|consigo|treinar|entao|quando|quanto|qual|quais|como|onde|porque|ainda|horario|funciona|abre|fecha|venceu|vencida|vencido|parcela|atraso|atrasado|ir|entrar|passar|valor|preco|aceita|aceitam|obrigado|obrigada|valeu|bom dia|boa tarde|boa noite)\b/;
 const ENROLLMENT_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|vamos|preciso|posso|queria)\s+(?:me\s+)?(?:matricular|cadastrar)|(?:fazer|fechar|concluir|realizar|abrir|iniciar|nova)\s+(?:a\s+|uma\s+)?(?:matr[ií]cula|cadastro|inscri[cç][aã]o)|me\s+(?:matricular|cadastrar)|matricular\s+(?:meu|minha|o|a|um|uma|ele|ela))\b/i;
 const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)|baby|infantil)\b/i;
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
@@ -25,6 +27,18 @@ function stripAccents(value) {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function looksLikeMemberLookupQuery(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return false;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 6) return true;
+  if (raw.includes('?')) return false;
+  const normalized = stripAccents(raw);
+  if (!normalized || NON_LOOKUP_PHRASE_REGEX.test(normalized)) return false;
+  const words = normalized.split(/\s+/).filter(Boolean);
+  return words.length >= 1 && words.length <= 6;
 }
 
 const NAME_STOPWORDS = new Set(['da', 'de', 'do', 'dos', 'das', 'e']);
@@ -696,7 +710,7 @@ export class OnlineSalesBotService {
 
   async handleMessage({ phone, userText, settings = this.store.getSettings?.() || {} }) {
     const existing = this._getSession(phone);
-    const wantsPayment = PAYMENT_INTENT_REGEX.test(userText);
+    const wantsPayment = PAYMENT_ACTION_REGEX.test(userText) && !PAYMENT_NON_ACTION_REGEX.test(userText);
     const wantsEnroll = ENROLLMENT_INTENT_REGEX.test(userText);
     const directCpf = !existing ? extractCpfDigits(userText) : '';
     const hasDirectValidCpf = Boolean(directCpf && isValidCpfDigits(directCpf));
@@ -831,6 +845,13 @@ export class OnlineSalesBotService {
         : 'Claro! Para gerar o pagamento pelo Mercado Pago, informe o *CPF (11 dígitos)* ou o *nome completo* do aluno.\n\n_(Se quiser pagar para mais de uma pessoa tudo junto, é só enviar um por vez!)_';
       this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
       return { reply, requiresHuman: false, session };
+    }
+
+    if (!looksLikeMemberLookupQuery(userText)) {
+      if (existing.items.length === 0) {
+        this._sessions.delete(phone);
+      }
+      return null;
     }
 
     const matchedMembers = this._findMembersByQuery(userText);

@@ -644,3 +644,51 @@ test('OnlineSalesBotService reconhece frases naturais como "fechar a matricula d
   assert.match(naturalEnroll.reply, /nome completo/i);
   assert.equal(himeCalls.length, 1);
 });
+
+test('OnlineSalesBotService nao confunde duvida de vencimento/treino ou perguntas gerais com fluxo de pagamento', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'TEST-MP-TOKEN',
+  });
+  const accessService = new AccessService(store, null, null);
+  const gatewayService = new GatewayService(store, accessService);
+  const geminiCalls = [];
+  const fakeFetch = async () => {
+    geminiCalls.push(1);
+    return {
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: 'Com a parcela vencida a catraca bloqueia após o vencimento.' }] } }] }),
+    };
+  };
+  const bot = new WhatsappBotService(store, { gatewayService, accessService, fetchFn: fakeFetch });
+
+  const dueQuestion = await bot.handleIncomingMessage({
+    phone: '5562991112233',
+    text: 'Oi boa tarde minha parcela venceu hoje mais só consigo pagar amanhã hoje ainda consigo treinar?',
+  });
+  assert.equal(geminiCalls.length, 1);
+  assert.doesNotMatch(dueQuestion.reply, /informe o \*?CPF/i);
+
+  const pixFaq = await bot.handleIncomingMessage({
+    phone: '5562991112233',
+    text: 'Vocês aceitam pix?',
+  });
+  assert.equal(geminiCalls.length, 2);
+  assert.doesNotMatch(pixFaq.reply, /informe o \*?CPF/i);
+
+  const startPay = await bot.handleIncomingMessage({
+    phone: '5562991112233',
+    text: 'Quero pagar minha mensalidade',
+  });
+  assert.match(startPay.reply, /informe o \*?CPF/i);
+  assert.equal(geminiCalls.length, 2);
+
+  const followUpQuestion = await bot.handleIncomingMessage({
+    phone: '5562991112233',
+    text: 'Então hoje ainda posso ir',
+  });
+  assert.equal(geminiCalls.length, 3);
+  assert.doesNotMatch(followUpQuestion.reply, /Não encontrei nenhum aluno/i);
+});
