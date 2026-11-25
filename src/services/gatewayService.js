@@ -314,6 +314,7 @@ export class GatewayService {
     const reference = 'ox_checkout_' + crypto.randomUUID();
     const title = `${settings.gym_name || 'Academia'} - ${plan.name}`.slice(0, 120);
     const now = Date.now();
+    const notificationUrl = this.getMpNotificationUrl(settings);
     const response = await this.fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: { ...this.getMpAuth(settings), 'X-Idempotency-Key': reference },
@@ -321,6 +322,7 @@ export class GatewayService {
       body: JSON.stringify({
         items: [{ id: String(plan.id), title, quantity: 1, currency_id: 'BRL', unit_price: cents / 100 }],
         external_reference: reference,
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
         expires: true,
         expiration_date_from: new Date(now - 60000).toISOString(),
         expiration_date_to: new Date(now + 24 * 3600000).toISOString(),
@@ -375,6 +377,7 @@ export class GatewayService {
     if (mode === 'checkout') {
       const reference = 'ox_checkout_' + crypto.randomUUID();
       const now = Date.now();
+      const notificationUrl = this.getMpNotificationUrl(settings);
       const response = await this.fetch('https://api.mercadopago.com/checkout/preferences', {
         method: 'POST',
         headers: { ...this.getMpAuth(settings), 'X-Idempotency-Key': reference },
@@ -388,6 +391,7 @@ export class GatewayService {
             unit_price: i.amount_cents / 100,
           })),
           external_reference: reference,
+          ...(notificationUrl ? { notification_url: notificationUrl } : {}),
           expires: true,
           expiration_date_from: new Date(now - 60000).toISOString(),
           expiration_date_to: new Date(now + 24 * 3600000).toISOString(),
@@ -442,6 +446,14 @@ export class GatewayService {
     };
   }
 
+  getMpNotificationUrl(settings = this.store.getSettings()) {
+    const base = String(settings?.portal_url || process.env.PORTAL_URL || 'https://sistema.academiaoxigenio.com')
+      .trim()
+      .replace(/\/+$/, '');
+    if (!/^https:\/\//i.test(base)) return null;
+    return `${base}/api/gateways/mp/webhook`;
+  }
+
   async createMercadoPagoPix({ member, amountCents, description, settings, idempotencyKey = null }) {
     const headers = this.getMpAuth(settings);
     const parts = String(member.name || 'Aluno').trim().split(/\s+/);
@@ -465,6 +477,7 @@ export class GatewayService {
     const resolvedKey =
       idempotencyKey || `mp_pix:${member.id}:${amountCents}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
 
+    const notificationUrl = this.getMpNotificationUrl(settings);
     const response = await this.fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: {
@@ -477,6 +490,7 @@ export class GatewayService {
         description: description.slice(0, 120),
         payment_method_id: 'pix',
         external_reference: String(member.id),
+        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
         payer,
       }),
     });
@@ -1633,5 +1647,30 @@ export class GatewayService {
       }
     }
     return { checked: rows.length, settledCount };
+  }
+
+  async syncPendingCharges({ limit = 25 } = {}) {
+    const settings = this.store.getSettings();
+    if (!String(process.env.MP_ACCESS_TOKEN || settings?.mp_access_token || '').trim()) {
+      return { checked: 0, paidCount: 0 };
+    }
+    const rows = this.store.all(
+      `SELECT id FROM gateway_charges
+       WHERE provider = 'mercadopago' AND status = 'pending'
+         AND created_at >= datetime('now', 'localtime', '-72 hours')
+       ORDER BY id DESC
+       LIMIT ?`,
+      [Math.max(1, Number(limit) || 25)],
+    );
+    let paidCount = 0;
+    for (const row of rows) {
+      try {
+        const res = await this.checkChargeStatus(row.id);
+        if (res?.paid) paidCount += 1;
+      } catch {
+        // Ignora falha pontual para continuar verificando as demais cobranças
+      }
+    }
+    return { checked: rows.length, paidCount };
   }
 }

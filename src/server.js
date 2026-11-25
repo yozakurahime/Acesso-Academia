@@ -251,6 +251,12 @@ async function start() {
     });
   });
 
+  cron.schedule('*/5 * * * *', () => {
+    gatewayService?.syncPendingCharges?.().catch((err) => {
+      console.error('[MP CHARGE SYNC]', err.message);
+    });
+  });
+
   cron.schedule('0 9 * * *', () => {
     if (store.getSettings().auto_collection_enabled === '1') {
       financeService.runAutoCollection(whatsappService).catch((err) => {

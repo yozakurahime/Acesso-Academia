@@ -527,3 +527,55 @@ test('Assinatura Recorrente: evita duplicidade, processa webhook subscription_au
   assert.equal(syncBatch.checked, 1);
   assert.equal(syncBatch.settledCount, 0);
 });
+
+test('GatewayService.syncPendingCharges reconcilia cobranca checkout pendente e da baixa automatica', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST' });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.duration_days === 30);
+  const member = await access.createMember({
+    name: 'Thiago Teste',
+    document: '52998224725',
+    phone: '62986601004',
+    plan_id: plan.id,
+  });
+
+  let createdRef = '';
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, options = {}) => {
+      if (url === 'https://api.mercadopago.com/checkout/preferences') {
+        const body = JSON.parse(options.body);
+        createdRef = body.external_reference;
+        assert.match(body.notification_url, /\/api\/gateways\/mp\/webhook$/);
+        return {
+          ok: true,
+          json: async () => ({ id: 'pref_sync_1', init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref_sync_1' }),
+        };
+      }
+      if (url.startsWith('https://api.mercadopago.com/v1/payments/search')) {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [{
+              id: 190481223989,
+              status: 'approved',
+              currency_id: 'BRL',
+              payment_method_id: 'pix',
+              transaction_amount: Number((plan.price_cents / 100).toFixed(2)),
+              external_reference: createdRef,
+            }],
+          }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  const charge = await gw.createCheckoutCharge({ member_id: member.id, plan_id: plan.id });
+  assert.equal(charge.status, 'pending');
+
+  const sync = await gw.syncPendingCharges();
+  assert.equal(sync.checked, 1);
+  assert.equal(sync.paidCount, 1);
+  assert.equal(access.getMember(member.id).status, 'active');
+});

@@ -3482,6 +3482,7 @@ function renderProfilePayments() {
               · Cobrança #${gc.id}
             </span>
           </div>
+          ${gc.status === 'pending' ? `<button type="button" class="btn btn-success btn-sm" data-check-profile-charge="${gc.id}">Verificar pagamento</button>` : ''}
         </li>`,
     });
   }
@@ -9395,6 +9396,26 @@ document.getElementById('paymentsBody').addEventListener('click', (e) => {
 });
 
 document.getElementById('profPaymentsList').addEventListener('click', async (e) => {
+  const checkChargeBtn = e.target.closest('[data-check-profile-charge]');
+  if (checkChargeBtn) {
+    const chargeId = Number(checkChargeBtn.dataset.checkProfileCharge || 0);
+    if (!chargeId) return;
+    await withLoading(checkChargeBtn, async () => {
+      try {
+        const res = await api(`/api/gateways/charges/${chargeId}/check`, { method: 'POST' });
+        if (res?.paid) {
+          showToast('Pagamento confirmado e baixa registrada!');
+          if (state.selectedProfileId) await openProfile(state.selectedProfileId);
+          Promise.allSettled([loadGatewayCharges(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]).catch(() => {});
+        } else {
+          showToast('Pagamento ainda consta como pendente no Mercado Pago.', true);
+        }
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    return;
+  }
   const printBtn = e.target.closest('[data-print-prof-payment]');
   if (printBtn) {
     const pay = (state.selectedProfilePayments || []).find((p) => Number(p.id) === Number(printBtn.dataset.printProfPayment));
