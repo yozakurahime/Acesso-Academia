@@ -275,15 +275,15 @@ export class GatewayService {
     );
   }
 
-  async createCheckoutCharge({ member_id, plan_id = null }) {
+  async createCheckoutCharge({ member_id, plan_id = null, amount_cents = null }) {
     const memberId = Number(member_id);
-    if (this.checkoutRequests.has(memberId)) return this.checkoutRequests.get(memberId);
-    const request = this.openCheckoutCharge(memberId, plan_id);
-    this.checkoutRequests.set(memberId, request);
+    if (!amount_cents && this.checkoutRequests.has(memberId)) return this.checkoutRequests.get(memberId);
+    const request = this.openCheckoutCharge(memberId, plan_id, amount_cents);
+    if (!amount_cents) this.checkoutRequests.set(memberId, request);
     try {
       return await request;
     } finally {
-      this.checkoutRequests.delete(memberId);
+      if (!amount_cents) this.checkoutRequests.delete(memberId);
     }
   }
 
@@ -299,10 +299,12 @@ export class GatewayService {
     return { charge, whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(message)}` };
   }
 
-  async openCheckoutCharge(memberId, planId) {
+  async openCheckoutCharge(memberId, planId, customAmountCents = null) {
     const settings = this.store.getSettings();
     const member = this.store.get('SELECT * FROM members WHERE id = ?', [memberId]);
-    const { plan, cents, charge } = this.resolveBillableMember(member, planId);
+    const { plan, cents: baseCents, charge } = this.resolveBillableMember(member, planId);
+    const parsedCustom = Number(customAmountCents);
+    const cents = Number.isSafeInteger(parsedCustom) && parsedCustom > 0 ? parsedCustom : baseCents;
     const existing = this.store.get(`SELECT * FROM gateway_charges WHERE member_id = ? AND plan_id = ? AND amount_cents = ?
       AND membership_charge_id IS ? AND checkout_ref IS NOT NULL AND status = 'pending'
       AND created_at > datetime('now', 'localtime', '-24 hours') ORDER BY id DESC LIMIT 1`,

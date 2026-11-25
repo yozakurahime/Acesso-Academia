@@ -2204,6 +2204,42 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     res.set('Cache-Control', 'no-store').status(201).json(await gatewayService.createWhatsAppCheckout(req.body?.member_id));
   }));
 
+  router.post(
+    '/gateways/mp/send-whatsapp-charge',
+    requireReception,
+    limitExpensive,
+    handle(async (req, res) => {
+      if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
+      if (!whatsappService) throw Object.assign(new Error('WhatsApp não inicializado.'), { statusCode: 400 });
+      const { member_id, plan_id = null, amount_cents = null, mode = 'checkout' } = req.body || {};
+      const member = accessService.getMember(member_id);
+      if (!member) throw Object.assign(new Error('Aluno não encontrado.'), { statusCode: 404 });
+      const phone = String(member.phone || member.guardian_phone || '').trim();
+      if (!phone) throw Object.assign(new Error('Cadastre um WhatsApp válido no perfil do aluno antes de enviar.'), { statusCode: 400 });
+
+      const charge = mode === 'pix'
+        ? await gatewayService.createPixCharge({ member_id: member.id, plan_id, amount_cents })
+        : await gatewayService.createCheckoutCharge({ member_id: member.id, plan_id, amount_cents });
+
+      const settings = store.getSettings();
+      const firstName = String(member.name || 'Aluno').trim().split(/\s+/)[0];
+      const gym = settings.gym_name || 'Academia Oxigênio';
+      const amount = (Number(charge.amount_cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const message = mode === 'pix' && charge.qr_code
+        ? `Olá, ${firstName}! Segue o Pix Copia e Cola de *${amount}* na ${gym}:\n\n${charge.qr_code}\n\nAssim que pagar, a baixa e a liberação na catraca acontecem automaticamente!`
+        : `Olá, ${firstName}! Segue o link do Mercado Pago para pagar sua mensalidade de *${amount}* na ${gym} (Pix ou Cartão):\n\n${charge.payment_url}\n\nAssim que concluir, a baixa e a liberação na catraca acontecem automaticamente!`;
+
+      const result = await whatsappService.sendImmediate(phone, message, { kind: 'billing_link', memberId: member.id });
+      whatsappBotService?.recordChatMessage?.({
+        phone,
+        direction: 'out',
+        senderType: 'human',
+        body: message,
+      });
+      res.status(201).json({ ok: true, charge, whatsapp: result });
+    }),
+  );
+
   // Assinaturas Recorrentes Mercado Pago
   router.get('/gateways/mp/subscriptions', requireReception, (req, res) => {
     if (!gatewayService) return res.json([]);
