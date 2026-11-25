@@ -668,10 +668,16 @@ const tabLoaders = {
   chat: loadChats,
   logs: loadLogs,
   reports: () => Promise.all([loadOnce(loadMembers), loadReports()]),
-  settings: () => Promise.all([
-    loadOnce(loadSettings), loadOnce(loadDevices), loadOnce(loadPaymentMethods), loadOnce(loadGymStructure), loadOnce(loadPlans),
-    loadWhatsappStatus(), loadRbacUsers().catch(() => {}), loadAuditLogs().catch(() => {}), loadBackups().catch(() => {}),
-  ]),
+  settings: () => {
+    const tasks = [loadOnce(loadSettings), loadOnce(loadPaymentMethods)];
+    if (activeSettingsCategory === 'devices') tasks.push(loadOnce(loadDevices));
+    else if (activeSettingsCategory === 'structure') tasks.push(loadOnce(loadGymStructure), loadOnce(loadPlans));
+    else if (activeSettingsCategory === 'whatsapp') tasks.push(loadWhatsappStatus().catch(() => {}));
+    else if (activeSettingsCategory === 'system') {
+      tasks.push(loadRbacUsers().catch(() => {}), loadAuditLogs().catch(() => {}), loadBackups().catch(() => {}));
+    }
+    return Promise.all(tasks);
+  },
 };
 
 function loadTab(tabName) {
@@ -10205,6 +10211,19 @@ function activateSettingsCategory(category = 'general', subIndex = 0) {
     el.classList.toggle('settings-cat-hidden', el.dataset.settingsCat !== category);
   });
   renderSettingsSubNav(category, subIndex);
+  if (category === 'devices') loadOnce(loadDevices).catch(() => {});
+  else if (category === 'structure') Promise.all([loadOnce(loadGymStructure), loadOnce(loadPlans)]).catch(() => {});
+  else if (category === 'whatsapp') loadWhatsappStatus().catch(() => {});
+  else if (category === 'system') {
+    Promise.all([loadRbacUsers().catch(() => {}), loadAuditLogs().catch(() => {}), loadBackups().catch(() => {})]).catch(() => {});
+  }
+}
+
+function getSettingsSearchHaystack(el) {
+  if (!el.dataset.searchCache) {
+    el.dataset.searchCache = `${el.dataset.settingsKeywords || ''} ${el.textContent || ''}`.toLowerCase();
+  }
+  return el.dataset.searchCache;
 }
 
 function filterSettingsContent(rawQuery) {
@@ -10241,7 +10260,7 @@ function filterSettingsContent(rawQuery) {
           card.classList.add('settings-cat-hidden');
           return;
         }
-        const hay = `${card.dataset.settingsKeywords || ''} ${card.textContent || ''}`.toLowerCase();
+        const hay = getSettingsSearchHaystack(card);
         const match = hay.includes(query);
         card.classList.toggle('settings-cat-hidden', !match);
         if (match) {
@@ -10253,7 +10272,7 @@ function filterSettingsContent(rawQuery) {
       return;
     }
 
-    const hay = `${block.dataset.settingsKeywords || ''} ${block.textContent || ''}`.toLowerCase();
+    const hay = getSettingsSearchHaystack(block);
     const match = hay.includes(query);
     block.classList.toggle('settings-cat-hidden', !match);
     if (match) visibleCards += 1;
@@ -10275,8 +10294,11 @@ document.getElementById('settingsSubNav')?.addEventListener('click', (e) => {
   activateSettingsCategory(activeSettingsCategory, idx);
 });
 
+let settingsSearchTimer = null;
 document.getElementById('settingsSearchInput')?.addEventListener('input', (e) => {
-  filterSettingsContent(e.target.value);
+  const val = e.target.value;
+  clearTimeout(settingsSearchTimer);
+  settingsSearchTimer = setTimeout(() => filterSettingsContent(val), 120);
 });
 
 document.getElementById('btnClearSettingsSearch')?.addEventListener('click', () => {

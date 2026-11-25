@@ -3188,6 +3188,13 @@ input.is-cpf-error {
 #profKpiCredit,
 #profPaymentsList strong,
 #billingSummary,
-#billingCartTotal {
+#billingCartTotal,
+#settings-plans td,
+#settings-audit td:first-child,
+#settings-backup td {
   font-variant-numeric: tabular-nums;
+}
+#tab-settings tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 44px;
 }
