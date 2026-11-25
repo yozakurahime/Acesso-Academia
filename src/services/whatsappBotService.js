@@ -243,7 +243,7 @@ export class WhatsappBotService {
   listChats() {
     const items = this.store.all(
       `SELECT c.phone, c.contact_name, c.member_id, c.bot_paused, c.needs_human, c.handoff_summary, c.internal_note,
-              c.unread_count, c.last_message, c.last_message_at,
+              COALESCE(c.opt_out, 0) AS opt_out, c.unread_count, c.last_message, c.last_message_at,
               m.name AS member_name, m.status AS member_status, m.valid_until AS member_valid_until
        FROM whatsapp_chats c
        LEFT JOIN members m ON m.id = c.member_id
@@ -339,6 +339,30 @@ export class WhatsappBotService {
     if (paused) this.pauseContact(phone, this.humanPauseMs);
     else this.resumeContact(phone);
     return { phone: normalizeBrPhone(phone) || phone, bot_paused: paused ? 1 : 0 };
+  }
+
+  setCampaignOptOut(phone, optOut) {
+    const normalized = normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
+    if (!normalized) return null;
+    const flag = optOut ? 1 : 0;
+    this.store.run(
+      `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
+       VALUES (?, ?, datetime('now', 'localtime'))
+       ON CONFLICT(phone) DO UPDATE SET opt_out = excluded.opt_out`,
+      [normalized, flag],
+    );
+    this.store.run(
+      "UPDATE members SET whatsapp_opt_out = ?, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
+      [flag, normalized.slice(-9)],
+    );
+    if (flag === 1) {
+      this.store.run(
+        `UPDATE whatsapp_logs SET status = 'skipped', error = 'Disparos automáticos pausados pela recepção'
+         WHERE phone = ? AND status = 'queued'`,
+        [normalized],
+      );
+    }
+    return { phone: normalized, opt_out: flag };
   }
 
   _getHistory(phone, nowMs = Date.now()) {

@@ -2094,6 +2094,16 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   );
 
   router.post(
+    '/whatsapp/chats/:phone/opt-out',
+    requireReception,
+    handle(async (req, res) => {
+      if (!whatsappBotService) throw new Error('Bot WhatsApp não inicializado.');
+      const optOut = Boolean(req.body?.optOut);
+      res.json(whatsappBotService.setCampaignOptOut(req.params.phone, optOut));
+    }),
+  );
+
+  router.post(
     '/whatsapp/chats/:phone/note',
     requireReception,
     handle(async (req, res) => {

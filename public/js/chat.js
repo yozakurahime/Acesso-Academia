@@ -58,7 +58,7 @@ function renderChatList() {
     return name.includes(q) || String(c.phone || '').includes(q);
   });
 
-  const renderKey = `${activeChatPhone || ''}|${chatFilterMode}|${q}|${filtered.map((c) => `${c.phone}:${c.last_message_at || ''}:${c.unread_count || 0}:${c.needs_human || 0}:${c.internal_note ? 1 : 0}`).join(';')}`;
+  const renderKey = `${activeChatPhone || ''}|${chatFilterMode}|${q}|${filtered.map((c) => `${c.phone}:${c.last_message_at || ''}:${c.unread_count || 0}:${c.needs_human || 0}:${c.internal_note ? 1 : 0}:${c.opt_out || 0}`).join(';')}`;
   if (listEl.dataset.renderKey === renderKey) return;
   listEl.dataset.renderKey = renderKey;
 
@@ -72,9 +72,11 @@ function renderChatList() {
     const initials = memberInitials(title);
     const activeClass = c.phone === activeChatPhone ? ' active' : '';
     const isHuman = Number(c.needs_human) === 1;
+    const isOptOut = Number(c.opt_out) === 1;
     const humanTag = isHuman
       ? '<span class="badge badge-pending">Atendente</span>'
       : (Number(c.unread_count) > 0 ? `<span class="badge badge-active">${Number(c.unread_count)}</span>` : '');
+    const optOutBadge = isOptOut ? '<span title="Disparos automáticos parados" aria-label="Disparos automáticos parados" style="font-size:11px;opacity:0.85;">🔕</span>' : '';
     const noteBadge = c.internal_note ? '<span title="Possui nota interna" aria-label="Possui nota interna" style="font-size:11px;opacity:0.75;">📝</span>' : '';
     const timeStr = formatChatItemTime(c.last_message_at);
     return `
@@ -87,7 +89,7 @@ function renderChatList() {
           </div>
           <div class="chat-item-bottom">
             <div class="chat-item-preview">${escapeHtml(c.last_message || '')}</div>
-            ${noteBadge}${humanTag}
+            ${optOutBadge}${noteBadge}${humanTag}
           </div>
         </div>
       </button>
@@ -109,10 +111,15 @@ async function openChat(phone) {
   const title = chat.member_name || chat.contact_name || chat.phone;
   const paused = Number(chat.bot_paused) === 1;
   const needsHuman = Number(chat.needs_human) === 1;
+  const optOut = Number(chat.opt_out) === 1;
   const hasNote = Boolean(String(chat.internal_note || '').trim());
   const headerEl = document.getElementById('chatHeader');
   if (headerEl) {
     const toggleLabel = needsHuman ? 'Resolver e retomar bot' : (paused ? 'Retomar bot' : 'Pausar bot');
+    const optOutLabel = optOut ? '🔕 Disparos parados' : 'Parar disparos';
+    const optOutTitle = optOut
+      ? 'Disparos automáticos bloqueados para este número (clique para reativar)'
+      : 'Parar disparos automáticos (cobrança, aniversário, inatividade) para este número';
     const validLabel = chat.member_valid_until ? ` · vence ${chat.member_valid_until}` : '';
     const memberBtnHtml = chat.member_id
       ? '<button type="button" id="btnChatMemberBilling" class="btn btn-secondary btn-sm">Cobrar / Plano</button>'
@@ -129,6 +136,7 @@ async function openChat(phone) {
       <div class="inline-actions">
         <button type="button" id="btnToggleChatNote" class="btn btn-secondary btn-sm" title="Nota interna">${hasNote ? '📝 Nota' : 'Nota'}</button>
         ${memberBtnHtml}
+        <button type="button" id="btnToggleChatOptOut" class="btn ${optOut ? 'btn-danger' : 'btn-secondary'} btn-sm" title="${escapeHtml(optOutTitle)}">${optOutLabel}</button>
         <button type="button" id="btnToggleChatBot" class="btn ${needsHuman ? 'btn-primary' : 'btn-secondary'} btn-sm">${toggleLabel}</button>
       </div>
     `;
@@ -153,6 +161,18 @@ async function openChat(phone) {
           return;
         }
         await jumpToPaymentForMember(member);
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    });
+    document.getElementById('btnToggleChatOptOut')?.addEventListener('click', async () => {
+      try {
+        await api(`/api/whatsapp/chats/${encodeURIComponent(phone)}/opt-out`, {
+          method: 'POST',
+          body: JSON.stringify({ optOut: !optOut }),
+        });
+        showToast(optOut ? 'Disparos automáticos reativados para este número.' : 'Disparos automáticos bloqueados para este número.');
+        await Promise.all([openChat(phone), loadChats({ skipActiveReload: true })]);
       } catch (err) {
         showToast(err.message, true);
       }
@@ -259,7 +279,8 @@ async function loadChats({ skipActiveReload = false } = {}) {
     const activeChanged = !prevActive || !nextActive
       || prevActive.last_message_at !== nextActive.last_message_at
       || Number(prevActive.unread_count || 0) !== Number(nextActive.unread_count || 0)
-      || Number(prevActive.needs_human || 0) !== Number(nextActive.needs_human || 0);
+      || Number(prevActive.needs_human || 0) !== Number(nextActive.needs_human || 0)
+      || Number(prevActive.opt_out || 0) !== Number(nextActive.opt_out || 0);
     if (activeChanged) {
       await openChat(activeChatPhone);
     }

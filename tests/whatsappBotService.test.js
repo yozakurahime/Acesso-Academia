@@ -730,3 +730,50 @@ test('OnlineSalesBotService tranca matricula pelo WhatsApp sem pedir atestado me
   assert.match(again.reply, /já está trancada/i);
   assert.match(again.reply, /Não exigimos atestado médico/i);
 });
+
+test('WhatsappBotService.setCampaignOptOut bloqueia e reativa disparos automaticos por telefone e cancela fila pendente', async () => {
+  const store = await DatabaseStore.create(null);
+  const { WhatsappService } = await import('../src/services/whatsappService.js');
+  const wa = new WhatsappService(store);
+  const bot = new WhatsappBotService(store);
+
+  const planId = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Mensal', 30, 10000)").lastInsertRowid;
+  const memberId = store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Jonathas Errado', '52998224725', '5562993334455', 'active', '2026-12-01', ?)",
+    [planId],
+  ).lastInsertRowid;
+
+  const queued = wa.enqueueMessage({
+    memberId,
+    phone: '5562993334455',
+    kind: 'due_reminder',
+    refKey: '2026-12-01',
+    message: 'Lembrete pendente',
+  });
+  assert.ok(queued);
+
+  const optRes = bot.setCampaignOptOut('5562993334455', true);
+  assert.equal(optRes.opt_out, 1);
+
+  const logRow = store.get('SELECT status, error FROM whatsapp_logs WHERE id = ?', [queued.id]);
+  assert.equal(logRow.status, 'skipped');
+
+  const blocked = wa.enqueueMessage({
+    memberId: null,
+    phone: '5562993334455',
+    kind: 'inactive',
+    refKey: '2026-12-02',
+    message: 'Oi, sumiu!',
+  });
+  assert.equal(blocked, null);
+
+  bot.setCampaignOptOut('5562993334455', false);
+  const reenabled = wa.enqueueMessage({
+    memberId,
+    phone: '5562993334455',
+    kind: 'inactive',
+    refKey: '2026-12-03',
+    message: 'Voltou!',
+  });
+  assert.ok(reenabled);
+});

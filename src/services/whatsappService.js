@@ -779,6 +779,12 @@ export class WhatsappService {
         );
       }
       this.store.run(
+        `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
+         VALUES (?, 1, datetime('now', 'localtime'))
+         ON CONFLICT(phone) DO UPDATE SET opt_out = 1`,
+        [normalized],
+      );
+      this.store.run(
         `UPDATE whatsapp_logs SET status = 'skipped', error = 'Opt-out solicitado pelo aluno'
          WHERE phone = ? AND status = 'queued'`,
         [normalized],
@@ -786,6 +792,12 @@ export class WhatsappService {
       return true;
     }
     if (/^(voltar|ativar|receber)\b/.test(clean)) {
+      this.store.run(
+        `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
+         VALUES (?, 0, datetime('now', 'localtime'))
+         ON CONFLICT(phone) DO UPDATE SET opt_out = 0`,
+        [normalized],
+      );
       this.store.run(
         "UPDATE members SET whatsapp_opt_out = 0, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
         [normalized.slice(-9)],
@@ -812,6 +824,12 @@ export class WhatsappService {
         [normalizedPhone.slice(-9)],
       );
       if (phoneOptedOut) return null;
+
+      const chatOptedOut = this.store.get(
+        "SELECT phone FROM whatsapp_chats WHERE opt_out = 1 AND (phone = ? OR phone LIKE '%' || ?) LIMIT 1",
+        [normalizedPhone, normalizedPhone.slice(-9)],
+      );
+      if (chatOptedOut) return null;
     }
 
     const knownBad = this.store.get(
