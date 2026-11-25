@@ -2211,28 +2211,74 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     handle(async (req, res) => {
       if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
       if (!whatsappService) throw Object.assign(new Error('WhatsApp não inicializado.'), { statusCode: 400 });
-      const { member_id, plan_id = null, amount_cents = null, mode = 'checkout' } = req.body || {};
+      const { member_id, plan_id = null, amount_cents = null, mode = 'pix' } = req.body || {};
       const member = accessService.getMember(member_id);
       if (!member) throw Object.assign(new Error('Aluno não encontrado.'), { statusCode: 404 });
       const phone = String(member.phone || member.guardian_phone || '').trim();
       if (!phone) throw Object.assign(new Error('Cadastre um WhatsApp válido no perfil do aluno antes de enviar.'), { statusCode: 400 });
 
-      const charge = mode === 'pix'
-        ? await gatewayService.createPixCharge({ member_id: member.id, plan_id, amount_cents })
-        : await gatewayService.createCheckoutCharge({ member_id: member.id, plan_id, amount_cents });
+      const charge = mode === 'checkout'
+        ? await gatewayService.createCheckoutCharge({ member_id: member.id, plan_id, amount_cents })
+        : await gatewayService.createPixCharge({ member_id: member.id, plan_id, amount_cents });
 
       const settings = store.getSettings();
+      const portalBase = String(settings.portal_url || process.env.PORTAL_URL || 'https://sistema.academiaoxigenio.com')
+        .trim()
+        .replace(/\/+$/, '');
+      const payPageUrl = authService && charge?.id
+        ? `${portalBase}/pagar.html?t=${encodeURIComponent(authService.signPixViewToken(charge.id))}`
+        : (charge.payment_url || null);
+
       const firstName = String(member.name || 'Aluno').trim().split(/\s+/)[0];
       const gym = settings.gym_name || 'Academia Oxigênio';
       const amount = (Number(charge.amount_cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      const message = mode === 'pix' && charge.qr_code
-        ? `Olá, ${firstName}! Segue o Pix Copia e Cola de *${amount}* na ${gym}:\n\n${charge.qr_code}\n\nAssim que pagar, a baixa e a liberação na catraca acontecem automaticamente!`
-        : `Olá, ${firstName}! Segue o link do Mercado Pago para pagar sua mensalidade de *${amount}* na ${gym} (Pix ou Cartão):\n\n${charge.payment_url}\n\nAssim que concluir, a baixa e a liberação na catraca acontecem automaticamente!`;
 
-      const result = await whatsappService.sendImmediate(phone, message, { kind: 'billing_link', memberId: member.id, senderType: 'human' });
-      res.status(201).json({ ok: true, charge, whatsapp: result });
+      if (mode !== 'checkout' && charge.qr_code) {
+        const introLines = [
+          `Olá, ${firstName}! Segue o Pix da sua mensalidade de *${amount}* na ${gym}.`,
+          'Toque e segure na *próxima mensagem* para copiar o código Pix no app do seu banco.',
+          payPageUrl ? `Ou toque neste link para copiar com 1 clique / ver o QR Code:\n${payPageUrl}` : '',
+        ].filter(Boolean).join('\n\n');
+        const result = await whatsappService.sendImmediate(phone, introLines, { kind: 'billing_link', memberId: member.id, senderType: 'human' });
+        await whatsappService.sendImmediate(phone, charge.qr_code, { kind: 'billing_pix_code', memberId: member.id, senderType: 'human' });
+        return res.status(201).json({ ok: true, charge, payPageUrl, whatsapp: result });
+      }
+
+      const fallbackMsg = `Olá, ${firstName}! Segue o link para pagar sua mensalidade de *${amount}* na ${gym}:\n\n${payPageUrl || charge.payment_url}\n\nAssim que concluir, a baixa e a liberação na catraca acontecem automaticamente!`;
+      const result = await whatsappService.sendImmediate(phone, fallbackMsg, { kind: 'billing_link', memberId: member.id, senderType: 'human' });
+      res.status(201).json({ ok: true, charge, payPageUrl, whatsapp: result });
     }),
   );
+
+  router.get('/public/pix-charge', limitExpensive, handle(async (req, res) => {
+    const parsed = authService?.verifyPixViewToken(req.query?.t);
+    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado. Peça um novo Pix à recepção.' });
+    const row = store.get(
+      `SELECT gc.id, gc.status, gc.amount_cents, gc.qr_code, gc.qr_base64, gc.paid_at,
+              m.name AS member_name, p.name AS plan_name
+       FROM gateway_charges gc
+       JOIN members m ON m.id = gc.member_id
+       LEFT JOIN plans p ON p.id = gc.plan_id
+       WHERE gc.id = ?`,
+      [parsed.chargeId],
+    );
+    if (!row) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    res.set('Cache-Control', 'no-store').json({
+      ...row,
+      gym_name: store.getSettings().gym_name || 'Academia Oxigênio',
+    });
+  }));
+
+  router.post('/public/pix-charge/check', limitExpensive, handle(async (req, res) => {
+    if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
+    const parsed = authService?.verifyPixViewToken(req.body?.token);
+    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado.' });
+    const result = await gatewayService.checkChargeStatus(parsed.chargeId);
+    res.set('Cache-Control', 'no-store').json({
+      paid: Boolean(result?.paid),
+      status: result?.paid ? 'paid' : 'pending',
+    });
+  }));
 
   // Assinaturas Recorrentes Mercado Pago
   router.get('/gateways/mp/subscriptions', requireReception, (req, res) => {

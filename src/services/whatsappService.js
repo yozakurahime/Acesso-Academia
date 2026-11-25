@@ -1580,10 +1580,15 @@ export class WhatsappService {
     try {
       const { charge } = await this.gatewayService.createBatchPayment({
         memberIds: [Number(item.member_id)],
-        mode: 'checkout',
+        mode: 'pix',
       });
+      if (charge?.qr_code) {
+        const enriched = `${baseText}\n\nPix Copia e Cola:\n${charge.qr_code}`;
+        this.store.run('UPDATE whatsapp_logs SET message = ? WHERE id = ?', [enriched, item.id]);
+        return enriched;
+      }
       if (charge?.payment_url) {
-        const enriched = `${baseText}\n\nPague agora (Pix ou Cartão): ${charge.payment_url}`;
+        const enriched = `${baseText}\n\nPague agora: ${charge.payment_url}`;
         this.store.run('UPDATE whatsapp_logs SET message = ? WHERE id = ?', [enriched, item.id]);
         return enriched;
       }

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pagar Mensalidade (Pix) | Academia Oxigênio</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #111827;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --muted: #cbd5e1;
+      --success: #16a34a;
+      --success-hover: #15803d;
+      --accent: #f97316;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 20px 14px;
+    }
+    .wrap { width: 100%; max-width: 460px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+      text-align: center;
+    }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    .member-name { font-size: 18px; font-weight: 700; margin: 4px 0; color: #fff; }
+    .plan-name { font-size: 15px; color: var(--muted); margin: 0 0 14px; }
+    .amount {
+      font-size: 36px;
+      font-weight: 800;
+      color: #4ade80;
+      margin: 8px 0 18px;
+    }
+    .btn-copy-big {
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 18px 16px;
+      font-size: 19px;
+      font-weight: 800;
+      cursor: pointer;
+      background: var(--success);
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(22, 163, 74, 0.35);
+      margin-bottom: 14px;
+    }
+    .btn-copy-big:active { transform: scale(0.98); background: var(--success-hover); }
+    .copy-feedback {
+      background: rgba(22, 163, 74, 0.16);
+      border: 1px solid rgba(74, 222, 128, 0.45);
+      color: #bbf7d0;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 15px;
+      line-height: 1.4;
+      margin-bottom: 16px;
+    }
+    .qr-wrap {
+      background: #fff;
+      border-radius: 14px;
+      padding: 14px;
+      display: inline-block;
+      margin: 6px 0 12px;
+    }
+    .qr-wrap img { width: 220px; height: 220px; display: block; }
+    .steps {
+      text-align: left;
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 12px 0 16px;
+      color: var(--muted);
+    }
+    .steps ol { margin: 6px 0 0; padding-left: 20px; }
+    .btn-check {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #1e293b;
+      color: #fff;
+    }
+    .paid-box {
+      background: rgba(22, 163, 74, 0.18);
+      border: 1px solid rgba(74, 222, 128, 0.5);
+      color: #dcfce7;
+      border-radius: 14px;
+      padding: 20px;
+      font-size: 18px;
+      line-height: 1.5;
+      margin-top: 12px;
+    }
+    .error-box {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #fecaca;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 16px;
+      margin-top: 12px;
+    }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 id="gymTitle">Pagamento via Pix</h1>
+      <p id="loadingText" class="plan-name">Carregando cobrança...</p>
+
+      <div id="payBox" hidden>
+        <div id="memberName" class="member-name"></div>
+        <div id="planName" class="plan-name"></div>
+        <div id="amountText" class="amount"></div>
+
+        <button type="button" id="btnCopyPix" class="btn-copy-big">📋 COPIAR CÓDIGO PIX</button>
+        <div id="copyFeedback" class="copy-feedback" hidden>
+          ✅ <strong>Código Pix copiado!</strong><br />
+          Agora abra o aplicativo do seu banco, escolha <strong>Pix Copia e Cola</strong> e cole o código.
+        </div>
+
+        <div id="qrWrap" class="qr-wrap" hidden>
+          <img id="qrImg" alt="QR Code Pix" />
+        </div>
+
+        <div class="steps">
+          <strong>Como pagar pelo celular:</strong>
+          <ol>
+            <li>Toque no botão verde <strong>COPIAR CÓDIGO PIX</strong> acima.</li>
+            <li>Abra o aplicativo do seu banco.</li>
+            <li>Vá em <strong>Pix &rarr; Pix Copia e Cola</strong>, cole e confirme.</li>
+          </ol>
+        </div>
+
+        <button type="button" id="btnCheckNow" class="btn-check">Já paguei — verificar agora</button>
+      </div>
+
+      <div id="paidBox" class="paid-box" hidden>
+        ✅ <strong>Pagamento confirmado!</strong><br />
+        Sua mensalidade foi baixada e o acesso na catraca já está liberado. Bom treino!
+      </div>
+
+      <div id="errorBox" class="error-box" hidden></div>
+    </div>
+  </div>
+
+  <script>
+    (async () => {
+      const token = new URLSearchParams(location.search).get('t') || '';
+      const gymTitle = document.getElementById('gymTitle');
+      const loadingText = document.getElementById('loadingText');
+      const payBox = document.getElementById('payBox');
+      const paidBox = document.getElementById('paidBox');
+      const errorBox = document.getElementById('errorBox');
+      const memberName = document.getElementById('memberName');
+      const planName = document.getElementById('planName');
+      const amountText = document.getElementById('amountText');
+      const btnCopyPix = document.getElementById('btnCopyPix');
+      const copyFeedback = document.getElementById('copyFeedback');
+      const qrWrap = document.getElementById('qrWrap');
+      const qrImg = document.getElementById('qrImg');
+      const btnCheckNow = document.getElementById('btnCheckNow');
+
+      let qrCode = '';
+      let pollTimer = null;
+
+      function showPaid() {
+        if (pollTimer) clearInterval(pollTimer);
+        payBox.hidden = true;
+        paidBox.hidden = false;
+      }
+
+      if (!token) {
+        loadingText.hidden = true;
+        errorBox.textContent = 'Link inválido. Peça um novo Pix para a recepção.';
+        errorBox.hidden = false;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/public/pix-charge?t=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || 'Não foi possível carregar o Pix.');
+        gymTitle.textContent = data.gym_name || 'Pagamento via Pix';
+        loadingText.hidden = true;
+        if (data.status === 'paid') {
+          showPaid();
+          return;
+        }
+        memberName.textContent = data.member_name || 'Aluno';
+        planName.textContent = data.plan_name || 'Mensalidade';
+        amountText.textContent = (Number(data.amount_cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        qrCode = String(data.qr_code || '');
+        if (data.qr_base64) {
+          qrImg.src = data.qr_base64;
+          qrWrap.hidden = false;
+        }
+        payBox.hidden = false;
+      } catch (err) {
+        loadingText.hidden = true;
+        errorBox.textContent = err.message;
+        errorBox.hidden = false;
+        return;
+      }
+
+      btnCopyPix.addEventListener('click', async () => {
+        if (!qrCode) return;
+        try {
+          await navigator.clipboard.writeText(qrCode);
+          copyFeedback.hidden = false;
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = qrCode;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          copyFeedback.hidden = false;
+        }
+      });
+
+      async function checkStatus(manual = false) {
+        if (manual) {
+          btnCheckNow.disabled = true;
+          btnCheckNow.textContent = 'Verificando...';
+        }
+        try {
+          const res = await fetch('/api/public/pix-charge/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          });
+          const data = await res.json();
+          if (res.ok && data?.paid) {
+            showPaid();
+            return;
+          }
+          if (manual) {
+            btnCheckNow.textContent = 'Ainda aguardando — tentar novamente';
+            btnCheckNow.disabled = false;
+          }
+        } catch {
+          if (manual) {
+            btnCheckNow.textContent = 'Já paguei — verificar agora';
+            btnCheckNow.disabled = false;
+          }
+        }
+      }
+
+      btnCheckNow.addEventListener('click', () => checkStatus(true));
+      pollTimer = setInterval(() => checkStatus(false), 5000);
+    })();
+  </script>
+</body>
+</html>

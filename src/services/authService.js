@@ -136,6 +136,38 @@ export class AuthService {
     }
   }
 
+  getPixViewSecret() {
+    return crypto.createHmac('sha256', this.getSecret()).update('pix-view-v1').digest();
+  }
+
+  signPixViewToken(chargeId, ttlMs = 72 * 60 * 60 * 1000) {
+    const id = Number(chargeId);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('Cobrança inválida.');
+    const exp = Date.now() + Math.max(60_000, Number(ttlMs) || 72 * 60 * 60 * 1000);
+    const payload = Buffer.from(JSON.stringify({ c: id, purpose: 'pix_view', exp })).toString('base64url');
+    const sig = crypto.createHmac('sha256', this.getPixViewSecret()).update(payload).digest('base64url');
+    return `${payload}.${sig}`;
+  }
+
+  verifyPixViewToken(token) {
+    if (!token || !String(token).includes('.')) return null;
+    const [payload, sig] = String(token).trim().split('.');
+    if (!payload || !sig) return null;
+    const expectedSig = crypto.createHmac('sha256', this.getPixViewSecret()).update(payload).digest('base64url');
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expectedSig);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+      const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      if (data?.purpose !== 'pix_view' || !data?.exp || Date.now() > Number(data.exp)) return null;
+      const chargeId = Number(data.c);
+      if (!Number.isInteger(chargeId) || chargeId <= 0) return null;
+      return { chargeId, exp: Number(data.exp) };
+    } catch {
+      return null;
+    }
+  }
+
   rotateSessionSecret() {
     const generated = crypto.randomBytes(32).toString('hex');
     this.store.updateSettings({ auth_session_secret: generated });

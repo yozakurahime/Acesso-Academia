@@ -190,4 +190,8 @@ test('AuthService assina e valida token temporario para envio de foto FaceID', a
 
   assert.equal(auth.verifyFaceUploadToken(`${token}tampered`), null);
   assert.equal(auth.verifyFaceUploadToken(auth.signStudentToken(42)), null);
+
+  const pixToken = auth.signPixViewToken(99, 60_000);
+  assert.equal(auth.verifyPixViewToken(pixToken)?.chargeId, 99);
+  assert.equal(auth.verifyPixViewToken(`${pixToken}x`), null);
 });

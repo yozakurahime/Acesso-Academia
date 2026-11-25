@@ -7585,14 +7585,15 @@ document.getElementById('btnSendBillingWhatsapp')?.addEventListener('click', asy
         method: 'POST',
         body: JSON.stringify({ member_id: memberId, plan_id: planId, amount_cents: amountCents }),
       });
-      showToast(`Link de pagamento enviado no WhatsApp de ${memberObj?.name || 'aluno'}!`);
+      showToast(`Pix enviado no WhatsApp de ${memberObj?.name || 'aluno'}!`);
       const box = document.getElementById('whatsappCheckoutBox');
       const amountEl = document.getElementById('whatsappCheckoutAmount');
       const linkEl = document.getElementById('whatsappCheckoutLink');
-      if (box && amountEl && linkEl && res?.charge?.payment_url) {
-        amountEl.textContent = `Cobrança de ${fmtMoney(res.charge.amount_cents)} enviada no WhatsApp!`;
-        linkEl.href = res.charge.payment_url;
-        linkEl.textContent = 'Abrir link de pagamento';
+      const targetUrl = res?.payPageUrl || res?.charge?.payment_url;
+      if (box && amountEl && linkEl && targetUrl) {
+        amountEl.textContent = `Pix de ${fmtMoney(res.charge.amount_cents)} enviado no WhatsApp!`;
+        linkEl.href = targetUrl;
+        linkEl.textContent = 'Abrir página do Pix / QR Code';
         box.classList.remove('hidden');
       }
       if (res?.charge?.id && typeof startPaymentAutoPoll === 'function') {
