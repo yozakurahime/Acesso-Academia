@@ -1500,7 +1500,45 @@ export class WhatsappService {
     };
   }
 
-  async sendImmediate(phone, message, { kind = 'test', memberId = null } = {}) {
+  _recordOutboundChatMessage(phone, body, senderType = 'bot') {
+    const normalizedPhone = normalizeBrPhone(phone);
+    const cleanBody = String(body || '').trim();
+    if (!normalizedPhone || !cleanBody) return;
+    if (this.onBotMessage?.recordChatMessage) {
+      this.onBotMessage.recordChatMessage({
+        phone: normalizedPhone,
+        direction: 'out',
+        senderType,
+        body: cleanBody,
+      });
+      return;
+    }
+    try {
+      const member = this.store.get(
+        `SELECT id, name FROM members
+         WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?
+         ORDER BY id DESC LIMIT 1`,
+        [normalizedPhone.slice(-8)],
+      );
+      this.store.run(
+        `INSERT INTO whatsapp_chats (phone, contact_name, member_id, unread_count, last_message, last_message_at)
+         VALUES (?, ?, ?, 0, ?, datetime('now', 'localtime'))
+         ON CONFLICT(phone) DO UPDATE SET
+           contact_name = COALESCE(whatsapp_chats.contact_name, excluded.contact_name),
+           member_id = COALESCE(whatsapp_chats.member_id, excluded.member_id),
+           last_message = excluded.last_message,
+           last_message_at = datetime('now', 'localtime')`,
+        [normalizedPhone, member?.name || null, member?.id || null, cleanBody.slice(0, 240)],
+      );
+      this.store.run(
+        `INSERT INTO whatsapp_chat_messages (phone, direction, sender_type, body)
+         VALUES (?, 'out', ?, ?)`,
+        [normalizedPhone, senderType, cleanBody],
+      );
+    } catch {}
+  }
+
+  async sendImmediate(phone, message, { kind = 'test', memberId = null, senderType = 'human' } = {}) {
     const settings = this.store.getSettings();
     const metaMode = this.isMetaCloudMode(settings);
     const normalizedPhone = normalizeBrPhone(phone);
@@ -1524,11 +1562,13 @@ export class WhatsappService {
       await this.sock.sendPresenceUpdate('paused', jid).catch(() => {});
     }
 
+    const cleanMessage = String(message || '').trim();
     const res = this.store.run(
       `INSERT INTO whatsapp_logs (member_id, phone, kind, message, status, sent_at)
        VALUES (?, ?, ?, ?, 'sent', datetime('now', 'localtime'))`,
-      [memberId, normalizedPhone, kind, String(message || '').trim()],
+      [memberId, normalizedPhone, kind, cleanMessage],
     );
+    this._recordOutboundChatMessage(normalizedPhone, cleanMessage, senderType);
     return this.store.get('SELECT * FROM whatsapp_logs WHERE id = ?', [res.lastInsertRowid]);
   }
 
@@ -1601,6 +1641,7 @@ export class WhatsappService {
         if (!next) break;
 
         try {
+          let sentBody = next.message;
           if (metaMode) {
             if (next.template_name) { let tplParams = []; if (next.template_params) { try { tplParams = JSON.parse(next.template_params); } catch {} } await withTimeout(this.sendMetaTemplate(next.phone, next.template_name, tplParams, 'pt_BR', settings), 15000, 'sendMetaTemplate'); } else { this.store.run("UPDATE whatsapp_logs SET status = 'skipped', error = 'Mensagem sem modelo aprovado para API Meta' WHERE id = ?", [next.id]); continue; }
           } else {
@@ -1626,6 +1667,7 @@ export class WhatsappService {
             }
             const jid = cached.jid;
             const outboundText = await this._enrichMessageWithPaymentLink(next, settings);
+            sentBody = outboundText;
             await this.sock.sendPresenceUpdate('composing', jid).catch(() => {});
             await sleepCancelable(1400 + Math.floor(Math.random() * 1800));
             if (this.status !== 'connected' || !this.sock || this.manualDisconnect) break;
@@ -1637,6 +1679,7 @@ export class WhatsappService {
             `UPDATE whatsapp_logs SET status = 'sent', sent_at = datetime('now', 'localtime') WHERE id = ?`,
             [next.id],
           );
+          this._recordOutboundChatMessage(next.phone, sentBody, 'bot');
 
           sentInBatch += 1;
           if (metaMode) {

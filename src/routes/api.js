@@ -2229,13 +2229,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         ? `Olá, ${firstName}! Segue o Pix Copia e Cola de *${amount}* na ${gym}:\n\n${charge.qr_code}\n\nAssim que pagar, a baixa e a liberação na catraca acontecem automaticamente!`
         : `Olá, ${firstName}! Segue o link do Mercado Pago para pagar sua mensalidade de *${amount}* na ${gym} (Pix ou Cartão):\n\n${charge.payment_url}\n\nAssim que concluir, a baixa e a liberação na catraca acontecem automaticamente!`;
 
-      const result = await whatsappService.sendImmediate(phone, message, { kind: 'billing_link', memberId: member.id });
-      whatsappBotService?.recordChatMessage?.({
-        phone,
-        direction: 'out',
-        senderType: 'human',
-        body: message,
-      });
+      const result = await whatsappService.sendImmediate(phone, message, { kind: 'billing_link', memberId: member.id, senderType: 'human' });
       res.status(201).json({ ok: true, charge, whatsapp: result });
     }),
   );

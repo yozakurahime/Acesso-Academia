@@ -384,3 +384,28 @@ test('WhatsappService enfileira recuperacao de pendentes e anexa link MP em lemb
   const enriched = await wa._enrichMessageWithPaymentLink(dueItem, store.getSettings());
   assert.match(enriched, /https:\/\/mpago\.la\/teste-link-123/);
 });
+
+test('WhatsappService registra envios automaticos e manuais (sendImmediate) no Atendimento WhatsApp', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    whatsapp_enabled: '1',
+    whatsapp_provider: 'meta_cloud',
+    whatsapp_meta_phone_number_id: '123456789',
+    whatsapp_meta_access_token: 'token-teste',
+  });
+  const wa = new WhatsappService(store, {
+    sleepFn: async () => {},
+    fetchFn: async () => ({ ok: true, json: async () => ({ messages: [{ id: 'wamid.out.1' }] }) }),
+  });
+
+  await wa.sendImmediate('62995551122', 'Olá! Segue seu link de pagamento.', { kind: 'billing_link', senderType: 'human' });
+  const msgsAfterImmediate = store.all('SELECT direction, sender_type, body FROM whatsapp_chat_messages WHERE phone = ?', ['5562995551122']);
+  assert.equal(msgsAfterImmediate.length, 1);
+  assert.equal(msgsAfterImmediate[0].direction, 'out');
+  assert.equal(msgsAfterImmediate[0].sender_type, 'human');
+  assert.match(msgsAfterImmediate[0].body, /link de pagamento/i);
+
+  const chatRow = store.get('SELECT last_message, unread_count FROM whatsapp_chats WHERE phone = ?', ['5562995551122']);
+  assert.equal(chatRow.unread_count, 0);
+  assert.match(chatRow.last_message, /link de pagamento/i);
+});
