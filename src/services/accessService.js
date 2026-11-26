@@ -349,6 +349,98 @@ export class AccessService {
     return { approved: true, requestId: id, checkin, releaseError: null };
   }
 
+  async syncWellhubExtensionCheckins(items = []) {
+    const list = Array.isArray(items) ? items : [];
+    const partnerService = new PartnerService(this.store);
+    const normalizeName = (v) =>
+      String(v || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const candidates = this.store.all(
+      `SELECT id, name, partner_provider, wellhub_id, status, access_role
+       FROM members
+       WHERE access_role = 'student' AND status <> 'blocked'
+       ORDER BY CASE WHEN partner_provider = 'wellhub' THEN 0 ELSE 1 END, id ASC`,
+    );
+
+    const matched = [];
+    const unmatched = [];
+    const seenMemberIds = new Set();
+
+    for (const rawItem of list) {
+      const name = String(rawItem?.name || '').trim();
+      const wellhubId = String(rawItem?.wellhub_id || '').trim() || null;
+      if (!name && !wellhubId) continue;
+
+      let member = wellhubId ? partnerService.findMemberByPartner('wellhub', wellhubId) : null;
+      if (!member && name) {
+        const target = normalizeName(name);
+        member = candidates.find((c) => normalizeName(c.name) === target) || null;
+      }
+
+      if (!member) {
+        unmatched.push({ name: name || wellhubId, wellhub_id: wellhubId });
+        continue;
+      }
+      if (seenMemberIds.has(member.id)) continue;
+      seenMemberIds.add(member.id);
+
+      const alreadyChecked = partnerService.hasCheckinToday(member.id, 'wellhub');
+      const checkin = partnerService.recordCheckin({
+        provider: 'wellhub',
+        memberId: member.id,
+        identifier: member.wellhub_id || wellhubId || member.name,
+        source: 'extension',
+        externalId: rawItem?.external_id || null,
+        rawPayload: rawItem,
+      });
+
+      const pendingReq = this.store.get(
+        `SELECT id FROM partner_access_requests
+         WHERE member_id = ? AND provider = 'wellhub' AND request_date = date('now', 'localtime') AND status = 'pending'
+         ORDER BY id DESC LIMIT 1`,
+        [member.id],
+      );
+      if (pendingReq) {
+        this.store.run(
+          "UPDATE partner_access_requests SET status = 'approved', resolved_at = datetime('now', 'localtime') WHERE id = ?",
+          [pendingReq.id],
+        );
+        this._emitPartnerRequest('partner_request_resolved', {
+          id: pendingReq.id,
+          member_id: member.id,
+          status: 'approved',
+        });
+      }
+
+      if (!alreadyChecked || pendingReq) {
+        const fullMember = this.getMember(member.id);
+        if (fullMember) {
+          this.scheduleMemberSync(fullMember);
+        }
+      }
+
+      matched.push({
+        member_id: member.id,
+        name: member.name,
+        already_checked: alreadyChecked,
+        approved_request: Boolean(pendingReq),
+        checkin_id: checkin?.id || null,
+      });
+    }
+
+    return {
+      ok: true,
+      syncedCount: matched.filter((m) => !m.already_checked || m.approved_request).length,
+      matched,
+      unmatched,
+    };
+  }
+
   cancelPartnerRequest(requestId) {
     const id = Number(requestId);
     const req = this.store.get('SELECT * FROM partner_access_requests WHERE id = ?', [id]);

@@ -1016,3 +1016,31 @@ test('Natacao Infantil/Baby exige turma e recepcao pode cadastrar em turma lotad
   const enrolledCount = store.get('SELECT COUNT(*) AS c FROM class_enrollments WHERE class_id = ?', [cls.id]).c;
   assert.equal(enrolledCount, 2);
 });
+
+test('syncWellhubExtensionCheckins registra check-in por nome e aprova solicitacao pendente', async () => {
+  const { store, service } = await createTestEnv();
+  const partnerMember = await service.createMember({
+    name: 'Ordely Rodrigues de Sousa',
+    document: nextCpf(),
+    partner_provider: 'wellhub',
+  });
+  store.run(
+    `INSERT INTO partner_access_requests (member_id, provider, status, request_date)
+     VALUES (?, 'wellhub', 'pending', date('now', 'localtime'))`,
+    [partnerMember.id],
+  );
+
+  const res = await service.syncWellhubExtensionCheckins([
+    { name: 'ordely rodrigues de sousa', modality: 'Musculação', time_text: '26 de nov., 18:10' },
+    { name: 'Pessoa Nao Cadastrada', modality: 'Musculação' },
+  ]);
+
+  assert.equal(res.syncedCount, 1);
+  assert.equal(res.matched.length, 1);
+  assert.equal(res.matched[0].member_id, partnerMember.id);
+  assert.equal(res.matched[0].approved_request, true);
+  assert.equal(res.unmatched.length, 1);
+
+  const reqRow = store.get('SELECT status FROM partner_access_requests WHERE member_id = ?', [partnerMember.id]);
+  assert.equal(reqRow.status, 'approved');
+});

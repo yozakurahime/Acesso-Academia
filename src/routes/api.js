@@ -2495,6 +2495,15 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   );
 
   router.post(
+    '/partners/wellhub/extension-sync',
+    requireReception,
+    handle(async (req, res) => {
+      const result = await accessService.syncWellhubExtensionCheckins(req.body?.items || []);
+      res.json(result);
+    }),
+  );
+
+  router.post(
     '/webhooks/wellhub',
     limitWebhook,
     handle(async (req, res) => {

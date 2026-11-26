@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Oxigênio · Wellhub Auto Check-in",
+  "version": "1.0.0",
+  "description": "Vigia o painel do Wellhub/Gympass aberto, confirma check-ins pendentes e libera automaticamente no sistema Oxigênio.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://partners.gympass.com/*",
+    "https://partners.wellhub.com/*",
+    "https://sistema.academiaoxigenio.com/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://partners.gympass.com/new/validation/*",
+        "https://partners.wellhub.com/new/validation/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Oxigênio · Wellhub Auto Check-in"
+  }
+}
