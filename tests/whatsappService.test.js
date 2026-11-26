@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseStore } from '../src/db.js';
-import { WhatsappService, normalizeBrPhone } from '../src/services/whatsappService.js';
+import { WhatsappService, normalizeBrPhone, brPhoneVariants, areEquivalentBrPhones } from '../src/services/whatsappService.js';
 
 test('normalizeBrPhone formata telefones brasileiros e rejeita inválidos', () => {
   assert.equal(normalizeBrPhone('(11) 99999-8888'), '5511999998888');
@@ -408,4 +408,14 @@ test('WhatsappService registra envios automaticos e manuais (sendImmediate) no A
   const chatRow = store.get('SELECT last_message, unread_count FROM whatsapp_chats WHERE phone = ?', ['5562995551122']);
   assert.equal(chatRow.unread_count, 0);
   assert.match(chatRow.last_message, /link de pagamento/i);
+});
+
+test('brPhoneVariants e areEquivalentBrPhones tratam 12 e 13 digitos BR como equivalentes sem colidir DDD', () => {
+  assert.deepEqual(brPhoneVariants('556292093611'), ['556292093611', '5562992093611']);
+  assert.deepEqual(brPhoneVariants('5562992093611'), ['5562992093611', '556292093611']);
+  assert.equal(areEquivalentBrPhones('556292093611', '5562992093611'), true);
+  assert.equal(areEquivalentBrPhones('(62) 9209-3611', '62992093611'), true);
+  assert.equal(areEquivalentBrPhones('5511992093611', '5562992093611'), false);
+  assert.equal(areEquivalentBrPhones('123', '5562992093611'), false);
+  assert.deepEqual(brPhoneVariants('invalido'), []);
 });

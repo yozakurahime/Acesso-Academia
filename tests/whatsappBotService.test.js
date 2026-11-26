@@ -799,3 +799,145 @@ test('WhatsappBotService.getChatMessages retorna todos os perfis vinculados ao m
     ['Filho Dois', 'Filho Um'],
   );
 });
+
+test('WhatsappBotService e OnlineSalesBotService reconhecem equivalencia de 9o digito BR sem duplicar chats', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'APP_USR_TEST',
+  });
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const gateway = new GatewayService(store, access, { fetchFn: async () => ({ ok: true, json: async () => ({}) }) });
+  const bot = new WhatsappBotService(store, { accessService: access, gatewayService: gateway });
+
+  const planId = store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Musculação Completo', 30, 12000)").lastInsertRowid;
+  store.run(
+    "INSERT INTO members (name, document, phone, status, valid_until, plan_id) VALUES ('Pedro Nono Digito', '52998224725', '556292093611', 'active', '2026-12-20', ?)",
+    [planId],
+  );
+
+  bot.recordChatMessage({ phone: '556292093611', direction: 'in', senderType: 'customer', body: 'Oi' });
+  bot.recordChatMessage({ phone: '5562992093611', direction: 'in', senderType: 'customer', body: 'Quero pagar' });
+
+  const chats = store.all('SELECT phone, member_id FROM whatsapp_chats');
+  assert.equal(chats.length, 1);
+  assert.ok(chats[0].member_id);
+
+  const thread = bot.getChatMessages('5562992093611');
+  assert.equal(thread.linkedMembers.length, 1);
+  assert.equal(thread.linkedMembers[0].name, 'Pedro Nono Digito');
+  assert.equal(thread.messages.length, 2);
+
+  const payMenu = await bot.handleIncomingMessage({ phone: '5562992093611', text: 'quero pagar' });
+  assert.ok(payMenu);
+  assert.match(payMenu.reply, /Pedro Nono Digito/);
+
+  const freezeRes = await bot.handleIncomingMessage({ phone: '5562992093611', text: 'tranca minha matrícula' });
+  assert.ok(freezeRes);
+  assert.match(freezeRes.reply, /trancada com sucesso/i);
+});
+
+test('OnlineSalesBotService lista mais de 6 planos, pre-checa telefone na matricula e rejeita frases nao-nome em ask_name', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'APP_USR_TEST',
+  });
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const gateway = new GatewayService(store, access, { fetchFn: async () => ({ ok: true, json: async () => ({}) }) });
+  const bot = new WhatsappBotService(store, { accessService: access, gatewayService: gateway });
+
+  for (let i = 1; i <= 8; i += 1) {
+    store.run(
+      'INSERT INTO plans (name, duration_days, price_cents, active, online_available) VALUES (?, 30, ?, 1, 1)',
+      [`Plano Online ${i}`, 10000 + i * 1000],
+    );
+  }
+
+  // 1) Novo telefone: em ask_name rejeita "já tenho cadastro" e "quero pagar"
+  const s1 = await bot.handleIncomingMessage({ phone: '5562998887766', text: 'quero me matricular' });
+  assert.match(s1.reply, /nome completo/i);
+
+  const nonName1 = await bot.handleIncomingMessage({ phone: '5562998887766', text: 'já tenho cadastro' });
+  assert.match(nonName1.reply, /CPF|nome e sobrenome/i);
+  assert.doesNotMatch(nonName1.reply, /Certo, \*já tenho cadastro\*/i);
+
+  const nonName2 = await bot.handleIncomingMessage({ phone: '5562998887766', text: 'quero pagar' });
+  assert.match(nonName2.reply, /nome e sobrenome completos/i);
+
+  // Completa nome, CPF e e-mail e verifica que todos os 8 planos aparecem (sem slice(0, 6))
+  await bot.handleIncomingMessage({ phone: '5562998887766', text: 'Fernanda Alves Costa' });
+  await bot.handleIncomingMessage({ phone: '5562998887766', text: '52998224725' });
+  await bot.handleIncomingMessage({ phone: '5562998887766', text: 'pular' });
+  const plansReply = await bot.handleIncomingMessage({ phone: '5562998887766', text: 'sim' });
+  assert.match(plansReply.reply, /Plano Online 7/);
+  assert.match(plansReply.reply, /Plano Online 8/);
+
+  // 2) Telefone ja cadastrado sem plano: pre-checa e vai direto para escolha de plano
+  store.run(
+    "INSERT INTO members (name, document, phone, status, access_role) VALUES ('Rafael Sem Plano', '15350946056', '5562987776655', 'pending', 'student')",
+  );
+  const existingPrecheck = await bot.handleIncomingMessage({ phone: '5562987776655', text: 'quero me matricular' });
+  assert.match(existingPrecheck.reply, /Encontrei o cadastro de \*Rafael\*/);
+  assert.match(existingPrecheck.reply, /Plano Online 8/);
+});
+
+test('WhatsappBotService aplica regexes expandidas, TTL de 2h e safety check de handoff sem marcador', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    whatsapp_bot_enabled: '1',
+    gemini_api_key: 'fake-key',
+    mp_access_token: 'APP_USR_TEST',
+  });
+  let llmCalls = 0;
+  let nextLlmReply = 'A mensalidade custa a partir de R$ 100,00.';
+  const fetchFn = async () => {
+    llmCalls += 1;
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: nextLlmReply }] } }],
+      }),
+    };
+  };
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const gateway = new GatewayService(store, access, { fetchFn });
+  const bot = new WhatsappBotService(store, { fetchFn, accessService: access, gatewayService: gateway });
+
+  assert.equal(bot.onlineSalesBot.sessionTtlMs, 2 * 60 * 60 * 1000);
+
+  // Nao deve disparar fluxo de pagamento para "já realizei o pagamento" nem "valor mensalidade"
+  await bot.handleIncomingMessage({ phone: '5562991112233', text: 'já realizei o pagamento' });
+  assert.equal(llmCalls, 1);
+  await bot.handleIncomingMessage({ phone: '5562991112233', text: 'valor mensalidade musculação' });
+  assert.equal(llmCalls, 2);
+
+  // Frases naturais de trancamento devem acionar _handleFreezeFlow
+  const freezeQ1 = await bot.handleIncomingMessage({ phone: '5562991112233', text: 'posso trancar minha matrícula?' });
+  assert.match(freezeQ1.reply, /Não precisa de atestado médico/i);
+  await bot.handleIncomingMessage({ phone: '5562991112233', text: 'cancelar' });
+
+  const freezeQ2 = await bot.handleIncomingMessage({ phone: '5562991112233', text: 'preciso pausar por cirurgia' });
+  assert.match(freezeQ2.reply, /Não precisa de atestado médico/i);
+
+  // Safety check: LLM promete encaminhar para recepcao sem marcador -> needs_human = 1
+  nextLlmReply = 'Vou encaminhar para nossa recepção confirmar essa informação com você!';
+  const handoffRes = await bot.handleIncomingMessage({ phone: '5562990001122', text: 'Tem aula especial domingo?' });
+  assert.equal(handoffRes.requiresHuman, true);
+  assert.equal(handoffRes.reason, 'llm_handoff_promise');
+  const chatRow = store.get('SELECT needs_human, bot_paused FROM whatsapp_chats WHERE phone = ?', ['5562990001122']);
+  assert.equal(chatRow.needs_human, 1);
+  assert.equal(chatRow.bot_paused, 1);
+
+  // Verifica contexto atualizado
+  const ctx = bot.loadBaseContext();
+  assert.doesNotMatch(ctx, /Musculação \+ Natação Adulto/);
+  assert.match(ctx, /Jiu-Jitsu \+ Musculação: R\$ 150,00/);
+  assert.match(ctx, /Personal Trainer: contratado à parte/i);
+  assert.match(ctx, /não há bloqueio da catraca no próprio dia do vencimento/i);
+});

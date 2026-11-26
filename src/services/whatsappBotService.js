@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeBrPhone } from './whatsappService.js';
+import { normalizeBrPhone, brPhoneVariants, areEquivalentBrPhones } from './whatsappService.js';
 import { OnlineSalesBotService, formatBrl } from './onlineSalesBotService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -10,12 +10,14 @@ const DEFAULT_CONTEXT_PATH = path.resolve(__dirname, '..', 'config', 'defaultBot
 export const CONTEXT_MISSING_HANDOFF_MARKER = '[[HUMAN_HANDOFF_CONTEXT_MISSING]]';
 
 const HUMAN_REQUEST_REGEX = /\b(atendente|humano|pessoa\s+real|falar\s+com\s+(?:algu[eé]m|atendente|recep[cç][aã]o|gerente|dono)|chamar\s+atendente|suporte\s+humano)\b/i;
+const LLM_HANDOFF_PROMISE_REGEX = /\b(?:vou\s+(?:encaminhar|passar|transferir|chamar)\b[^.\n]*\b(?:recep[cç][aã]o|equipe|atendente|humano)|(?:nossa\s+)?(?:recep[cç][aã]o|equipe)\s+(?:vai|ir[aá]|precisa)\s+(?:confirmar|verificar|conferir|responder|concluir|assumir|te\s+chamar|te\s+atender))\b/i;
 
 const DEFAULT_PLAYBOOKS = [
   'Mensalidade: Quando perguntarem valor da mensalidade ou preço de plano, responda com os valores que existirem no contexto. Se não houver valor no contexto, encaminhe para o atendimento humano.',
   'Modalidades: Quando perguntarem modalidades, responda com lista objetiva (nome, frequência, público e observações) priorizando clareza.',
-  'Matrícula Online (Musculação): Para Musculação, oriente que o cliente pode fazer o cadastro, enviar a foto do Face ID e pagar via PIX diretamente pelo link https://sistema.academiaoxigenio.com/matricula.html (ou concluir com atendente humano).',
-  'Regras de Vagas por Turma: Hidroginástica tem limite máximo de 15 alunos por horário; Natação Adulto tem limite máximo de 6 alunos por horário; Pilates das 18h está FECHADO para novas matrículas (somente alunos já matriculados continuam); Natação Infantil e Baby NÃO permitem matrícula ou confirmação automática de vaga online — sempre informe que a vaga precisa ser confirmada pela recepção/professor, colete idade da criança e horário de preferência, e encaminhe para atendimento humano.',
+  'Matrícula Online: Para todas as modalidades abertas (Musculação, Pilates, Dança, Jiu-Jitsu, Hidroginástica, Natação Adulto e Combos), oriente que o cliente pode escolher a modalidade/turma, fazer o cadastro, enviar a foto do Face ID e pagar via PIX diretamente pelo link https://sistema.academiaoxigenio.com/matricula.html (ou concluir por aqui / com atendente humano).',
+  'Regras de Vagas por Turma: Hidroginástica tem limite máximo de 15 alunos por horário (matrícula online automática conforme vagas); Natação Adulto tem limite máximo de 6 alunos por horário (matrícula online automática conforme vagas); Pilates Seg/Qua/Sex 07:00 (Prof. Gustavo) está aberta para novas matrículas e Pilates Seg/Qua/Sex 18:00 está FECHADO para novas matrículas (somente alunos já matriculados continuam); Natação Infantil e Baby NÃO permitem matrícula ou confirmação automática de vaga online — sempre informe que a vaga precisa ser confirmada pela recepção/professor, colete idade da criança e horário de preferência, e encaminhe para atendimento humano.',
+  'Tolerância e Personal Trainer: Não há bloqueio da catraca no próprio dia do vencimento — existe um período de tolerância após o vencimento conforme a regra vigente da academia (sem inventar números não confirmados). Personal Trainer é contratado à parte diretamente com o profissional (não está incluso nos planos da academia).',
   'Trancamento de Matrícula: NÃO exigimos atestado médico para trancar matrícula. O próprio bot realiza o trancamento pelo WhatsApp (limite de 1 trancamento por mês). Nunca peça atestado médico ou encaminhe para a recepção por falta de atestado.',
   'Objeções: Quando houver indecisão (tempo, preço, distância), responda com empatia, destaque benefícios práticos e convide para conhecer a academia.',
 ].join('\n');
@@ -57,7 +59,7 @@ export class WhatsappBotService {
     ownerTakeoverPauseMs = 30 * 60 * 1000,
     historyMaxTurns = 10,
     historyTtlMs = 6 * 60 * 60 * 1000,
-    paymentSessionTtlMs = 30 * 60 * 1000,
+    paymentSessionTtlMs = 2 * 60 * 60 * 1000,
   } = {}) {
     this.store = store;
     this.contextFilePath = contextFilePath;
@@ -88,11 +90,39 @@ export class WhatsappBotService {
     this.onlineSalesBot.setAccessService(accessService);
   }
 
-  isPaused(phone, nowMs = Date.now()) {
+  _resolveChatPhone(phone) {
     const normalized = normalizeBrPhone(phone);
+    if (!normalized) return null;
+    const variants = brPhoneVariants(normalized);
+    if (variants.length > 1) {
+      try {
+        const existing = this.store.get(
+          `SELECT phone FROM whatsapp_chats
+           WHERE phone IN (${variants.map(() => '?').join(', ')})
+           ORDER BY CASE WHEN phone = ? THEN 0 ELSE 1 END, last_message_at DESC
+           LIMIT 1`,
+          [...variants, normalized],
+        );
+        if (existing?.phone) return existing.phone;
+      } catch {
+        // ignore if table not present
+      }
+    }
+    return normalized;
+  }
+
+  isPaused(phone, nowMs = Date.now()) {
+    const normalized = this._resolveChatPhone(phone);
     if (!normalized) return false;
     try {
-      const row = this.store.get('SELECT bot_paused, bot_paused_until FROM whatsapp_chats WHERE phone = ?', [normalized]);
+      const variants = brPhoneVariants(normalized);
+      const row = this.store.get(
+        `SELECT bot_paused, bot_paused_until FROM whatsapp_chats
+         WHERE phone IN (${variants.map(() => '?').join(', ')})
+         ORDER BY CASE WHEN phone = ? THEN 0 ELSE 1 END, last_message_at DESC
+         LIMIT 1`,
+        [...variants, normalized],
+      );
       if (Number(row?.bot_paused) === 1) {
         const dbUntil = Number(row?.bot_paused_until || 0);
         if (dbUntil > 0 && nowMs >= dbUntil) {
@@ -104,17 +134,20 @@ export class WhatsappBotService {
     } catch {
       // ignore if table not present
     }
-    const until = this._pausedUntil.get(normalized);
-    if (!until) return false;
-    if (nowMs >= until) {
-      this._pausedUntil.delete(normalized);
-      return false;
+    for (const v of brPhoneVariants(normalized)) {
+      const until = this._pausedUntil.get(v);
+      if (!until) continue;
+      if (nowMs >= until) {
+        this._pausedUntil.delete(v);
+      } else {
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 
   pauseContact(phone, durationMs = this.humanPauseMs, nowMs = Date.now()) {
-    const normalized = normalizeBrPhone(phone);
+    const normalized = this._resolveChatPhone(phone);
     if (!normalized) return;
     const until = nowMs + Math.max(1000, Number(durationMs) || this.humanPauseMs);
     this._pausedUntil.set(normalized, until);
@@ -132,13 +165,15 @@ export class WhatsappBotService {
   }
 
   resumeContact(phone) {
-    const normalized = normalizeBrPhone(phone);
+    const normalized = this._resolveChatPhone(phone);
     if (!normalized) return;
-    this._pausedUntil.delete(normalized);
+    const variants = brPhoneVariants(normalized);
+    for (const v of variants) this._pausedUntil.delete(v);
     try {
       this.store.run(
-        'UPDATE whatsapp_chats SET bot_paused = 0, bot_paused_until = NULL, needs_human = 0, handoff_summary = NULL WHERE phone = ?',
-        [normalized],
+        `UPDATE whatsapp_chats SET bot_paused = 0, bot_paused_until = NULL, needs_human = 0, handoff_summary = NULL
+         WHERE phone IN (${variants.map(() => '?').join(', ')})`,
+        variants,
       );
     } catch {}
   }
@@ -158,7 +193,7 @@ export class WhatsappBotService {
          ORDER BY m.id DESC`,
         [normalizedPhone.slice(-8)],
       );
-      return candidates.filter((m) => normalizeBrPhone(m.phone) === normalizedPhone);
+      return candidates.filter((m) => areEquivalentBrPhones(m.phone, normalizedPhone));
     } catch {
       return [];
     }
@@ -179,7 +214,7 @@ export class WhatsappBotService {
     needsHuman = false,
     handoffSummary = null,
   } = {}) {
-    const normalized = normalizeBrPhone(phone);
+    const normalized = this._resolveChatPhone(phone);
     const cleanBody = String(body || '').trim();
     if (!normalized || (!cleanBody && !mediaUrl)) return null;
 
@@ -256,7 +291,7 @@ export class WhatsappBotService {
   }
 
   setInternalNote(phone, note = '') {
-    const normalized = normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
+    const normalized = this._resolveChatPhone(phone) || normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
     if (!normalized) return null;
     const cleanNote = String(note || '').trim().slice(0, 500) || null;
     this.store.run(
@@ -271,7 +306,7 @@ export class WhatsappBotService {
   getQuickReplies() {
     const defaults = [
       { label: 'Boas-vindas', text: 'Olá! Tudo bem? Como posso te ajudar hoje?' },
-      { label: 'Link Matrícula', text: 'Para matrícula na Musculação, você pode fazer direto por aqui: https://sistema.academiaoxigenio.com/matricula.html' },
+      { label: 'Link Matrícula', text: 'Para fazer sua matrícula online (escolher modalidade, turma, enviar foto do Face ID e pagar no Pix), acesse: https://sistema.academiaoxigenio.com/matricula.html' },
       { label: 'Pagamento MP', text: 'Para pagar sua mensalidade pelo WhatsApp, é só me enviar *quero pagar* que o sistema gera o Pix ou link de pagamento!' },
       { label: 'Encerrar', text: 'Já verifiquei por aqui! Se precisar de mais alguma coisa, é só chamar.' },
     ];
@@ -308,17 +343,22 @@ export class WhatsappBotService {
   getChatMessages(phone, { markRead = true } = {}) {
     const normalized = normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
     if (!normalized) return { chat: null, messages: [] };
+    const variants = brPhoneVariants(normalized);
+    const phoneList = variants.length ? variants : [normalized];
+    const placeholders = phoneList.map(() => '?').join(', ');
     if (markRead) {
       try {
-        this.store.run('UPDATE whatsapp_chats SET unread_count = 0 WHERE phone = ?', [normalized]);
+        this.store.run(`UPDATE whatsapp_chats SET unread_count = 0 WHERE phone IN (${placeholders})`, phoneList);
       } catch {}
     }
     const chat = this.store.get(
       `SELECT c.*, m.name AS member_name, m.status AS member_status, m.valid_until AS member_valid_until
        FROM whatsapp_chats c
        LEFT JOIN members m ON m.id = c.member_id
-       WHERE c.phone = ?`,
-      [normalized],
+       WHERE c.phone IN (${placeholders})
+       ORDER BY CASE WHEN c.phone = ? THEN 0 ELSE 1 END, c.last_message_at DESC
+       LIMIT 1`,
+      [...phoneList, normalized],
     );
     const linkedMembers = this._findMembersForExactPhone(normalized);
     if (chat?.member_id && !linkedMembers.some((m) => Number(m.id) === Number(chat.member_id))) {
@@ -336,12 +376,12 @@ export class WhatsappBotService {
        FROM (
          SELECT id, phone, direction, sender_type, body, media_type, media_url, created_at
          FROM whatsapp_chat_messages
-         WHERE phone = ?
+         WHERE phone IN (${placeholders})
          ORDER BY id DESC
          LIMIT 200
        )
        ORDER BY id ASC`,
-      [normalized],
+      phoneList,
     );
     return { chat: chat || null, linkedMembers, messages };
   }
@@ -349,13 +389,16 @@ export class WhatsappBotService {
   setBotPaused(phone, paused) {
     if (paused) this.pauseContact(phone, this.humanPauseMs);
     else this.resumeContact(phone);
-    return { phone: normalizeBrPhone(phone) || phone, bot_paused: paused ? 1 : 0 };
+    return { phone: this._resolveChatPhone(phone) || normalizeBrPhone(phone) || phone, bot_paused: paused ? 1 : 0 };
   }
 
   setCampaignOptOut(phone, optOut) {
-    const normalized = normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
+    const normalized = this._resolveChatPhone(phone) || normalizeBrPhone(phone) || String(phone || '').replace(/\D/g, '');
     if (!normalized) return null;
     const flag = optOut ? 1 : 0;
+    const variants = brPhoneVariants(normalized);
+    const phoneList = variants.length ? variants : [normalized];
+    const placeholders = phoneList.map(() => '?').join(', ');
     this.store.run(
       `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
        VALUES (?, ?, datetime('now', 'localtime'))
@@ -363,21 +406,25 @@ export class WhatsappBotService {
       [normalized, flag],
     );
     this.store.run(
+      `UPDATE whatsapp_chats SET opt_out = ? WHERE phone IN (${placeholders})`,
+      [flag, ...phoneList],
+    );
+    this.store.run(
       "UPDATE members SET whatsapp_opt_out = ?, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
-      [flag, normalized.slice(-9)],
+      [flag, normalized.slice(-8)],
     );
     if (flag === 1) {
       this.store.run(
         `UPDATE whatsapp_logs SET status = 'skipped', error = 'Disparos automáticos pausados pela recepção'
-         WHERE phone = ? AND status = 'queued'`,
-        [normalized],
+         WHERE phone IN (${placeholders}) AND status = 'queued'`,
+        phoneList,
       );
     }
     return { phone: normalized, opt_out: flag };
   }
 
   _getHistory(phone, nowMs = Date.now()) {
-    const normalized = normalizeBrPhone(phone);
+    const normalized = this._resolveChatPhone(phone);
     if (!normalized) return [];
     const entry = this._histories.get(normalized);
     if (entry) {
@@ -389,11 +436,13 @@ export class WhatsappBotService {
     }
     try {
       const limit = this.historyMaxTurns * 2;
+      const variants = brPhoneVariants(normalized);
+      const placeholders = variants.map(() => '?').join(', ');
       const rows = this.store.all(
         `SELECT direction, body FROM whatsapp_chat_messages
-         WHERE phone = ? AND COALESCE(TRIM(body), '') != ''
+         WHERE phone IN (${placeholders}) AND COALESCE(TRIM(body), '') != ''
          ORDER BY id DESC LIMIT ?`,
-        [normalized, limit],
+        [...variants, limit],
       );
       if (rows.length > 0) {
         const turns = rows.reverse().map((r) => ({
@@ -410,7 +459,7 @@ export class WhatsappBotService {
   }
 
   _appendHistory(phone, role, text, nowMs = Date.now()) {
-    const normalized = normalizeBrPhone(phone);
+    const normalized = this._resolveChatPhone(phone);
     if (!normalized || !text) return;
     const turns = [...this._getHistory(normalized, nowMs), { role, text }];
     const maxItems = this.historyMaxTurns * 2;
@@ -704,6 +753,19 @@ export class WhatsappBotService {
 
     const cleanReply = sanitizeReply(rawReply.replaceAll(CONTEXT_MISSING_HANDOFF_MARKER, ''));
     if (!cleanReply) return null;
+
+    if (LLM_HANDOFF_PROMISE_REGEX.test(cleanReply)) {
+      this.pauseContact(normalized, this.humanPauseMs);
+      const handoffSummary = `Encaminhado pela Hime: "${userText.slice(0, 120)}"`;
+      this._appendHistory(normalized, 'user', userText);
+      this._appendHistory(normalized, 'model', cleanReply);
+      this.recordChatMessage({ phone: normalized, direction: 'out', senderType: 'bot', body: cleanReply, needsHuman: true, handoffSummary });
+      return {
+        reply: cleanReply,
+        requiresHuman: true,
+        reason: 'llm_handoff_promise',
+      };
+    }
 
     this._appendHistory(normalized, 'user', userText);
     this._appendHistory(normalized, 'model', cleanReply);

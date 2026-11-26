@@ -1,10 +1,11 @@
-import { normalizeBrPhone } from './whatsappService.js';
+import { normalizeBrPhone, areEquivalentBrPhones } from './whatsappService.js';
 
 const PAYMENT_ACTION_REGEX = /^(?:pix|pagar|pagamento|renovar|renova[cç][aã]o|mensalidade|link\s+de\s+pagamento)$|\b(?:(?:quero|gostaria\s+de|preciso|queria|vou|vamos|me\s+manda|manda|envia|enviar|gera|gerar|fazer|realizar)\s+(?:o\s+|a\s+|meu\s+|minha\s+|um\s+|uma\s+)?(?:pagamento|pagar|mensalidade|renovar|renova[cç][aã]o|pix|link(?:\s+de\s+pagamento)?|c[oó]digo\s+pix|qr\s*code)|pagar\s+(?:a\s+|minha\s+|o\s+|meu\s+)?(?:mensalidade|plano|parcela|fatura|renova[cç][aã]o)|pagar\s+(?:agora|por\s+aqui|online|via\s+pix|no\s+pix|no\s+cart[aã]o)|renovar\s+(?:a\s+|minha\s+|o\s+|meu\s+)?(?:mensalidade|plano|matr[ií]cula)|link\s+de\s+pagamento)\b/i;
-const PAYMENT_NON_ACTION_REGEX = /\b(?:consigo\s+(?:treinar|ir|entrar|passar)|posso\s+(?:treinar|ir|entrar|passar)|ainda\s+(?:consigo|posso)|libera(?:r|do|da)?\s+(?:a\s+)?catraca|venceu|vencid[oa]|atrasad[oa]|toler[âa]ncia|s[óo]\s+(?:consigo|posso|vou)\s+pagar|pagar\s+(?:amanh[ãa]|depois|outro\s+dia|semana\s+que\s+vem|m[êe]s\s+que\s+vem|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|dia\s+\d+)|qual\s+(?:[ée]\s+)?(?:o\s+)?valor|quanto\s+(?:custa|[ée]|fica|t[áa]|esta|est[áa])|quais\s+(?:s[ãa]o\s+)?(?:as\s+)?formas|aceita(?:m)?\s+(?:pix|cart[aã]o|dinheiro|boleto)|como\s+funciona)\b/i;
-const NON_LOOKUP_PHRASE_REGEX = /\b(?:hoje|amanha|ontem|posso|consigo|treinar|entao|quando|quanto|qual|quais|como|onde|porque|ainda|horario|funciona|abre|fecha|venceu|vencida|vencido|parcela|atraso|atrasado|ir|entrar|passar|valor|preco|aceita|aceitam|obrigado|obrigada|valeu|bom dia|boa tarde|boa noite)\b/;
+const PAYMENT_NON_ACTION_REGEX = /\b(?:consigo\s+(?:treinar|ir|entrar|passar)|posso\s+(?:treinar|ir|entrar|passar)|ainda\s+(?:consigo|posso)|libera(?:r|do|da)?\s+(?:a\s+)?catraca|venceu|vencid[oa]|atrasad[oa]|toler[âa]ncia|s[óo]\s+(?:consigo|posso|vou)\s+pagar|pagar\s+(?:amanh[ãa]|depois|outro\s+dia|semana\s+que\s+vem|m[êe]s\s+que\s+vem|segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo|dia\s+\d+)|qual\s+(?:[ée]\s+)?(?:o\s+)?valor|quanto\s+(?:custa|[ée]|fica|t[áa]|esta|est[áa])|(?:o\s+)?valor\s+(?:da\s+|do\s+|de\s+)?(?:mensalidade|plano|matr[ií]cula|di[aá]ria|parcela|academia)|pre[çc]o\s+(?:da\s+|do\s+|de\s+)?(?:mensalidade|plano|matr[ií]cula|di[aá]ria|academia)|j[aá]\s+(?:realizei|fiz|efetuei|mandei|enviei|paguei)(?:\s+(?:o|a|meu|minha))?(?:\s+(?:pagamento|pix|mensalidade|comprovante))?|comprovante(?:\s+de\s+pagamento)?|quais\s+(?:s[ãa]o\s+)?(?:as\s+)?formas|aceita(?:m)?\s+(?:pix|cart[aã]o|dinheiro|boleto)|como\s+funciona)\b/i;
+const NON_LOOKUP_PHRASE_REGEX = /\b(?:hoje|amanha|ontem|posso|consigo|treinar|entao|quando|quanto|qual|quais|como|onde|porque|ainda|horario|funciona|abre|fecha|venceu|vencida|vencido|parcela|atraso|atrasado|ir|entrar|passar|valor|preco|aceita|aceitam|obrigado|obrigada|valeu|bom dia|boa tarde|boa noite|ja|tenho|cadastro|matricula|mensalidade|plano|pix|cartao|dinheiro|boleto|comprovante|realizei|paguei|pagamento|pagar|trancar|pausar|congelar|cirurgia|atestado|recepcao|atendente|professor|personal|piscina|natacao|hidro|pilates|musculacao|danca|capoeira|jiu|sabado|domingo|segunda|terca|quarta|quinta|sexta|feriado|ajuda|duvida|informacao|sim|nao|certo|beleza|tudo bem|ola|oi)\b/;
 const ENROLLMENT_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|vamos|preciso|posso|queria)\s+(?:me\s+)?(?:matricular|cadastrar)|(?:fazer|fechar|concluir|realizar|abrir|iniciar|nova)\s+(?:a\s+|uma\s+)?(?:matr[ií]cula|cadastro|inscri[cç][aã]o)|me\s+(?:matricular|cadastrar)|matricular\s+(?:meu|minha|o|a|um|uma|ele|ela))\b/i;
-const FREEZE_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|preciso|queria|pode|poderia|vou|vamos|faz|fazer|pedi\s+(?:pra|para))\s+(?:trancar|pausar|congelar)(?:\s+(?:a\s+|minha\s+|o\s+)?(?:matr[ií]cula|plano|academia))?|trancar\s+(?:a\s+|minha\s+|o\s+)?(?:matr[ií]cula|plano|academia)|trancamento(?:\s+(?:da|de)\s+(?:matr[ií]cula|plano))?)\b/i;
+const ALREADY_REGISTERED_REGEX = /\b(?:j[aá]\s+(?:tenho|fiz|possuo)\s+(?:um\s+)?cadastro|j[aá]\s+(?:sou|estou)\s+(?:cadastrad[oa]|alun[oa]|matriculad[oa])|tenho\s+cadastro|sou\s+(?:cadastrad[oa]|alun[oa]))\b/i;
+const FREEZE_INTENT_REGEX = /\b(?:(?:quero|gostaria\s+de|preciso|queria|pode|poderia|posso|consigo|tem\s+como|d[aá]\s+pr?a|vou|vamos|faz|fazer|pedi\s+(?:pra|para))\s+(?:trancar|pausar|congelar)(?:\s+(?:a\s+|minha\s+|o\s+|meu\s+|por\s+)?(?:matr[ií]cula|plano|academia|cirurgia|viagem|sa[uú]de|um\s+tempo|\d+\s+dias?))?|(?:tranca|trancar|pausa|pausar|congela|congelar)\s+(?:(?:a\s+|minha\s+|o\s+|meu\s+)?(?:matr[ií]cula|plano|academia)|por\s+(?:cirurgia|viagem|sa[uú]de|motivo))|trancamento(?:\s+(?:da|de)\s+(?:matr[ií]cula|plano))?)\b/i;
 const FREEZE_NON_ACTION_REGEX = /\b(?:como\s+funciona|tem\s+taxa|cobra\s+taxa|quanto\s+(?:custa|[ée])|qual\s+(?:[ée]\s+)?a\s+regra)\b/i;
 const KIDS_SWIM_REGEX = /\b(nata[cç][aã]o\s*(?:baby|infantil|kids|crian[cç]a)|baby|infantil)\b/i;
 const FLOW_CANCEL_REGEX = /^(cancelar|sair|voltar|depois|n[aã]o\s+quero)$/i;
@@ -191,7 +192,7 @@ export class OnlineSalesBotService {
 
   _findBillableMembersByPhone(phone) {
     const rows = this.store.all("SELECT * FROM members WHERE access_role = 'student'");
-    const matches = rows.filter((m) => normalizeBrPhone(m.phone) === phone);
+    const matches = rows.filter((m) => areEquivalentBrPhones(m.phone, phone));
     return this._resolveBillableList(matches);
   }
 
@@ -264,8 +265,7 @@ export class OnlineSalesBotService {
       .filter((p) => {
         const label = stripAccents(p.name || '');
         return !label.includes('baby') && !label.includes('infantil') && !label.includes('kids');
-      })
-      .slice(0, 6);
+      });
   }
 
   _planRequiresClass(plan) {
@@ -385,6 +385,29 @@ export class OnlineSalesBotService {
     }
 
     if (!session) {
+      if (!existingMember) {
+        const phoneMembers = this.store
+          .all("SELECT * FROM members WHERE access_role = 'student'")
+          .filter((m) => areEquivalentBrPhones(m.phone, phone));
+        if (phoneMembers.length >= 1) {
+          const billable = this._resolveBillableList(phoneMembers);
+          if (billable.length > 0) {
+            this._setSession(phone, { kind: 'payment', items: billable, pendingChargeId: null });
+            const reply = this._buildPaymentMenuReply(
+              billable,
+              phoneMembers.length === 1
+                ? 'Encontrei seu cadastro já vinculado a um plano:'
+                : 'Encontrei cadastros já vinculados a este WhatsApp:',
+            );
+            this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+            return { reply, requiresHuman: false };
+          }
+          if (phoneMembers.length === 1) {
+            existingMember = phoneMembers[0];
+          }
+        }
+      }
+
       if (!existingMember) {
         this._setSession(phone, {
           kind: 'enroll',
@@ -536,7 +559,62 @@ export class OnlineSalesBotService {
 
     if (session.step === 'ask_name') {
       const name = String(userText || '').trim().replace(/\s+/g, ' ');
-      if (name.length < 5 || !name.includes(' ') || /\d/.test(name)) {
+      const cpfInName = extractCpfDigits(name);
+      if (cpfInName.length === 11 && isValidCpfDigits(cpfInName)) {
+        const formattedCpf = formatCpfDigits(cpfInName);
+        const existingByCpf = this.store
+          .all("SELECT * FROM members WHERE access_role = 'student'")
+          .find((m) => normalizeStoredCpfDigits(m.document) === cpfInName) || null;
+        if (existingByCpf) {
+          session.pendingCpfDigits = cpfInName;
+          session.pendingCpfFormatted = formattedCpf;
+          session.existingByCpf = existingByCpf;
+          session.fullName = existingByCpf.name;
+          session.pendingEmail = existingByCpf.email ? String(existingByCpf.email).trim() : null;
+          if (session.pendingEmail) {
+            session.step = 'confirm_data';
+            this._setSession(phone, session);
+            const reply = [
+              'Encontrei um cadastro com este CPF. Confira os dados:',
+              `\n• *Nome:* ${existingByCpf.name}`,
+              `• *CPF:* ${formattedCpf}`,
+              `• *E-mail:* ${session.pendingEmail}`,
+              '\n• Responda *1* ou *sim* para confirmar e continuar',
+              '• Responda *2* ou *corrigir* para digitar novamente',
+            ].join('\n');
+            this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+            return { reply, requiresHuman: false };
+          }
+          session.step = 'ask_email';
+          this._setSession(phone, session);
+          const reply = `Encontrei o cadastro de *${existingByCpf.name}*! Agora informe seu *e-mail* para receber o comprovante do pagamento (ou responda *pular*):`;
+          this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+          return { reply, requiresHuman: false };
+        }
+        const reply = 'Não encontrei cadastro com esse CPF. Por favor, informe seu *nome e sobrenome completos* (sem números):';
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
+      const strippedName = stripAccents(name);
+      if (ALREADY_REGISTERED_REGEX.test(strippedName)) {
+        const reply = 'Se você já tem cadastro, me envie seu *CPF (11 dígitos)* para eu localizar, ou informe seu *nome e sobrenome completos*:';
+        this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
+        return { reply, requiresHuman: false };
+      }
+
+      const isInvalidName =
+        name.length < 5
+        || !name.includes(' ')
+        || /\d/.test(name)
+        || /[?!@#$%^&*=+]/.test(name)
+        || NON_LOOKUP_PHRASE_REGEX.test(strippedName)
+        || PAYMENT_ACTION_REGEX.test(name)
+        || PAYMENT_NON_ACTION_REGEX.test(name)
+        || ENROLLMENT_INTENT_REGEX.test(name)
+        || nameTokens(name).length < 2;
+
+      if (isInvalidName) {
         const reply = 'Por favor, informe seu *nome e sobrenome completos* (sem números):';
         this.recordChatMessage({ phone, direction: 'out', senderType: 'bot', body: reply });
         return { reply, requiresHuman: false };
@@ -747,7 +825,7 @@ export class OnlineSalesBotService {
 
       const phoneMembers = this.store
         .all("SELECT * FROM members WHERE access_role = 'student'")
-        .filter((m) => normalizeBrPhone(m.phone) === phone);
+        .filter((m) => areEquivalentBrPhones(m.phone, phone));
 
       if (phoneMembers.length === 1) {
         return this._executeFreezeForMember({ phone, member: phoneMembers[0], days, reason: cleanReason });
@@ -811,8 +889,8 @@ export class OnlineSalesBotService {
       return { reply, requiresHuman: false };
     }
 
-    if (existing?.kind === 'freeze' || (!existing && wantsFreeze && !wantsPayment && !wantsEnroll)) {
-      return this._handleFreezeFlow({ phone, userText, session: existing });
+    if (existing?.kind === 'freeze' || (wantsFreeze && !wantsPayment && !wantsEnroll && existing?.kind !== 'enroll')) {
+      return this._handleFreezeFlow({ phone, userText, session: existing?.kind === 'freeze' ? existing : null });
     }
 
     const mpConfigured = Boolean(this.gatewayService && String(settings.mp_access_token || '').trim());
@@ -932,7 +1010,7 @@ export class OnlineSalesBotService {
       if (ownItems.length === 0) {
         const phoneMembers = this.store
           .all("SELECT * FROM members WHERE access_role = 'student'")
-          .filter((m) => normalizeBrPhone(m.phone) === phone);
+          .filter((m) => areEquivalentBrPhones(m.phone, phone));
         if (phoneMembers.length === 1) {
           return this._handleEnrollmentFlow({ phone, userText: '', session: null, existingMember: phoneMembers[0] });
         }

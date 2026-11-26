@@ -480,10 +480,11 @@ export class GatewayService {
     const lastName = parts.slice(1).join(' ') || 'Academia';
     const cpf = digitsOnly(member.document || member.guardian_cpf);
 
+    const fallbackEmail = `aluno${member.id}@academiaoxigenio.com`;
     const cleanEmail = String(member.email || '').trim();
     const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
       ? cleanEmail
-      : `aluno${member.id}@academiaoxigenio.com`;
+      : fallbackEmail;
     const payer = {
       email: validEmail,
       first_name: firstName,
@@ -497,24 +498,38 @@ export class GatewayService {
       idempotencyKey || `mp_pix:${member.id}:${amountCents}:${Math.floor(Date.now() / (5 * 60 * 1000))}`;
 
     const notificationUrl = this.getMpNotificationUrl(settings);
-    const response = await this.fetch('https://api.mercadopago.com/v1/payments', {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'X-Idempotency-Key': resolvedKey,
-      },
-      signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({
-        transaction_amount: Number((amountCents / 100).toFixed(2)),
-        description: description.slice(0, 120),
-        payment_method_id: 'pix',
-        external_reference: String(member.id),
-        ...(notificationUrl ? { notification_url: notificationUrl } : {}),
-        payer,
-      }),
-    });
+    const sendPixRequest = async (payerPayload, idemKey) => {
+      const response = await this.fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'X-Idempotency-Key': idemKey,
+        },
+        signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({
+          transaction_amount: Number((amountCents / 100).toFixed(2)),
+          description: description.slice(0, 120),
+          payment_method_id: 'pix',
+          external_reference: String(member.id),
+          ...(notificationUrl ? { notification_url: notificationUrl } : {}),
+          payer: payerPayload,
+        }),
+      });
+      const data = await this.safeJson(response);
+      return { response, data };
+    };
 
-    const data = await this.safeJson(response);
+    let { response, data } = await sendPixRequest(payer, resolvedKey);
+    if ((!response.ok || !data?.id) && validEmail !== fallbackEmail) {
+      const msg = String(data?.message || '').toLowerCase();
+      const causes = Array.isArray(data?.cause)
+        ? data.cause.map((c) => `${c?.code || ''} ${c?.description || ''}`).join(' ').toLowerCase()
+        : '';
+      if (msg.includes('email') || causes.includes('email')) {
+        ({ response, data } = await sendPixRequest({ ...payer, email: fallbackEmail }, `${resolvedKey}:fb`));
+      }
+    }
+
     if (!response.ok || !data?.id) {
       throw new Error(data?.message || data?.cause?.[0]?.description || `Erro Mercado Pago (${response.status})`);
     }

@@ -861,3 +861,51 @@ test('Stone POS: bloqueia carrinho, valida reutilizacao de pendente, valida valo
   assert.equal(wh.paid, true);
   assert.equal(wh.paymentResult.payment.method, 'debit');
 });
+
+test('createMercadoPagoPix faz fallback automatico de payer.email quando Mercado Pago rejeita o e-mail do aluno', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST_PIX_EMAIL' });
+  const access = new AccessService(store, { syncMember: async () => ({ synced: true }) });
+  const seenCalls = [];
+  const fetchFn = async (_url, opts) => {
+    const body = JSON.parse(opts.body);
+    seenCalls.push({ email: body.payer.email, idemKey: opts.headers['X-Idempotency-Key'] });
+    if (seenCalls.length === 1) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({
+          message: 'Invalid parameter payer.email',
+          cause: [{ code: 4004, description: 'Invalid payer.email' }],
+        }),
+      };
+    }
+    return {
+      ok: true,
+      status: 201,
+      text: async () => JSON.stringify({
+        id: 998877,
+        point_of_interaction: {
+          transaction_data: {
+            qr_code: '000201PIX_FALLBACK_EMAIL',
+            ticket_url: 'https://mpago.la/pix-ok',
+          },
+        },
+      }),
+    };
+  };
+  const gateway = new GatewayService(store, access, { fetchFn });
+  const res = await gateway.createMercadoPagoPix({
+    member: { id: 42, name: 'Maria Teste', email: 'email-ruim@invalid.xyz', document: '52998224725' },
+    amountCents: 10000,
+    description: 'Mensalidade',
+    settings: store.getSettings(),
+  });
+
+  assert.equal(seenCalls.length, 2);
+  assert.equal(seenCalls[0].email, 'email-ruim@invalid.xyz');
+  assert.equal(seenCalls[1].email, 'aluno42@academiaoxigenio.com');
+  assert.notEqual(seenCalls[0].idemKey, seenCalls[1].idemKey);
+  assert.equal(res.externalId, '998877');
+  assert.equal(res.qrCode, '000201PIX_FALLBACK_EMAIL');
+});

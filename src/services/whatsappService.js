@@ -59,6 +59,28 @@ export function normalizeBrPhone(raw) {
   return digits;
 }
 
+export function brPhoneVariants(raw) {
+  const normalized = normalizeBrPhone(raw);
+  if (!normalized) return [];
+  const ddd = normalized.slice(2, 4);
+  const last8 = normalized.slice(-8);
+  if (normalized.length === 13 && normalized[4] === '9') {
+    return [normalized, `55${ddd}${last8}`];
+  }
+  if (normalized.length === 12) {
+    return [normalized, `55${ddd}9${last8}`];
+  }
+  return [normalized];
+}
+
+export function areEquivalentBrPhones(a, b) {
+  const normA = normalizeBrPhone(a);
+  const normB = normalizeBrPhone(b);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+  return brPhoneVariants(normA).includes(normB);
+}
+
 function formatMoneyBr(cents) {
   return ((Number(cents) || 0) / 100).toLocaleString('pt-BR', {
     style: 'currency',
@@ -266,7 +288,7 @@ export class WhatsappService {
           }
           const senderPhone = normalizeBrPhone(msg?.from);
           if (!senderPhone) continue;
-          const contactName = contacts.find((c) => normalizeBrPhone(c?.wa_id) === senderPhone)?.profile?.name || '';
+          const contactName = contacts.find((c) => areEquivalentBrPhones(c?.wa_id, senderPhone))?.profile?.name || '';
 
           let incomingText = '';
           if (msg.type === 'text') incomingText = msg.text?.body || '';
@@ -771,11 +793,11 @@ export class WhatsappService {
     if (!normalized) return false;
     const clean = String(text || '').trim().toLowerCase();
     if (/^(sair|parar|stop|cancelar|descadastrar|nao quero|não quero)\b/.test(clean)) {
-      const localVariants = [normalized, normalized.slice(2)];
+      const localVariants = brPhoneVariants(normalized);
       for (const p of localVariants) {
         this.store.run(
           "UPDATE members SET whatsapp_opt_out = 1, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
-          [p.slice(-9)],
+          [p.slice(-8)],
         );
       }
       this.store.run(
@@ -786,12 +808,13 @@ export class WhatsappService {
       );
       this.store.run(
         `UPDATE whatsapp_logs SET status = 'skipped', error = 'Opt-out solicitado pelo aluno'
-         WHERE phone = ? AND status = 'queued'`,
-        [normalized],
+         WHERE phone IN (${localVariants.map(() => '?').join(', ')}) AND status = 'queued'`,
+        localVariants,
       );
       return true;
     }
     if (/^(voltar|ativar|receber)\b/.test(clean)) {
+      const localVariants = brPhoneVariants(normalized);
       this.store.run(
         `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
          VALUES (?, 0, datetime('now', 'localtime'))
@@ -800,7 +823,7 @@ export class WhatsappService {
       );
       this.store.run(
         "UPDATE members SET whatsapp_opt_out = 0, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
-        [normalized.slice(-9)],
+        [normalized.slice(-8)],
       );
       return true;
     }
@@ -819,15 +842,16 @@ export class WhatsappService {
         : null;
       if (Number(optedOut) === 1) return null;
 
-      const phoneOptedOut = this.store.get(
-        "SELECT id FROM members WHERE whatsapp_opt_out = 1 AND replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ? LIMIT 1",
-        [normalizedPhone.slice(-9)],
+      const phoneOptedOutCandidates = this.store.all(
+        "SELECT id, phone FROM members WHERE whatsapp_opt_out = 1 AND replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
+        [normalizedPhone.slice(-8)],
       );
-      if (phoneOptedOut) return null;
+      if (phoneOptedOutCandidates.some((m) => areEquivalentBrPhones(m.phone, normalizedPhone))) return null;
 
+      const variants = brPhoneVariants(normalizedPhone);
       const chatOptedOut = this.store.get(
-        "SELECT phone FROM whatsapp_chats WHERE opt_out = 1 AND (phone = ? OR phone LIKE '%' || ?) LIMIT 1",
-        [normalizedPhone, normalizedPhone.slice(-9)],
+        `SELECT phone FROM whatsapp_chats WHERE opt_out = 1 AND phone IN (${variants.map(() => '?').join(', ')}) LIMIT 1`,
+        variants,
       );
       if (chatOptedOut) return null;
     }
