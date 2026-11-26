@@ -2,17 +2,20 @@
   const DEFAULTS = {
     enabled: true,
     autoConfirm: true,
-    refreshSeconds: 8,
+    refreshSeconds: 10,
   };
 
   let cfg = { ...DEFAULTS };
   let sentNamesToday = new Set();
-  let lastRefreshAt = 0;
+  let lastRefreshAt = Date.now();
   let lastConfirmClickAt = 0;
   let badgeEl = null;
+  let lastBadgeText = '';
+  let scanTimer = null;
 
   function ensureBadge() {
-    if (badgeEl && document.body.contains(badgeEl)) return badgeEl;
+    if (badgeEl && document.body?.contains(badgeEl)) return badgeEl;
+    if (!document.body) return null;
     badgeEl = document.createElement('div');
     badgeEl.id = 'oxigenio-wellhub-badge';
     badgeEl.style.cssText = [
@@ -28,6 +31,7 @@
       'box-shadow:0 8px 24px rgba(0,0,0,.25)',
       'border:1px solid rgba(255,255,255,.15)',
       'max-width:290px',
+      'pointer-events:none',
     ].join(';');
     document.body.appendChild(badgeEl);
     return badgeEl;
@@ -35,15 +39,20 @@
 
   function updateBadge(text, isError = false) {
     const el = ensureBadge();
-    el.style.borderColor = isError ? '#ef4444' : '#10b981';
-    el.textContent = text;
+    if (!el) return;
+    const border = isError ? '#ef4444' : '#10b981';
+    if (el.style.borderColor !== border) el.style.borderColor = border;
+    if (lastBadgeText !== text) {
+      lastBadgeText = text;
+      el.textContent = text;
+    }
   }
 
   function findSectionCardByTitle(titleSubstring) {
     const target = titleSubstring.toLowerCase();
-    const headings = [...document.querySelectorAll('h1,h2,h3,h4,p,span,div,strong')];
+    const headings = [...document.querySelectorAll('h1,h2,h3,h4,p,span,strong')];
     for (const el of headings) {
-      if (el.children.length > 0) continue;
+      if (el.closest('#oxigenio-wellhub-badge') || el.children.length > 0) continue;
       const txt = (el.textContent || '').trim().toLowerCase();
       if (!txt.includes(target)) continue;
       let card = el.parentElement;
@@ -58,7 +67,7 @@
 
   function clickRefreshButtons() {
     const now = Date.now();
-    const intervalMs = Math.max(4, Number(cfg.refreshSeconds) || 8) * 1000;
+    const intervalMs = Math.max(5, Number(cfg.refreshSeconds) || 10) * 1000;
     if (now - lastRefreshAt < intervalMs) return;
     lastRefreshAt = now;
 
@@ -69,7 +78,7 @@
       const refreshBtn = buttons.find((btn) => {
         const label = `${btn.getAttribute('aria-label') || ''} ${btn.getAttribute('title') || ''}`.toLowerCase();
         if (label.includes('atualiz') || label.includes('refresh') || label.includes('reload')) return true;
-        return Boolean(btn.querySelector('svg')) && (btn.textContent || '').trim() === '';
+        return false;
       });
       if (refreshBtn && !refreshBtn.disabled) {
         refreshBtn.click();
@@ -80,7 +89,7 @@
   function tryAutoConfirmPending() {
     if (!cfg.autoConfirm) return;
     const now = Date.now();
-    if (now - lastConfirmClickAt < 1800) return;
+    if (now - lastConfirmClickAt < 2000) return;
 
     const pendingCard = findSectionCardByTitle('Check-ins para confirmar');
     if (!pendingCard) return;
@@ -88,7 +97,7 @@
     const confirmBtns = [...pendingCard.querySelectorAll('button')].filter((btn) => {
       if (btn.disabled) return false;
       const txt = (btn.textContent || '').trim().toLowerCase();
-      return /^(confirmar|aceitar|validar|confirm|accept)$/.test(txt) || txt.includes('confirmar');
+      return /^(confirmar|aceitar|validar|confirm|accept)$/.test(txt);
     });
 
     if (confirmBtns.length > 0) {
@@ -138,7 +147,16 @@
     return items;
   }
 
+  function scheduleScan(delayMs = 1000) {
+    if (scanTimer) return;
+    scanTimer = setTimeout(() => {
+      scanTimer = null;
+      scanAndSync();
+    }, delayMs);
+  }
+
   function scanAndSync() {
+    if (!document.body) return;
     if (!cfg.enabled) {
       updateBadge('Oxigênio Bot: Pausado');
       return;
@@ -179,10 +197,15 @@
       if (changes.enabled?.newValue === true) sentNamesToday.clear();
     });
 
-    const observer = new MutationObserver(() => scanAndSync());
-    observer.observe(document.body, { childList: true, subtree: true });
-    setInterval(scanAndSync, 2500);
-    setTimeout(scanAndSync, 1500);
+    if (document.body) {
+      const observer = new MutationObserver((mutations) => {
+        const onlyBadge = mutations.every((m) => m.target?.id === 'oxigenio-wellhub-badge' || m.target?.closest?.('#oxigenio-wellhub-badge'));
+        if (!onlyBadge) scheduleScan(1200);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+    setInterval(scanAndSync, 4000);
+    setTimeout(scanAndSync, 3000);
   }
 
   init();
