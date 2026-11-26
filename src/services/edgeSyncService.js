@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { printReceiptToWindowsPrinter } from './receiptPrinterService.js';
 import { fitnessToday } from './fitnessProgress.js';
 
 const EDGE_SAFE_SETTINGS = [
@@ -221,6 +222,10 @@ export class EdgeCloudHub {
     const before = this._pendingCommands.length;
     this._pendingCommands = this._pendingCommands.filter((c) => c.id !== commandId);
     return this._pendingCommands.length < before;
+  }
+
+  hasConnectedEdge() {
+    return this._listeners.size > 0;
   }
 
   subscribeCommands(listener) {
@@ -533,6 +538,16 @@ export class EdgeSyncClient {
       if (typeof this.accessService?.syncAllReaders === 'function') {
         await this.accessService.syncAllReaders().catch(() => {});
       }
+      return;
+    }
+    if (cmd.type === 'print_receipt') {
+      try {
+        await printReceiptToWindowsPrinter(cmd.payload || {});
+      } catch (err) {
+        this.lastError = `Erro ao imprimir recibo na MP-4200 TH: ${err.message}`;
+      }
+      return;
+    }
       return;
     }
     if (cmd.type === 'register_face') {

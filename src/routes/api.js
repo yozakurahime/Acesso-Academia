@@ -1599,7 +1599,11 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/payments',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.recordPayment(req.body || {}, { requireOpenCash: true, backgroundSync: true });
+      const result = await accessService.recordPayment(req.body || {}, {
+        requireOpenCash: true,
+        backgroundSync: true,
+        autoPrint: true,
+      });
       auditService.log({
         actorUser: req.authUser,
         actorRole: req.authRole,
@@ -1662,6 +1666,26 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
         results.push(result);
       }
       res.status(201).json({ ok: true, count: results.length, results });
+    }),
+  );
+
+  router.post(
+    '/payments/:id/print',
+    requireReception,
+    handle(async (req, res) => {
+      const payment = store.get(
+        `SELECT p.*, m.name AS member_name, pl.name AS plan_name
+         FROM payments p
+         LEFT JOIN members m ON m.id = p.member_id
+         LEFT JOIN plans pl ON pl.id = p.plan_id
+         WHERE p.id = ?`,
+        [Number(req.params.id)],
+      );
+      if (!payment) {
+        return res.status(404).json({ error: 'Pagamento não encontrado.' });
+      }
+      const directPrinted = accessService.dispatchReceiptPrint(payment);
+      return res.json({ ok: true, directPrinted });
     }),
   );
 

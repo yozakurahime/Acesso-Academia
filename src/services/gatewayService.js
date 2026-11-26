@@ -1263,6 +1263,7 @@ export class GatewayService {
             {
               reconcileOpenCharge: true,
               exactCharge: Boolean(item.charge_id),
+              autoPrint: true,
               onRecorded: (recordedId) => {
                 if (!firstPaymentId) firstPaymentId = recordedId;
               },
@@ -1378,6 +1379,7 @@ export class GatewayService {
       {
         reconcileOpenCharge: true,
         exactCharge: Boolean(order.membership_charge_id),
+        autoPrint: true,
         onRecorded: (paymentId) => this.store.run(
           `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
           [method, paymentId, order.id],

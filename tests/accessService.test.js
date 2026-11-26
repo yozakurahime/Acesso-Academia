@@ -1044,3 +1044,30 @@ test('syncWellhubExtensionCheckins registra check-in por nome e aprova solicitac
   const reqRow = store.get('SELECT status FROM partner_access_requests WHERE member_id = ?', [partnerMember.id]);
   assert.equal(reqRow.status, 'approved');
 });
+
+test('recordPayment com autoPrint envia comando print_receipt para o Edge conectado e buildEscPosReceiptBuffer gera ESC/POS', async () => {
+  const { store, service } = await createTestEnv();
+  const { buildEscPosReceiptBuffer } = await import('../src/services/receiptPrinterService.js');
+  const sentCommands = [];
+  service.setEdgeCloudHub({
+    hasConnectedEdge: () => true,
+    enqueueCommand: (type, payload) => sentCommands.push({ type, payload }),
+  });
+  const plan = service.createPlan({ name: 'Natação Infantil (Mensal)', price_cents: 14000, duration_days: 30 });
+  const member = await service.createMember({ name: 'Kaua Henrique', document: nextCpf(), plan_id: plan.id });
+
+  const res = await service.recordPayment(
+    { member_id: member.id, plan_id: plan.id, amount_cents: 14000, method: 'cash' },
+    { autoPrint: true },
+  );
+  assert.equal(res.directPrinted, true);
+  assert.equal(sentCommands.length, 1);
+  assert.equal(sentCommands[0].type, 'print_receipt');
+  assert.equal(sentCommands[0].payload.customerName, 'Kaua Henrique');
+  assert.equal(sentCommands[0].payload.totalCents, 14000);
+
+  const escpos = buildEscPosReceiptBuffer(sentCommands[0].payload);
+  assert.ok(Buffer.isBuffer(escpos));
+  assert.ok(escpos.includes(Buffer.from('TOTAL PAGO')));
+  assert.ok(escpos.subarray(-4).equals(Buffer.from([0x1d, 0x56, 0x42, 0x00])));
+});

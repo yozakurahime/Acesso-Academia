@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { GymService } from './gymService.js';
 import { PartnerService, normalizePartnerInput } from './partnerService.js';
+import { buildPaymentReceiptPayload, printReceiptToWindowsPrinter } from './receiptPrinterService.js';
 import { DeviceService } from './deviceService.js';
 import { matchesDeviceIdentity } from './controlIdClient.js';
 import { fitnessToday, weeklyGoal, weeklyVisits, receptionFitnessSummary } from './fitnessProgress.js';
@@ -1454,13 +1455,35 @@ export class AccessService {
     return parts;
   }
 
+  dispatchReceiptPrint(payment, member = null) {
+    if (!payment) return false;
+    const payload = buildPaymentReceiptPayload(this.store, payment, member);
+    if (this.edgeCloudHub?.hasConnectedEdge?.()) {
+      this.edgeCloudHub.enqueueCommand('print_receipt', payload);
+      return true;
+    }
+    const isCloudRole = String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud';
+    if (!isCloudRole && process.platform === 'win32') {
+      printReceiptToWindowsPrinter(payload).catch(() => {});
+      return true;
+    }
+    return false;
+  }
+
   async recordPayment(payload, options = {}) {
-    const { backgroundSync = false } = options;
+    const { backgroundSync = false, autoPrint = false } = options;
     const { _updatedMember, ...result } = this.recordPaymentSync(payload, options);
     const sync = _updatedMember
       ? (backgroundSync ? this.scheduleMemberSync(_updatedMember) : await this.trySyncMemberToDevice(_updatedMember))
       : null;
-    return { ...result, sync };
+    const directPrinted = Boolean(
+      autoPrint &&
+      result?.payment &&
+      !result.alreadyRecorded &&
+      Number(result.payment.amount_cents || 0) > 0 &&
+      this.dispatchReceiptPrint(result.payment, result.member),
+    );
+    return { ...result, sync, directPrinted };
   }
 
   recordPaymentSync({ member_id, plan_id, amount_cents, method = 'pix', external_id = null, notes = null, charge_id = null, use_credit = false, credit_excess_cents = 0, staff_id = null, commission_cents = 0, split_payments = null, debt_cents = 0, debt_due_date = null, debt_notes = null } = {},

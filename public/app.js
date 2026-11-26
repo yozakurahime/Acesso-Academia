@@ -6329,7 +6329,7 @@ document.getElementById('paymentForm').addEventListener('submit', async (e) => {
         document.getElementById('pSplitToggle').checked = false;
         resetSplitBox();
       }
-      if (isAutoPrintReceiptEnabled() && res.payment) {
+      if (!res.directPrinted && isAutoPrintReceiptEnabled() && res.payment) {
         openPaymentReceipt(res.payment, member, { autoPrint: true });
       }
       const shouldOpenFaceAfterPayment = state.pendingFaceAfterPaymentId === memberId;
@@ -9812,6 +9812,7 @@ function openPaymentReceipt(payment, memberObj = null, { autoPrint = false } = {
     operatorName: payment.staff_name || '',
   });
   currentReceiptHtml = html;
+  window.__currentReceiptPaymentId = Number(payment.id) || null;
   if (autoPrint) {
     window.MP4200_RECEIPT.printReceiptHtml(html);
     return;
@@ -9820,6 +9821,7 @@ function openPaymentReceipt(payment, memberObj = null, { autoPrint = false } = {
 }
 
 function openSaleReceipt(sale, memberObj = null) {
+  window.__currentReceiptPaymentId = null;
   if (!window.MP4200_RECEIPT || !sale) return;
   const product = (state.products || []).find((p) => Number(p.id) === Number(sale.product_id));
   const html = window.MP4200_RECEIPT.buildReceiptHtml({
@@ -9916,7 +9918,20 @@ document.getElementById('btnCloseReceiptModal').addEventListener('click', () => 
   hideModal('receiptPreviewModal');
 });
 
-document.getElementById('btnPrintReceiptNow').addEventListener('click', () => {
+document.getElementById('btnPrintReceiptNow').addEventListener('click', async () => {
+  const paymentId = Number(window.__currentReceiptPaymentId || 0);
+  if (paymentId) {
+    try {
+      const res = await api(`/api/payments/${paymentId}/print`, { method: 'POST' });
+      if (res?.directPrinted) {
+        showToast('Recibo enviado direto para a MP-4200 TH!');
+        hideModal('receiptPreviewModal');
+        return;
+      }
+    } catch {
+      // Fallback para impressao via navegador
+    }
+  }
   if (currentReceiptHtml) window.MP4200_RECEIPT.printReceiptHtml(currentReceiptHtml);
 });
 
