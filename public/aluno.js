@@ -558,7 +558,7 @@ function renderPortal() {
   const contactPhone = document.getElementById('stContactPhone');
   const contactEmail = document.getElementById('stContactEmail');
   const contactEmergency = document.getElementById('stContactEmergency');
-  if (contactPhone) contactPhone.value = m.phone || '';
+  if (contactPhone) contactPhone.value = formatStudentPhoneMask(m.phone || '');
   if (contactEmail) contactEmail.value = m.email || '';
   if (contactEmergency) contactEmergency.value = m.emergency_contact || '';
 
@@ -1448,6 +1448,20 @@ document.getElementById('stGoalSelect')?.addEventListener('change', async (e) =>
   } catch (err) {
     showToast(err.message, true);
   }
+});
+
+function formatStudentPhoneMask(value) {
+  let d = String(value || '').replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  d = d.slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+document.getElementById('stContactPhone')?.addEventListener('input', (e) => {
+  e.target.value = formatStudentPhoneMask(e.target.value);
 });
 
 document.getElementById('stContactForm')?.addEventListener('submit', async (e) => {
