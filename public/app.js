@@ -1885,14 +1885,29 @@ async function loadGymStructure() {
   }
 }
 
+function isKidsSwimModalityName(name) {
+  const lower = String(name || '').toLowerCase();
+  return (lower.includes('nata') || lower.includes('baby'))
+    && (lower.includes('infantil') || lower.includes('baby') || lower.includes('crian'));
+}
+
 function renderClassOptions(modalityField, classField, selected = '') {
   const modality = Number(document.getElementById(modalityField).value);
   const select = document.getElementById(classField);
+  const modObj = state.modalities.find((m) => Number(m.id) === modality);
+  const kidsRequired = Boolean(modObj && isKidsSwimModalityName(modObj.name));
   const classes = state.classes.filter((cls) => cls.modality_id === modality);
-  const placeholder = !modality ? 'Escolha a modalidade' : classes.length ? 'Sem turma' : 'Nenhuma turma cadastrada';
+  const placeholder = !modality
+    ? 'Escolha a modalidade'
+    : classes.length
+      ? (kidsRequired ? 'Selecione a turma (obrigatória)' : 'Sem turma')
+      : 'Nenhuma turma cadastrada';
   select.innerHTML = `<option value="">${placeholder}</option>` + classes.map((cls) => {
-    const full = cls.enrolled_count >= cls.capacity && String(cls.id) !== String(selected);
-    return `<option value="${cls.id}" ${full ? 'disabled' : ''}>${escapeHtml(cls.name)} · ${escapeHtml(cls.schedule)}${full ? ' (lotada)' : ''}</option>`;
+    const enrolled = Number(cls.enrolled_count || 0);
+    const capacity = Number(cls.capacity || 0);
+    const full = capacity > 0 && enrolled >= capacity && String(cls.id) !== String(selected);
+    const capText = capacity > 0 ? ` (${enrolled}/${capacity} vagas${full ? ' · LOTADA' : ''})` : '';
+    return `<option value="${cls.id}" data-full="${full ? '1' : '0'}" data-enrolled="${enrolled}" data-capacity="${capacity}">${escapeHtml(cls.name)} · ${escapeHtml(cls.schedule)}${escapeHtml(capText)}</option>`;
   }).join('');
   select.disabled = classes.length === 0;
   select.value = selected;
@@ -1908,6 +1923,7 @@ document.getElementById('mModality').addEventListener('change', (e) => {
   updateMemberWizardSummaries();
 });
 document.getElementById('mPlan').addEventListener('change', () => renderMemberPlanPicker());
+document.getElementById('mClass')?.addEventListener('change', () => updateMemberWizardSummaries());
 document.getElementById('profModality').addEventListener('change', () => renderClassOptions('profModality', 'profClassSelect'));
 
 function modalityIcon(name) {
@@ -4319,14 +4335,32 @@ document.getElementById('enrollmentForm').addEventListener('submit', async (even
     return;
   }
   const id = state.selectedProfileId;
+  const classEl = document.getElementById('profClassSelect');
+  const modObj = state.modalities.find((m) => Number(m.id) === modality);
+  if (modObj && isKidsSwimModalityName(modObj.name) && classEl && !classEl.disabled && !classEl.value) {
+    showToast('Selecione uma turma para Natação Infantil / Baby para manter a contagem de vagas correta.', true);
+    classEl.focus();
+    return;
+  }
+  const selectedOpt = classEl?.selectedOptions?.[0];
+  let allowOverCapacity = false;
+  if (selectedOpt?.dataset?.full === '1') {
+    const enrolled = selectedOpt.dataset.enrolled || '0';
+    const capacity = selectedOpt.dataset.capacity || '0';
+    if (!confirm(`Atenção: esta turma já está cheia (${enrolled}/${capacity} vagas). O professor autorizou incluir o aluno mesmo assim?`)) {
+      return;
+    }
+    allowOverCapacity = true;
+  }
   await withLoading(form, async () => {
     try {
       const data = await api(`/api/members/${id}/enrollment`, {
         method: 'PUT',
         body: JSON.stringify({
           modality_id: modality,
-          class_id: document.getElementById('profClassSelect').value || null,
+          class_id: classEl?.value || null,
           previous_modality_id: previous || null,
+          allow_over_capacity: allowOverCapacity,
         }),
       });
       showToast('Matrícula salva.');
@@ -5648,9 +5682,16 @@ function updateMemberWizardSummaries() {
   const classSelect = document.getElementById('mClass');
   const classHint = document.getElementById('mClassHint');
   if (classHint) {
-    classHint.textContent = classSelect.disabled
-      ? 'Nenhuma turma cadastrada para esta modalidade — você pode confirmar normalmente.'
-      : 'Selecione uma turma acima ou confirme sem turma vinculada.';
+    const selectedClassOpt = classSelect?.selectedOptions?.[0];
+    if (classSelect.disabled) {
+      classHint.textContent = 'Nenhuma turma cadastrada para esta modalidade — você pode confirmar normalmente.';
+    } else if (selectedClassOpt?.dataset?.full === '1') {
+      classHint.textContent = `⚠️ Turma cheia (${selectedClassOpt.dataset.enrolled}/${selectedClassOpt.dataset.capacity} vagas). Confirme apenas se o professor autorizou vaga extra.`;
+    } else if (isKidsSwimModalityName(modName) && !classSelect.value) {
+      classHint.textContent = '⚠️ Turma obrigatória para Natação Infantil / Baby (para manter a contagem de vagas correta).';
+    } else {
+      classHint.textContent = 'Selecione uma turma acima ou confirme sem turma vinculada.';
+    }
   }
 }
 
@@ -6010,6 +6051,24 @@ async function submitMemberWizard({ addToCart = false, payLater = false, trigger
     const proceedWithoutPlan = confirm('Nenhum plano selecionado. O aluno será cadastrado bloqueado para entrar na catraca. Deseja continuar sem plano?');
     if (!proceedWithoutPlan) return;
   }
+  const mModEl = document.getElementById('mModality');
+  const mClassEl = document.getElementById('mClass');
+  const selectedMod = state.modalities.find((m) => String(m.id) === String(mModEl?.value || ''));
+  if (!partnerProvider && selectedMod && isKidsSwimModalityName(selectedMod.name) && mClassEl && !mClassEl.disabled && !mClassEl.value) {
+    showToast('Selecione uma turma para Natação Infantil / Baby para manter a contagem de vagas correta.', true);
+    mClassEl.focus();
+    return;
+  }
+  let allowOverCapacity = false;
+  const selectedClassOpt = mClassEl?.selectedOptions?.[0];
+  if (selectedClassOpt?.dataset?.full === '1') {
+    const enrolled = selectedClassOpt.dataset.enrolled || '0';
+    const capacity = selectedClassOpt.dataset.capacity || '0';
+    if (!confirm(`Atenção: esta turma já está cheia (${enrolled}/${capacity} vagas). O professor autorizou incluir mais um aluno mesmo assim?`)) {
+      return;
+    }
+    allowOverCapacity = true;
+  }
   await withLoading(triggerEl || document.getElementById('memberForm'), async () => {
     try {
       const created = await api('/api/members', {
@@ -6026,6 +6085,7 @@ async function submitMemberWizard({ addToCart = false, payLater = false, trigger
           guardian_relationship: document.getElementById('mGuardianRel')?.value || null,
           modality_id: document.getElementById('mModality').value || null,
           class_id: document.getElementById('mClass').value || null,
+          allow_over_capacity: allowOverCapacity,
           plan_id: partnerProvider ? null : selectedPlanId,
           partner_provider: partnerProvider,
           wellhub_id: partnerProvider === 'wellhub' ? wellhubId : null,

@@ -1392,7 +1392,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/members',
     requireReception,
     handle(async (req, res) => {
-      const member = await accessService.createMember(req.body, { backgroundSync: true });
+      const member = await accessService.createMember(req.body, {
+        backgroundSync: true,
+        allowOverCapacity: Boolean(req.body?.allow_over_capacity),
+      });
       if (whatsappService && (!member.access_role || member.access_role === 'student') && member.phone) {
         whatsappService.enqueueWelcomeMessage({ member }).catch(() => {});
       }
@@ -1877,7 +1880,9 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   router.post(
     '/classes/:id/enroll',
     requireReception,
-    handle(async (req, res) => res.json(gymService.enrollMemberInClass(req.params.id, req.body.member_id))),
+    handle(async (req, res) => res.json(gymService.enrollMemberInClass(req.params.id, req.body.member_id, {
+      allowOverCapacity: Boolean(req.body?.allow_over_capacity),
+    }))),
   );
   router.delete(
     '/classes/:id',

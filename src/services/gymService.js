@@ -6,6 +6,12 @@ function normalizeMemberName(name) {
   return String(name || '').normalize('NFD').replace(/\p{M}/gu, '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function isKidsSwimModalityName(name) {
+  const lower = String(name || '').toLowerCase();
+  return (lower.includes('nata') || lower.includes('baby'))
+    && (lower.includes('infantil') || lower.includes('baby') || lower.includes('crian'));
+}
+
 export class GymService {
   constructor(store) {
     this.store = store;
@@ -560,7 +566,7 @@ export class GymService {
     return { ok: true };
   }
 
-  enrollMemberInClass(classId, memberId) {
+  enrollMemberInClass(classId, memberId, { allowOverCapacity = false } = {}) {
     const cls = this.store.get('SELECT * FROM classes WHERE id = ?', [Number(classId)]);
     if (!cls) throw new Error('Turma nao encontrada.');
     if (cls.active === 0) throw new Error('Esta turma esta inativa.');
@@ -569,7 +575,7 @@ export class GymService {
     if (this.store.get('SELECT 1 FROM class_enrollments WHERE class_id = ? AND member_id = ?', [cls.id, member.id])) return { ok: true };
     if (cls.allow_new_enrollments === 0) throw new Error('Esta turma esta fechada para novas matriculas.');
     const count = this.store.get('SELECT COUNT(*) AS c FROM class_enrollments WHERE class_id = ?', [cls.id])?.c ?? 0;
-    if (count >= cls.capacity) throw new Error('Turma sem vagas disponiveis.');
+    if (!allowOverCapacity && count >= cls.capacity) throw new Error('Turma sem vagas disponiveis.');
 
     this.store.run('INSERT OR IGNORE INTO class_enrollments (class_id, member_id) VALUES (?, ?)', [
       cls.id,
@@ -578,18 +584,27 @@ export class GymService {
     return { ok: true };
   }
 
-  validateEnrollment(memberId, modalityId, classId) {
-    if (!this.store.get('SELECT id FROM modalities WHERE id = ?', [modalityId])) throw new Error('Modalidade não encontrada.');
-    if (classId == null) return;
+  validateEnrollment(memberId, modalityId, classId, { allowOverCapacity = false, requireKidsClass = true } = {}) {
+    const modality = this.store.get('SELECT id, name FROM modalities WHERE id = ?', [modalityId]);
+    if (!modality) throw new Error('Modalidade não encontrada.');
+    if (classId == null) {
+      if (requireKidsClass && isKidsSwimModalityName(modality.name)) {
+        const hasActiveClass = this.store.get('SELECT 1 FROM classes WHERE modality_id = ? AND active = 1 LIMIT 1', [modalityId]);
+        if (hasActiveClass) {
+          throw new Error('Selecione uma turma para Natação Infantil / Baby para manter a contagem de vagas correta.');
+        }
+      }
+      return;
+    }
     const cls = this.store.get('SELECT * FROM classes WHERE id = ? AND modality_id = ?', [classId, modalityId]);
     if (!cls) throw new Error('Selecione uma turma da modalidade escolhida.');
     const alreadyEnrolled = this.store.get('SELECT 1 FROM class_enrollments WHERE class_id = ? AND member_id = ?', [classId, memberId]);
     if (!alreadyEnrolled && cls.allow_new_enrollments === 0) throw new Error('Esta turma esta fechada para novas matriculas.');
     const count = this.store.get('SELECT COUNT(*) AS count FROM class_enrollments WHERE class_id = ? AND member_id <> ?', [classId, memberId]);
-    if (count.count >= cls.capacity) throw new Error('Esta turma está lotada.');
+    if (!allowOverCapacity && count.count >= cls.capacity) throw new Error('Esta turma está lotada.');
   }
 
-  saveEnrollment(memberId, { modality_id, class_id = null, previous_modality_id = null }) {
+  saveEnrollment(memberId, { modality_id, class_id = null, previous_modality_id = null, allow_over_capacity = false }, { allowOverCapacity = false } = {}) {
     const id = Number(memberId);
     const modalityId = Number(modality_id);
     const previousId = Number(previous_modality_id);
@@ -597,7 +612,9 @@ export class GymService {
     this.store.transaction(() => {
       const member = this.store.get('SELECT modality_id FROM members WHERE id = ?', [id]);
       if (!member) throw new Error('Aluno não encontrado.');
-      this.validateEnrollment(id, modalityId, classId);
+      this.validateEnrollment(id, modalityId, classId, {
+        allowOverCapacity: Boolean(allowOverCapacity || allow_over_capacity),
+      });
       if (previousId && previousId !== modalityId) {
         if (!this.hasEnrollment(id, previousId, member.modality_id)) throw new Error('Matrícula não encontrada.');
         if (this.hasEnrollment(id, modalityId, member.modality_id)) throw new Error('O aluno já está matriculado nessa modalidade.');

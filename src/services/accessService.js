@@ -709,7 +709,7 @@ export class AccessService {
     return withoutPortalCredentials(member);
   }
 
-  async createMember({ name, document, phone, email, plan_id, modality_id, class_id, birth_date, sex, address, emergency_contact, notes, guardian_name = null, guardian_cpf = null, guardian_phone = null, guardian_relationship = null, access_role = 'student', partner_provider = null, wellhub_id = null }, { backgroundSync = false } = {}) {
+  async createMember({ name, document, phone, email, plan_id, modality_id, class_id, birth_date, sex, address, emergency_contact, notes, guardian_name = null, guardian_cpf = null, guardian_phone = null, guardian_relationship = null, access_role = 'student', partner_provider = null, wellhub_id = null, allow_over_capacity = false }, { backgroundSync = false, allowOverCapacity = false } = {}) {
     if (!name?.trim()) {
       throw new Error('Nome do aluno e obrigatorio.');
     }
@@ -736,7 +736,9 @@ export class AccessService {
       const modalityId = modality_id ? Number(modality_id) : null;
       const classId = class_id ? Number(class_id) : null;
       if (modalityId !== null || classId !== null) {
-        gym.validateEnrollment(0, modalityId, classId);
+        gym.validateEnrollment(0, modalityId, classId, {
+          allowOverCapacity: Boolean(allowOverCapacity || allow_over_capacity),
+        });
       }
       const res = this.store.run(
         `INSERT INTO members (name, document, phone, email, plan_id, modality_id, birth_date, sex, address, emergency_contact, notes, guardian_name, guardian_cpf, guardian_phone, guardian_relationship, access_role, partner_provider, wellhub_id, status)

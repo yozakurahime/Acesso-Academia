@@ -978,3 +978,41 @@ test('recordPayment bloqueia duplicidade em 3 minutos no caixa e evita baixa dup
   assert.equal(pointConfirm.payment.id, first.payment.id);
   assert.equal(store.all("SELECT id FROM payments WHERE member_id = ? AND status = 'paid'", [member.id]).length, 1);
 });
+
+test('Natacao Infantil/Baby exige turma e recepcao pode cadastrar em turma lotada com allowOverCapacity', async () => {
+  const { store, service } = await createTestEnv();
+  const gym = new GymService(store);
+  const kidsMod = gym.createModality({ name: 'Natação Infantil', description: 'Piscina infantil' });
+  const cls = gym.createClass({
+    name: 'Infantil 16h',
+    modality_id: kidsMod.id,
+    schedule: 'Ter/Qui 16:00',
+    capacity: 1,
+  });
+
+  await assert.rejects(
+    () => service.createMember({ name: 'Crianca Sem Turma', document: nextCpf(), modality_id: kidsMod.id }),
+    /Selecione uma turma para Natação Infantil/,
+  );
+
+  const m1 = await service.createMember({
+    name: 'Crianca Um',
+    document: nextCpf(),
+    modality_id: kidsMod.id,
+    class_id: cls.id,
+  });
+  assert.ok(m1.id > 0);
+
+  await assert.rejects(
+    () => service.createMember({ name: 'Crianca Online Bloqueada', document: nextCpf(), modality_id: kidsMod.id, class_id: cls.id }),
+    /turma está lotada/i,
+  );
+
+  const m2 = await service.createMember(
+    { name: 'Crianca Extra Recepcao', document: nextCpf(), modality_id: kidsMod.id, class_id: cls.id },
+    { allowOverCapacity: true },
+  );
+  assert.ok(m2.id > 0);
+  const enrolledCount = store.get('SELECT COUNT(*) AS c FROM class_enrollments WHERE class_id = ?', [cls.id]).c;
+  assert.equal(enrolledCount, 2);
+});
