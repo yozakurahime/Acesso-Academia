@@ -2,12 +2,12 @@
   const DEFAULTS = {
     enabled: true,
     autoConfirm: true,
-    refreshSeconds: 10,
+    refreshSeconds: 8,
   };
 
   let cfg = { ...DEFAULTS };
   let sentNamesToday = new Set();
-  let lastRefreshAt = Date.now();
+  let lastRefreshAt = 0;
   let lastConfirmClickAt = 0;
   let badgeEl = null;
   let lastBadgeText = '';
@@ -30,7 +30,7 @@
       'font:600 12px/1.4 system-ui,-apple-system,sans-serif',
       'box-shadow:0 8px 24px rgba(0,0,0,.25)',
       'border:1px solid rgba(255,255,255,.15)',
-      'max-width:290px',
+      'max-width:300px',
       'pointer-events:none',
     ].join(';');
     document.body.appendChild(badgeEl);
@@ -50,15 +50,18 @@
 
   function findSectionCardByTitle(titleSubstring) {
     const target = titleSubstring.toLowerCase();
-    const headings = [...document.querySelectorAll('h1,h2,h3,h4,p,span,strong')];
-    for (const el of headings) {
-      if (el.closest('#oxigenio-wellhub-badge') || el.children.length > 0) continue;
-      const txt = (el.textContent || '').trim().toLowerCase();
-      if (!txt.includes(target)) continue;
+    const otherTitle = target.includes('para confirmar') ? 'check-ins confirmados' : 'check-ins para confirmar';
+    const candidates = [...document.querySelectorAll('h1,h2,h3,h4,h5,p,span,strong,div')];
+    for (const el of candidates) {
+      if (el.closest('#oxigenio-wellhub-badge')) continue;
+      const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!txt.includes(target) || txt.length > 70) continue;
       let card = el.parentElement;
-      for (let i = 0; i < 6 && card; i += 1) {
+      for (let i = 0; i < 8 && card && card !== document.body; i += 1) {
+        const cardText = (card.textContent || '').toLowerCase();
+        if (cardText.includes(otherTitle)) break;
         const rect = card.getBoundingClientRect();
-        if (rect.width > 240 && rect.height > 120) return card;
+        if (rect.width > 220 && rect.height > 120) return card;
         card = card.parentElement;
       }
     }
@@ -67,21 +70,27 @@
 
   function clickRefreshButtons() {
     const now = Date.now();
-    const intervalMs = Math.max(5, Number(cfg.refreshSeconds) || 10) * 1000;
+    const intervalMs = Math.max(4, Number(cfg.refreshSeconds) || 8) * 1000;
     if (now - lastRefreshAt < intervalMs) return;
     lastRefreshAt = now;
 
     ['Check-ins para confirmar', 'Check-ins confirmados'].forEach((title) => {
       const card = findSectionCardByTitle(title);
       if (!card) return;
-      const buttons = [...card.querySelectorAll('button, [role="button"]')];
-      const refreshBtn = buttons.find((btn) => {
-        const label = `${btn.getAttribute('aria-label') || ''} ${btn.getAttribute('title') || ''}`.toLowerCase();
+      const clickables = [...card.querySelectorAll('button, [role="button"], svg')];
+      const refreshTarget = clickables.find((el) => {
+        const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.toLowerCase();
         if (label.includes('atualiz') || label.includes('refresh') || label.includes('reload')) return true;
-        return false;
+        const txt = (el.textContent || '').trim();
+        if (txt) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width >= 12 && rect.width <= 44 && rect.height >= 12 && rect.height <= 44;
       });
-      if (refreshBtn && !refreshBtn.disabled) {
-        refreshBtn.click();
+      if (refreshTarget) {
+        const btn = refreshTarget.closest('button, [role="button"]') || refreshTarget;
+        if (!btn.disabled) {
+          btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        }
       }
     });
   }
@@ -89,14 +98,11 @@
   function tryAutoConfirmPending() {
     if (!cfg.autoConfirm) return;
     const now = Date.now();
-    if (now - lastConfirmClickAt < 2000) return;
+    if (now - lastConfirmClickAt < 1800) return;
 
-    const pendingCard = findSectionCardByTitle('Check-ins para confirmar');
-    if (!pendingCard) return;
-
-    const confirmBtns = [...pendingCard.querySelectorAll('button')].filter((btn) => {
-      if (btn.disabled) return false;
-      const txt = (btn.textContent || '').trim().toLowerCase();
+    const confirmBtns = [...document.querySelectorAll('button')].filter((btn) => {
+      if (btn.disabled || btn.closest('#oxigenio-wellhub-badge')) return false;
+      const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
       return /^(confirmar|aceitar|validar|confirm|accept)$/.test(txt);
     });
 
@@ -111,36 +117,33 @@
     const confirmedCard = findSectionCardByTitle('Check-ins confirmados');
     if (!confirmedCard) return [];
 
-    const ignoredLine = /^(check-ins confirmados|ver check-ins de hoje|nenhum check-in|\d+|\d+\s+de\s+[a-z]+\.?,\s*\d{1,2}:\d{2})$/i;
+    const lines = (confirmedCard.innerText || '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    const timeRegex = /^\d{1,2}\s+de\s+[a-zç.]+\s*,?\s*\d{1,2}:\d{2}$|^\d{1,2}:\d{2}$/i;
+    const headerIgnore = /^(check-ins confirmados|ver check-ins de hoje|nenhum check-in|\d+)$/i;
     const items = [];
     const seen = new Set();
 
-    const rows = [...confirmedCard.querySelectorAll('li, [role="listitem"], div')].filter((el) => {
-      const text = (el.textContent || '').trim();
-      if (!text || text.length > 180) return false;
-      return /\d{1,2}:\d{2}/.test(text) && el.querySelectorAll('div, p, span').length <= 8;
-    });
-
-    for (const row of rows) {
-      const lines = (row.innerText || '')
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l && !ignoredLine.test(l));
-      if (!lines.length) continue;
-
-      const candidateName = lines[0];
-      if (!candidateName || candidateName.length < 4 || /\d/.test(candidateName)) continue;
-      if (candidateName.includes('Check-ins')) continue;
-
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!timeRegex.test(lines[i])) continue;
+      // Look 1-2 lines above the timestamp for the student's name and modality
+      const prev1 = lines[i - 1] || '';
+      const prev2 = lines[i - 2] || '';
+      const candidateName = prev2 && !headerIgnore.test(prev2) && !timeRegex.test(prev2) ? prev2 : prev1;
+      const modality = candidateName === prev2 ? prev1 : '';
+      if (!candidateName || candidateName.length < 3 || headerIgnore.test(candidateName) || /\d/.test(candidateName)) {
+        continue;
+      }
       const key = candidateName.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-
-      const timeLine = (row.innerText || '').match(/\d{1,2}\s+de\s+[^\n]+|\d{1,2}:\d{2}/i)?.[0] || '';
       items.push({
         name: candidateName,
-        modality: lines[1] || '',
-        time_text: timeLine,
+        modality,
+        time_text: lines[i],
       });
     }
 
@@ -200,12 +203,12 @@
     if (document.body) {
       const observer = new MutationObserver((mutations) => {
         const onlyBadge = mutations.every((m) => m.target?.id === 'oxigenio-wellhub-badge' || m.target?.closest?.('#oxigenio-wellhub-badge'));
-        if (!onlyBadge) scheduleScan(1200);
+        if (!onlyBadge) scheduleScan(900);
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
-    setInterval(scanAndSync, 4000);
-    setTimeout(scanAndSync, 3000);
+    setInterval(scanAndSync, 3000);
+    setTimeout(scanAndSync, 2000);
   }
 
   init();
