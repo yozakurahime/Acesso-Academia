@@ -367,26 +367,23 @@
 
             <div id="memberStep2" class="wizard-pane hidden">
               <div id="mStep2NameLabel" class="wizard-summary"></div>
-              <div id="memberPartnerPicker" class="plan-picker" style="margin-top:0;padding-top:0;border-top:0;margin-bottom:14px;">
-                <p class="plan-picker-title">Tipo de vínculo</p>
-                <input type="hidden" id="mPartnerProvider" value="" />
-                <div id="memberPartnerPills" class="modality-pills">
-                  <button type="button" class="pill-btn active" data-partner="">Plano da Academia</button>
-                  <button type="button" class="pill-btn" data-partner="wellhub">Wellhub (Gympass)</button>
-                  <button type="button" class="pill-btn" data-partner="totalpass">TotalPass (CPF)</button>
-                </div>
-                <div id="mWellhubBox" class="form-grid hidden" style="margin-top:10px;">
-                  <label>ID Wellhub (opcional) <input type="text" id="mWellhubId" placeholder="Ex: 1234567890 (opcional)" /></label>
-                </div>
-                <p id="mTotalpassNote" class="muted hidden" style="margin:8px 0 0;font-size:13px;">
-                  O acesso TotalPass será liberado automaticamente pelo CPF informado na etapa anterior, sem precisar de matrícula paga.
-                </p>
-              </div>
+              <input type="hidden" id="mPartnerProvider" value="" />
               <div id="memberPlanPicker" class="plan-picker" style="margin-top:0;padding-top:0;border-top:0;">
                 <p class="plan-picker-title">Escolha a modalidade</p>
                 <div id="memberModalityPills" class="modality-pills"></div>
-                <p class="plan-picker-title">Escolha o plano ou combo</p>
-                <div id="memberPlanCards" class="plan-cards-grid"></div>
+                <div id="mWellhubBox" class="form-grid hidden" style="margin-top:12px;">
+                  <label>ID Wellhub (opcional) <input type="text" id="mWellhubId" placeholder="Ex: 1234567890 (opcional)" /></label>
+                </div>
+                <p id="mTotalpassNote" class="muted hidden" style="margin:10px 0 0;font-size:13px;">
+                  O acesso TotalPass será liberado automaticamente pelo CPF informado na etapa anterior, sem gerar cobrança.
+                </p>
+                <p id="mPartnerNoChargeNote" class="muted hidden" style="margin:6px 0 0;font-size:13px;">
+                  Modalidade de convênio ativa sem cobrança de mensalidade pela academia.
+                </p>
+                <div id="memberPlanCardsWrap">
+                  <p class="plan-picker-title">Escolha o plano ou combo</p>
+                  <div id="memberPlanCards" class="plan-cards-grid"></div>
+                </div>
               </div>
               <div class="plan-picker" style="margin-top:14px;">
                 <p class="plan-picker-title">Turma (opcional)</p>

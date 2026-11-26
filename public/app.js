@@ -1896,6 +1896,8 @@ document.getElementById('profModality').addEventListener('change', () => renderC
 
 function modalityIcon(name) {
   const n = String(name || '').toLowerCase();
+  if (n.includes('wellhub') || n.includes('gympass')) return '🎫';
+  if (n.includes('totalpass')) return '🏷️';
   if (n.includes('muscula')) return '💪';
   if (n.includes('jiu')) return '🥋';
   if (n.includes('muay')) return '🥊';
@@ -1931,8 +1933,9 @@ function parsePlanGroup(plan) {
 function renderMemberModalityPills() {
   const container = document.getElementById('memberModalityPills');
   if (!container) return;
-  const activeMod = state.memberPickerModality || '';
-  container.innerHTML = state.modalities
+  const activePartner = document.getElementById('mPartnerProvider')?.value || '';
+  const activeMod = activePartner ? '' : (state.memberPickerModality || '');
+  const regularPills = state.modalities
     .map((m) => {
       const isActive = activeMod.toLowerCase() === m.name.toLowerCase();
       return `
@@ -1942,6 +1945,19 @@ function renderMemberModalityPills() {
         </button>`;
     })
     .join('');
+  const partnerPills = [
+    { key: 'wellhub', label: 'Wellhub (Gympass)' },
+    { key: 'totalpass', label: 'TotalPass (CPF)' },
+  ]
+    .map(
+      (p) => `
+        <button type="button" class="modality-pill ${activePartner === p.key ? 'active' : ''}" data-partner-modality="${p.key}">
+          <span class="modality-pill-icon" aria-hidden="true">${modalityIcon(p.label)}</span>
+          <span>${escapeHtml(p.label)}</span>
+        </button>`,
+    )
+    .join('');
+  container.innerHTML = regularPills + partnerPills;
 }
 
 function renderMemberPlanPicker() {
@@ -2020,9 +2036,27 @@ function renderMemberPlanPicker() {
 document.getElementById('memberModalityPills')?.addEventListener('click', (e) => {
   const pill = e.target.closest('.modality-pill');
   if (!pill) return;
+  const mModSelect = document.getElementById('mModality');
+  const mPlanSelect = document.getElementById('mPlan');
+  const partnerMod = pill.dataset.partnerModality;
+  if (partnerMod) {
+    const currentPartner = document.getElementById('mPartnerProvider')?.value || '';
+    const nextPartner = currentPartner === partnerMod ? '' : partnerMod;
+    state.memberPickerModality = '';
+    if (mModSelect) mModSelect.value = '';
+    if (mPlanSelect && nextPartner) mPlanSelect.value = '';
+    setMemberPartnerProvider(nextPartner);
+    renderClassOptions('mModality', 'mClass');
+    renderMemberPlanPicker();
+    updateMemberWizardSummaries();
+    return;
+  }
+
   const modId = pill.dataset.modId;
   const modName = pill.dataset.modName;
-  const mModSelect = document.getElementById('mModality');
+  if (document.getElementById('mPartnerProvider')?.value) {
+    setMemberPartnerProvider('');
+  }
   if (state.memberPickerModality === modName) {
     state.memberPickerModality = '';
     mModSelect.value = '';
@@ -5574,14 +5608,17 @@ function updateMemberWizardSummaries() {
   }
 
   const partnerProvider = document.getElementById('mPartnerProvider')?.value || '';
-  const selectionText = [
-    modSelect.value ? `<strong>Modalidade:</strong> ${escapeHtml(modName)}` : '<strong>Modalidade:</strong> Não selecionada',
-    partnerProvider
-      ? `<strong>Convênio:</strong> ${escapeHtml(partnerProvider === 'wellhub' ? 'Wellhub (Gympass)' : 'TotalPass')}`
-      : plan
-        ? `<strong>Plano:</strong> ${escapeHtml(plan.name)} (${fmtMoney(plan.price_cents)})`
-        : '<strong>Plano:</strong> Sem plano contratado (bloqueado para entrar)',
-  ].join(' · ');
+  const selectionText = partnerProvider
+    ? [
+        `<strong>Modalidade:</strong> ${escapeHtml(partnerProvider === 'wellhub' ? 'Wellhub (Gympass)' : 'TotalPass (CPF)')}`,
+        '<strong>Cobrança:</strong> Sem cobrança (Convênio)',
+      ].join(' · ')
+    : [
+        modSelect.value ? `<strong>Modalidade:</strong> ${escapeHtml(modName)}` : '<strong>Modalidade:</strong> Não selecionada',
+        plan
+          ? `<strong>Plano:</strong> ${escapeHtml(plan.name)} (${fmtMoney(plan.price_cents)})`
+          : '<strong>Plano:</strong> Sem plano contratado (bloqueado para entrar)',
+      ].join(' · ');
 
   const step2Summary = document.getElementById('mStep2Summary');
   if (step2Summary) {
@@ -5627,24 +5664,18 @@ function setMemberPartnerProvider(provider) {
   const clean = provider || '';
   const input = document.getElementById('mPartnerProvider');
   if (input) input.value = clean;
-  document.querySelectorAll('#memberPartnerPills [data-partner]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.partner === clean);
-  });
   document.getElementById('mWellhubBox')?.classList.toggle('hidden', clean !== 'wellhub');
   document.getElementById('mTotalpassNote')?.classList.toggle('hidden', clean !== 'totalpass');
-  document.getElementById('memberPlanPicker')?.classList.toggle('hidden', Boolean(clean));
+  document.getElementById('mPartnerNoChargeNote')?.classList.toggle('hidden', !clean);
+  document.getElementById('memberPlanCardsWrap')?.classList.toggle('hidden', Boolean(clean));
+  document.getElementById('btnMemberAddToCart')?.classList.toggle('hidden', Boolean(clean));
   const submitBtn = document.getElementById('btnMemberSubmit');
   if (submitBtn) {
-    submitBtn.textContent = clean ? 'Confirmar cadastro (Convênio)' : 'Confirmar e ir para pagamento';
+    submitBtn.textContent = clean ? 'Confirmar cadastro (Sem cobrança)' : 'Confirmar e ir para pagamento';
   }
+  renderMemberModalityPills();
   updateMemberWizardSummaries();
 }
-
-document.getElementById('memberPartnerPills')?.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-partner]');
-  if (!btn) return;
-  setMemberPartnerProvider(btn.dataset.partner);
-});
 
 function resetMemberWizard() {
   const form = document.getElementById('memberForm');
