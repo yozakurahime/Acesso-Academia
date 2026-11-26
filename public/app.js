@@ -1391,10 +1391,20 @@ async function loadPlans() {
   renderBillingPlanPicker();
 }
 
+function resetBillingResidualState() {
+  state.billingFinalAmountEdited = false;
+  const useCreditEl = document.getElementById('pUseCredit');
+  if (useCreditEl) useCreditEl.checked = false;
+  const splitToggleEl = document.getElementById('pSplitToggle');
+  if (splitToggleEl) splitToggleEl.checked = false;
+  if (typeof resetSplitBox === 'function') resetSplitBox();
+}
+
 function updatePaymentAmountFromPlan() {
   const planId = Number(document.getElementById('pPlan').value);
   const plan = state.plans.find((p) => p.id === planId);
   document.getElementById('pAmount').value = plan ? (plan.price_cents / 100).toFixed(2) : '';
+  state.billingFinalAmountEdited = false;
   renderBillingSummary();
 }
 
@@ -2281,7 +2291,7 @@ function selectBillingMember(member) {
     return;
   }
   state.billingChangePlanOpen = false;
-  state.billingFinalAmountEdited = false;
+  resetBillingResidualState();
   state.billingDiffDebtDueDate = '';
   document.getElementById('pMemberSearch').value = memberLabel(member);
   document.getElementById('pMember').value = String(member.id);
@@ -2433,7 +2443,7 @@ function renderBillingSummary() {
             </div>
           </div>
           <div class="inline-actions">
-            ${member.plan_id ? `<button type="button" class="btn btn-secondary btn-sm" data-toggle-billing-plan="1">${state.billingChangePlanOpen ? 'Ocultar planos' : 'Trocar matrícula'}</button>` : ''}
+            ${member.plan_id && !charge ? `<button type="button" class="btn btn-secondary btn-sm" data-toggle-billing-plan="1">${state.billingChangePlanOpen ? 'Ocultar planos' : 'Trocar matrícula'}</button>` : ''}
             <button type="button" class="btn btn-secondary btn-sm billing-clear-member" data-clear-billing-member="1">Trocar aluno</button>
           </div>
         </div>
@@ -2475,7 +2485,7 @@ function renderBillingSummary() {
   }
 
   const hasBillableMember = Boolean(member && !team);
-  const showPlanStep = hasBillableMember && (!member.plan_id || Boolean(state.billingChangePlanOpen));
+  const showPlanStep = hasBillableMember && (!member.plan_id || (Boolean(state.billingChangePlanOpen) && !charge));
   document.getElementById('billingStep2')?.classList.toggle('hidden', !showPlanStep);
   document.getElementById('billingStep3')?.classList.toggle('hidden', !hasBillableMember);
   document.getElementById('billingCheckoutAsideWrap')?.classList.toggle('hidden', !hasBillableMember);
@@ -2494,8 +2504,11 @@ function renderBillingSummary() {
   const asideExtra = document.getElementById('billingAsideExtra');
   const diffBox = document.getElementById('billingDiffBox');
 
-  if (asideFinalInput && !state.billingFinalAmountEdited) {
-    asideFinalInput.value = hasBillableMember ? (finalDisplayAmount / 100).toFixed(2) : '0.00';
+  if (asideFinalInput) {
+    asideFinalInput.min = effectiveCreditUsed > 0 && finalDisplayAmount === 0 ? '0' : '0.01';
+    if (!state.billingFinalAmountEdited) {
+      asideFinalInput.value = hasBillableMember ? (finalDisplayAmount / 100).toFixed(2) : '0.00';
+    }
   }
   const finalPaidCents = hasBillableMember && asideFinalInput
     ? toCents(asideFinalInput.value)
@@ -2582,10 +2595,15 @@ function renderBillingSummary() {
   const addCartBtn = document.getElementById('btnAddBillingToCart');
   const quickConfirmBox = document.getElementById('quickConfirmMethods');
   if (typeof renderBillingPlanPicker === 'function') renderBillingPlanPicker();
-  const isDisabled = !member || team || finalPaidCents <= 0 || !splitValid;
+  const coveredByCredit = effectiveCreditUsed > 0 && finalDisplayAmount === 0 && finalPaidCents === 0;
+  const confirmDisabled = !member || team || (finalPaidCents <= 0 && !coveredByCredit);
+  const isDisabled = confirmDisabled || !splitValid;
   const actionDisabled = !member || team || finalPaidCents <= 0;
+  const pMethodEl = document.getElementById('pMethod');
+  const currentMethodCode = String(pMethodEl?.value || '').toLowerCase();
+  const availableMethods = new Set(pMethodEl ? [...pMethodEl.options].map((opt) => String(opt.value || '').toLowerCase()) : []);
   const splitPointTarget = resolvePointSplitTarget();
-  const pointDisabled = !member || team || (splitPointTarget.active ? !splitPointTarget.single : finalPaidCents <= 0);
+  const pointDisabled = !member || team || (splitPointTarget.active ? !splitPointTarget.single : (finalPaidCents <= 0 || currentMethodCode === 'cash'));
   if (pointBtn) {
     pointBtn.disabled = pointDisabled;
     if (pointDisabled) {
@@ -2613,7 +2631,8 @@ function renderBillingSummary() {
   if (quickConfirmBox) {
     quickConfirmBox.classList.toggle('hidden', splitActive);
     quickConfirmBox.querySelectorAll('button[data-quick-confirm]').forEach((btn) => {
-      btn.disabled = actionDisabled;
+      const methodCode = String(btn.dataset.quickConfirm || '').toLowerCase();
+      btn.disabled = confirmDisabled || !availableMethods.has(methodCode);
     });
   }
   if (submitBtn) {
@@ -2639,7 +2658,7 @@ document.getElementById('billingSummary')?.addEventListener('click', (event) => 
   const clearBtn = event.target.closest('[data-clear-billing-member]');
   if (!clearBtn) return;
   state.billingChangePlanOpen = false;
-  state.billingFinalAmountEdited = false;
+  resetBillingResidualState();
   state.billingDiffDebtDueDate = '';
   document.getElementById('pMemberSearch').value = '';
   document.getElementById('pMember').value = '';
@@ -6072,6 +6091,7 @@ function finishPaymentAndReturnHome(options = {}) {
   const { keepPendingFace = false } = options;
   if (!keepPendingFace) state.pendingFaceAfterPaymentId = null;
   state.billingDiffDebtDueDate = '';
+  resetBillingResidualState();
   const searchEl = document.getElementById('pMemberSearch');
   const memberEl = document.getElementById('pMember');
   const whatsappBox = document.getElementById('whatsappCheckoutBox');
@@ -7018,12 +7038,12 @@ function startPaymentAutoPoll({ type, id, stayOnMember = false, isCart = false }
       return;
     }
     try {
-      if (type === 'pix') {
+      if (type === 'pix' || type === 'charge') {
         const res = await api(`/api/gateways/charges/${id}/check`, { method: 'POST' });
         if (res.paid) {
           stopPaymentAutoPoll();
           if (activePixChargeId === Number(id) && res.charge) renderPixChargeBox(res.charge);
-          showToast('Pix confirmado e mensalidade baixada!');
+          showToast(type === 'charge' ? 'Cobrança confirmada e mensalidade baixada!' : 'Pix confirmado e mensalidade baixada!');
           await Promise.all([loadGatewayCharges(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
           if (isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
           finishPaymentAndReturnHome();
@@ -7554,6 +7574,7 @@ document.getElementById('btnAddBillingToCart')?.addEventListener('click', () => 
     showToast(`${member.name} adicionado ao carrinho!`);
     document.getElementById('pMemberSearch').value = '';
     document.getElementById('pMember').value = '';
+    resetBillingResidualState();
     renderBillingSummary();
     document.getElementById('pMemberSearch')?.focus();
   }
@@ -7565,7 +7586,7 @@ document.getElementById('billingCartPanel')?.addEventListener('input', (e) => {
   const idx = Number(input.dataset.cartAmount);
   if (!Number.isInteger(idx) || !state.billingCart?.[idx]) return;
   const cents = toCents(input.value);
-  if (cents > 0) state.billingCart[idx].amount_cents = cents;
+  state.billingCart[idx].amount_cents = Math.max(0, cents);
   const totalEl = document.getElementById('billingCartTotal');
   if (totalEl) {
     const sum = state.billingCart.reduce((acc, item) => acc + Number(item.amount_cents || 0), 0);
@@ -7588,6 +7609,10 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
   const payBtn = e.target.closest('[data-cart-pay-method]');
   if (payBtn) {
     if (!state.billingCart?.length) return;
+    if (state.billingCart.some((item) => Number(item.amount_cents || 0) <= 0)) {
+      showToast('Informe um valor válido (> R$ 0,00) para todos os itens do carrinho.', true);
+      return;
+    }
     const method = payBtn.dataset.cartPayMethod || 'pix';
     await withLoading(payBtn, async () => {
       try {
@@ -7603,7 +7628,8 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
         const firstPayment = res.results?.[0]?.payment;
         if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
       } catch (err) {
-        showToast(err.message, true);
+        if (err.code === 'CASH_CLOSED') await openCashFromBilling({ autoSubmit: false });
+        else showToast(err.message, true);
       }
     });
     return;
@@ -7694,16 +7720,16 @@ function advanceSplitAfterPointPaid(res) {
   if (firstPosRow) firstPosRow.remove();
   state.billingFinalAmountEdited = false;
   const remainingRows = [...document.querySelectorAll('#pSplitRows .split-row')];
-  if (remainingRows.length <= 1 && Number(res?.remaining_cents || 0) > 0) {
+  if (remainingRows.length <= 1) {
     const onlyRow = remainingRows[0];
     if (onlyRow) {
       const m = onlyRow.querySelector('.split-method')?.value || 'cash';
       const pMethod = document.getElementById('pMethod');
       if (pMethod) pMethod.value = m;
     }
-    if (remainingRows.length === 0) {
-      document.getElementById('pSplitToggle').checked = false;
-    }
+    const splitToggle = document.getElementById('pSplitToggle');
+    if (splitToggle) splitToggle.checked = false;
+    if (typeof resetSplitBox === 'function') resetSplitBox();
   }
   renderBillingSummary();
 }

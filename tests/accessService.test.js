@@ -897,3 +897,55 @@ test('createMember exige dados do responsavel apenas para menores de 14 anos e d
     /CPF é obrigatório/i,
   );
 });
+
+test('recordPayment bloqueia split + credito excedente, aceita amount_cents null, quita cobranca em 100% fiado e deletePayment limpa caixa', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.listPlans().find((p) => p.price_cents === 12000);
+  const member = await service.createMember({ name: 'Aluno Fiado Total', document: nextCpf(), plan_id: plan.id });
+
+  // split_payments + credit_excess_cents > 0 deve falhar com 400
+  await assert.rejects(
+    () => service.recordPayment({
+      member_id: member.id,
+      plan_id: plan.id,
+      amount_cents: 12000,
+      split_payments: [{ method: 'pix', amount_cents: 6000 }, { method: 'cash', amount_cents: 6000 }],
+      credit_excess_cents: 1000,
+    }),
+    (err) => err.statusCode === 400,
+  );
+
+  // 100% fiado (debt_cents === netAmountCents) deve quitar membership_charges e chamar onRecorded
+  let recordedCalled = false;
+  const fiadoRes = await service.recordPayment(
+    {
+      member_id: member.id,
+      plan_id: plan.id,
+      amount_cents: null,
+      debt_cents: 12000,
+    },
+    {
+      onRecorded: () => { recordedCalled = true; },
+    },
+  );
+  assert.equal(recordedCalled, true);
+  assert.equal(fiadoRes.payments.length, 0);
+  assert.equal(fiadoRes.debt.amount_cents, 12000);
+  assert.equal(store.all('SELECT id FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]).length, 0);
+
+  // deletePayment remove cash_movements usando session_id quando caixa esta aberto
+  const sessionIns = store.run("INSERT INTO cash_sessions (opening_cents, status) VALUES (5000, 'open')");
+  const m2 = await service.createMember({ name: 'Aluno Estorno Caixa', document: nextCpf(), plan_id: plan.id });
+  const payRes = await service.recordPayment({ member_id: m2.id, plan_id: plan.id, amount_cents: null, method: 'cash' });
+  assert.equal(payRes.payment.amount_cents, 12000);
+  assert.equal(
+    store.all('SELECT id FROM cash_movements WHERE session_id = ? AND type = ?', [sessionIns.lastInsertRowid, 'payment']).length,
+    1,
+  );
+
+  await service.deletePayment(payRes.payment.id);
+  assert.equal(
+    store.all('SELECT id FROM cash_movements WHERE session_id = ? AND type = ?', [sessionIns.lastInsertRowid, 'payment']).length,
+    0,
+  );
+});

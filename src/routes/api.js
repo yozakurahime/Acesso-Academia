@@ -1596,7 +1596,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/payments',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.recordPayment(req.body, { requireOpenCash: true, backgroundSync: true });
+      const result = await accessService.recordPayment(req.body || {}, { requireOpenCash: true, backgroundSync: true });
       auditService.log({
         actorUser: req.authUser,
         actorRole: req.authRole,
@@ -1621,19 +1621,30 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       if (!items.length) {
         throw Object.assign(new Error('Adicione ao menos um aluno no carrinho.'), { statusCode: 400 });
       }
+      const txItems = store.transaction(() => {
+        const out = [];
+        for (let i = 0; i < items.length; i += 1) {
+          const item = items[i] || {};
+          out.push(
+            accessService.recordPaymentSync(
+              {
+                member_id: item.member_id,
+                plan_id: item.plan_id || null,
+                amount_cents: item.amount_cents ?? null,
+                method,
+                notes: item.notes || `Recebimento em lote (${i + 1}/${items.length})`,
+              },
+              { requireOpenCash: true },
+            ),
+          );
+        }
+        return out;
+      });
       const results = [];
-      for (let i = 0; i < items.length; i += 1) {
+      for (let i = 0; i < txItems.length; i += 1) {
+        const { _updatedMember, ...result } = txItems[i];
+        result.sync = _updatedMember ? accessService.scheduleMemberSync(_updatedMember) : null;
         const item = items[i] || {};
-        const result = await accessService.recordPayment(
-          {
-            member_id: item.member_id,
-            plan_id: item.plan_id || null,
-            amount_cents: item.amount_cents ?? null,
-            method,
-            notes: item.notes || `Recebimento em lote (${i + 1}/${items.length})`,
-          },
-          { requireOpenCash: true, backgroundSync: true },
-        );
         auditService.log({
           actorUser: req.authUser,
           actorRole: req.authRole,
@@ -2409,7 +2420,8 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       const timestamp = parts.get('ts')?.trim();
       const signature = parts.get('v1')?.trim();
       const requestId = req.get('x-request-id');
-      const id = typeof req.query['data.id'] === 'string' ? req.query['data.id'] : '';
+      const rawId = req.query?.['data.id'] ?? req.query?.id ?? req.body?.data?.id ?? req.body?.id ?? '';
+      const id = String(rawId || '').trim();
       const manifest = `id:${id.toLowerCase()};request-id:${requestId};ts:${timestamp};`;
       if (!id || !requestId || !/^\d+$/.test(timestamp || '') ||
           !secrets.some((secret) => equalSecret(signature, createHmac('sha256', secret).update(manifest).digest('hex')))) {

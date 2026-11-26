@@ -233,13 +233,14 @@ export class GatewayService {
 
   async createPixCharge({ member_id, plan_id = null, amount_cents = null }) {
     const memberId = Number(member_id);
-    if (this.pixRequests.has(memberId)) return this.pixRequests.get(memberId);
+    const reqKey = `${memberId}:${Number(amount_cents) || 0}`;
+    if (this.pixRequests.has(reqKey)) return this.pixRequests.get(reqKey);
     const request = this._createPixChargeOnce({ member_id: memberId, plan_id, amount_cents });
-    this.pixRequests.set(memberId, request);
+    this.pixRequests.set(reqKey, request);
     try {
       return await request;
     } finally {
-      this.pixRequests.delete(memberId);
+      this.pixRequests.delete(reqKey);
     }
   }
 
@@ -256,9 +257,9 @@ export class GatewayService {
          FROM gateway_charges gc
          JOIN members m ON m.id = gc.member_id
          LEFT JOIN plans p ON p.id = gc.plan_id
-         WHERE gc.provider = 'mercadopago' AND gc.checkout_ref IS NULL AND gc.member_id = ? AND gc.membership_charge_id = ? AND gc.status = 'pending'
+         WHERE gc.provider = 'mercadopago' AND gc.checkout_ref IS NULL AND gc.member_id = ? AND gc.membership_charge_id = ? AND gc.amount_cents = ? AND gc.status = 'pending'
          ORDER BY gc.id DESC LIMIT 1`,
-        [member.id, charge.id],
+        [member.id, charge.id, finalAmount],
       );
       if (existingPending) return existingPending;
     }
@@ -469,7 +470,7 @@ export class GatewayService {
       .trim()
       .replace(/\/+$/, '');
     if (!/^https:\/\//i.test(base)) return null;
-    return `${base}/api/gateways/mp/webhook`;
+    return `${base}/api/webhooks/mercadopago`;
   }
 
   async createMercadoPagoPix({ member, amountCents, description, settings, idempotencyKey = null }) {
@@ -605,38 +606,100 @@ export class GatewayService {
       }
     }
 
-    if (batchItems) {
-      const results = [];
-      let firstPaymentId = null;
-      for (const item of batchItems) {
-        const res = await this.accessService.recordPayment(
-          {
-            member_id: item.member_id,
-            plan_id: item.plan_id,
-            amount_cents: item.amount_cents,
-            method,
-            external_id: `mercadopago:${paymentId}:m${item.member_id}`,
-            charge_id: item.membership_charge_id,
-            notes: batchItems.length > 1 ? `${notes} · Lote (${batchItems.length} pessoas)` : notes,
-          },
-          {
-            reconcileOpenCharge: true,
-            exactCharge: Boolean(item.membership_charge_id),
-            separateOnlineCash: true,
-            onRecorded: (recordedId) => {
-              if (!firstPaymentId) firstPaymentId = recordedId;
-            },
-          },
+    const applyChargeDiscount = (chargeId, paidCents) => {
+      if (!chargeId || !(Number(paidCents) > 0)) return;
+      const openCharge = this.store.get(
+        'SELECT id, amount FROM membership_charges WHERE id = ? AND payment_id IS NULL',
+        [chargeId],
+      );
+      if (openCharge && Number(paidCents) < Number(openCharge.amount)) {
+        this.store.run(
+          'UPDATE membership_charges SET amount = ? WHERE id = ? AND payment_id IS NULL',
+          [Number(paidCents), openCharge.id],
         );
-        results.push(res);
-        if (this.whatsappService && !res.alreadyRecorded) {
-          this.whatsappService.enqueuePaymentReceipt(res).catch(() => {});
+      }
+    };
+
+    if (batchItems) {
+      const canSyncTx = typeof this.accessService.recordPaymentSync === 'function';
+      let results;
+      if (canSyncTx) {
+        results = this.store.transaction(() => {
+          const out = [];
+          let firstPaymentId = null;
+          for (const item of batchItems) {
+            applyChargeDiscount(item.membership_charge_id, item.amount_cents);
+            const res = this.accessService.recordPaymentSync(
+              {
+                member_id: item.member_id,
+                plan_id: item.plan_id,
+                amount_cents: item.amount_cents,
+                method,
+                external_id: `mercadopago:${paymentId}:m${item.member_id}`,
+                charge_id: item.membership_charge_id,
+                notes: batchItems.length > 1 ? `${notes} · Lote (${batchItems.length} pessoas)` : notes,
+              },
+              {
+                reconcileOpenCharge: true,
+                exactCharge: Boolean(item.membership_charge_id),
+                separateOnlineCash: true,
+                onRecorded: (recordedId) => {
+                  if (!firstPaymentId) firstPaymentId = recordedId;
+                },
+              },
+            );
+            out.push(res);
+          }
+          this.store.run(
+            `UPDATE gateway_charges SET status = 'paid', payment_id = COALESCE(payment_id, ?), paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+            [firstPaymentId, fresh.id],
+          );
+          return out;
+        });
+        for (const res of results) {
+          if (res._updatedMember && typeof this.accessService.scheduleMemberSync === 'function') {
+            res.sync = this.accessService.scheduleMemberSync(res._updatedMember);
+          }
+          delete res._updatedMember;
+        }
+      } else {
+        results = [];
+        let firstPaymentId = null;
+        for (const item of batchItems) {
+          applyChargeDiscount(item.membership_charge_id, item.amount_cents);
+          const res = await this.accessService.recordPayment(
+            {
+              member_id: item.member_id,
+              plan_id: item.plan_id,
+              amount_cents: item.amount_cents,
+              method,
+              external_id: `mercadopago:${paymentId}:m${item.member_id}`,
+              charge_id: item.membership_charge_id,
+              notes: batchItems.length > 1 ? `${notes} · Lote (${batchItems.length} pessoas)` : notes,
+            },
+            {
+              reconcileOpenCharge: true,
+              exactCharge: Boolean(item.membership_charge_id),
+              separateOnlineCash: true,
+              onRecorded: (recordedId) => {
+                if (!firstPaymentId) firstPaymentId = recordedId;
+              },
+            },
+          );
+          results.push(res);
+        }
+        this.store.run(
+          `UPDATE gateway_charges SET status = 'paid', payment_id = COALESCE(payment_id, ?), paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+          [firstPaymentId, fresh.id],
+        );
+      }
+      if (this.whatsappService) {
+        for (const res of results) {
+          if (!res.alreadyRecorded) {
+            this.whatsappService.enqueuePaymentReceipt(res).catch(() => {});
+          }
         }
       }
-      this.store.run(
-        `UPDATE gateway_charges SET status = 'paid', payment_id = COALESCE(payment_id, ?), paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
-        [firstPaymentId, fresh.id],
-      );
       return {
         alreadyPaid: results.every((r) => Boolean(r.alreadyRecorded)),
         charge: this.store.get('SELECT * FROM gateway_charges WHERE id = ?', [fresh.id]),
@@ -645,22 +708,54 @@ export class GatewayService {
       };
     }
 
-    const paymentResult = await this.accessService.recordPayment(
-      {
-        member_id: fresh.member_id,
-        plan_id: fresh.plan_id,
-        amount_cents: fresh.amount_cents,
-        method,
-        external_id: `mercadopago:${paymentId}`,
-        charge_id: fresh.membership_charge_id,
-        notes,
-      },
-      { reconcileOpenCharge: true, exactCharge: Boolean(fresh.membership_charge_id), separateOnlineCash: true,
-        onRecorded: (paymentId) => this.store.run(
-          `UPDATE gateway_charges SET status = 'paid', payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
-          [paymentId, fresh.id],
-        ) },
-    );
+    let paymentResult;
+    if (typeof this.accessService.recordPaymentSync === 'function') {
+      paymentResult = this.store.transaction(() => {
+        applyChargeDiscount(fresh.membership_charge_id, fresh.amount_cents);
+        return this.accessService.recordPaymentSync(
+          {
+            member_id: fresh.member_id,
+            plan_id: fresh.plan_id,
+            amount_cents: fresh.amount_cents,
+            method,
+            external_id: `mercadopago:${paymentId}`,
+            charge_id: fresh.membership_charge_id,
+            notes,
+          },
+          {
+            reconcileOpenCharge: true,
+            exactCharge: Boolean(fresh.membership_charge_id),
+            separateOnlineCash: true,
+            onRecorded: (recordedPaymentId) => this.store.run(
+              `UPDATE gateway_charges SET status = 'paid', payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+              [recordedPaymentId, fresh.id],
+            ),
+          },
+        );
+      });
+      if (paymentResult._updatedMember && typeof this.accessService.trySyncMemberToDevice === 'function') {
+        paymentResult.sync = await this.accessService.trySyncMemberToDevice(paymentResult._updatedMember);
+      }
+      delete paymentResult._updatedMember;
+    } else {
+      applyChargeDiscount(fresh.membership_charge_id, fresh.amount_cents);
+      paymentResult = await this.accessService.recordPayment(
+        {
+          member_id: fresh.member_id,
+          plan_id: fresh.plan_id,
+          amount_cents: fresh.amount_cents,
+          method,
+          external_id: `mercadopago:${paymentId}`,
+          charge_id: fresh.membership_charge_id,
+          notes,
+        },
+        { reconcileOpenCharge: true, exactCharge: Boolean(fresh.membership_charge_id), separateOnlineCash: true,
+          onRecorded: (recordedPaymentId) => this.store.run(
+            `UPDATE gateway_charges SET status = 'paid', payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+            [recordedPaymentId, fresh.id],
+          ) },
+      );
+    }
 
     if (this.whatsappService && !paymentResult.alreadyRecorded) {
       this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
@@ -1095,34 +1190,82 @@ export class GatewayService {
     }
 
     if (batchItems) {
-      const paymentResults = [];
-      for (let i = 0; i < batchItems.length; i += 1) {
-        const item = batchItems[i];
-        const res = await this.accessService.recordPayment(
-          {
-            member_id: item.member_id,
-            plan_id: item.plan_id,
-            amount_cents: item.amount_cents,
-            method,
-            external_id: `${externalId}:batch:${item.member_id}:${i}`,
-            charge_id: item.charge_id ?? null,
-            notes: `${notes} (Carrinho ${i + 1}/${batchItems.length})`,
-          },
-          {
-            reconcileOpenCharge: true,
-            exactCharge: Boolean(item.charge_id),
-            onRecorded: i === 0
-              ? (paymentId) => this.store.run(
-                  `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = ?, paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
-                  [method, paymentId, order.id],
-                )
-              : undefined,
-          },
-        );
-        if (this.whatsappService && !res.alreadyRecorded) {
-          this.whatsappService.enqueuePaymentReceipt(res).catch(() => {});
+      const canSyncTx = typeof this.accessService.recordPaymentSync === 'function';
+      let paymentResults;
+      if (canSyncTx) {
+        paymentResults = this.store.transaction(() => {
+          const out = [];
+          let firstPaymentId = null;
+          for (let i = 0; i < batchItems.length; i += 1) {
+            const item = batchItems[i];
+            const res = this.accessService.recordPaymentSync(
+              {
+                member_id: item.member_id,
+                plan_id: item.plan_id,
+                amount_cents: item.amount_cents,
+                method,
+                external_id: `${externalId}:batch:${item.member_id}:${i}`,
+                charge_id: item.charge_id ?? null,
+                notes: `${notes} (Carrinho ${i + 1}/${batchItems.length})`,
+              },
+              {
+                reconcileOpenCharge: true,
+                exactCharge: Boolean(item.charge_id),
+                onRecorded: (recordedId) => {
+                  if (!firstPaymentId) firstPaymentId = recordedId;
+                },
+              },
+            );
+            out.push(res);
+          }
+          this.store.run(
+            `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = COALESCE(payment_id, ?), paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+            [method, firstPaymentId, order.id],
+          );
+          return out;
+        });
+        for (const res of paymentResults) {
+          if (res._updatedMember && typeof this.accessService.scheduleMemberSync === 'function') {
+            res.sync = this.accessService.scheduleMemberSync(res._updatedMember);
+          }
+          delete res._updatedMember;
         }
-        paymentResults.push(res);
+      } else {
+        paymentResults = [];
+        let firstPaymentId = null;
+        for (let i = 0; i < batchItems.length; i += 1) {
+          const item = batchItems[i];
+          const res = await this.accessService.recordPayment(
+            {
+              member_id: item.member_id,
+              plan_id: item.plan_id,
+              amount_cents: item.amount_cents,
+              method,
+              external_id: `${externalId}:batch:${item.member_id}:${i}`,
+              charge_id: item.charge_id ?? null,
+              notes: `${notes} (Carrinho ${i + 1}/${batchItems.length})`,
+            },
+            {
+              reconcileOpenCharge: true,
+              exactCharge: Boolean(item.charge_id),
+              onRecorded: (recordedId) => {
+                if (!firstPaymentId) firstPaymentId = recordedId;
+              },
+            },
+          );
+          paymentResults.push(res);
+        }
+        this.store.run(
+          `UPDATE point_orders SET status = 'paid', payment_method = ?, payment_id = COALESCE(payment_id, ?), paid_at = COALESCE(paid_at, datetime('now', 'localtime')) WHERE id = ? AND status <> 'paid'`,
+          [method, firstPaymentId, order.id],
+        );
+      }
+      if (this.whatsappService) {
+        for (const res of paymentResults) {
+          if (!res.alreadyRecorded) {
+            this.whatsappService.enqueuePaymentReceipt(res).catch(() => {});
+          }
+        }
       }
       return {
         paid: true,
@@ -1165,6 +1308,21 @@ export class GatewayService {
             `${notes} (Parcela parcial)`,
           ],
         );
+        const openCash = this.store.get("SELECT id FROM cash_sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1");
+        if (openCash && Number(order.amount_cents) > 0) {
+          const memberRow = this.store.get('SELECT name FROM members WHERE id = ?', [order.member_id]);
+          const planRow = order.plan_id ? this.store.get('SELECT name FROM plans WHERE id = ?', [order.plan_id]) : null;
+          this.store.run(
+            'INSERT INTO cash_movements (session_id, type, amount_cents, method, description) VALUES (?, ?, ?, ?, ?)',
+            [
+              openCash.id,
+              'payment',
+              order.amount_cents,
+              method,
+              `Mensalidade: ${memberRow?.name || `#${order.member_id}`}${planRow ? ` (${planRow.name})` : ''} (Parcela parcial)`,
+            ],
+          );
+        }
         const newRemaining = Math.max(1, Number(openCharge.amount) - Number(order.amount_cents));
         this.store.run(
           `UPDATE membership_charges SET amount = ? WHERE id = ? AND payment_id IS NULL`,
@@ -1178,13 +1336,17 @@ export class GatewayService {
       });
       const payment = this.store.get('SELECT * FROM payments WHERE id = ?', [paymentId]);
       const member = this.accessService.getMember(order.member_id);
+      const paymentResult = { payment, member, alreadyRecorded: false };
+      if (this.whatsappService) {
+        this.whatsappService.enqueuePaymentReceipt(paymentResult).catch(() => {});
+      }
       return {
         paid: true,
         alreadyPaid: false,
         partial: true,
         remaining_cents: remainingCents,
         order: this.getPointOrderById(order.id),
-        paymentResult: { payment, member, alreadyRecorded: false },
+        paymentResult,
       };
     }
 
@@ -1221,7 +1383,10 @@ export class GatewayService {
   async createPointOrder({ member_id = null, plan_id = null, amount_cents = null, terminal_id = null, payment_method = 'credit', provider = null, items = null }) {
     const settings = this.store.getSettings();
     const activeProvider = this.resolvePosProvider(provider, settings);
-    if (activeProvider === 'stone' && !Array.isArray(items)) {
+    if (activeProvider === 'stone') {
+      if (Array.isArray(items)) {
+        throw this._badRequest('Carrinho na maquininha disponível apenas para Point Smart Mercado Pago.');
+      }
       return this._createStoneOrder({ member_id, plan_id, amount_cents, terminal_id, payment_method, settings });
     }
     const headers = this.getPointAuth(settings);
@@ -1387,17 +1552,24 @@ export class GatewayService {
     if (!member) throw this._badRequest('Aluno não encontrado.');
 
     const { plan, cents: finalAmount, charge } = this.resolveBillableMember(member, plan_id, amount_cents);
+    const stoneType = payment_method === 'debit' ? 'debit' : payment_method === 'pix' ? 'pix' : 'credit';
     if (charge?.id) {
       const existingPending = this.store.get(
-        `SELECT id FROM point_orders WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' AND COALESCE(provider, 'mercadopago') = 'stone' ORDER BY id DESC LIMIT 1`,
+        `SELECT id, amount_cents, terminal_id, payment_method FROM point_orders WHERE member_id = ? AND membership_charge_id = ? AND status = 'pending' AND COALESCE(provider, 'mercadopago') = 'stone' ORDER BY id DESC LIMIT 1`,
         [member.id, charge.id],
       );
-      if (existingPending) return this.getPointOrderById(existingPending.id);
+      if (
+        existingPending &&
+        Number(existingPending.amount_cents) === Number(finalAmount) &&
+        existingPending.terminal_id === chosenSerial &&
+        existingPending.payment_method === stoneType
+      ) {
+        return this.getPointOrderById(existingPending.id);
+      }
     }
 
     const description = `${settings.gym_name || 'Academia'} - ${plan?.name || 'Mensalidade'} (${member.name})`.slice(0, 100);
     const doc = digitsOnly(member.document || member.guardian_cpf);
-    const stoneType = payment_method === 'debit' ? 'debit' : payment_method === 'pix' ? 'pix' : 'credit';
 
     const res = await this.fetch('https://api.pagar.me/core/v5/orders', {
       method: 'POST',
@@ -1461,6 +1633,10 @@ export class GatewayService {
       }
       const orderStatus = String(data?.status || '').toLowerCase();
       if (orderStatus === 'paid') {
+        const paidAmount = data?.charges?.[0]?.last_transaction?.amount ?? data?.amount ?? null;
+        if (paidAmount != null && Number(paidAmount) !== Number(order.amount_cents)) {
+          throw this._badRequest('Valor processado pela maquininha difere da cobrança registrada.');
+        }
         const payMethodRaw = String(data?.charges?.[0]?.payment_method || order.payment_method || 'credit').toLowerCase();
         const method = payMethodRaw.includes('debit') ? 'debit' : payMethodRaw.includes('pix') ? 'pix' : 'credit';
         return this._markPointOrderPaid(order, method, `stone_order:${order.order_id}`, `Stone POS (${order.terminal_id})`);
@@ -1596,7 +1772,7 @@ export class GatewayService {
       if (payloadAmount != null && Number(payloadAmount) !== Number(order.amount_cents)) {
         return { ignored: true, reason: 'amount_mismatch' };
       }
-      const payMethodRaw = String(data?.payment_method || order.payment_method || 'credit').toLowerCase();
+      const payMethodRaw = String(data?.charges?.[0]?.payment_method || data?.payment_method || order.payment_method || 'credit').toLowerCase();
       const method = payMethodRaw.includes('debit') ? 'debit' : payMethodRaw.includes('pix') ? 'pix' : 'credit';
       return this._markPointOrderPaid(order, method, `stone_order:${order.order_id}`, `Stone POS (${order.terminal_id})`);
     }

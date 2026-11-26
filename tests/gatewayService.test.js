@@ -546,7 +546,7 @@ test('GatewayService.syncPendingCharges reconcilia cobranca checkout pendente e 
       if (url === 'https://api.mercadopago.com/checkout/preferences') {
         const body = JSON.parse(options.body);
         createdRef = body.external_reference;
-        assert.match(body.notification_url, /\/api\/gateways\/mp\/webhook$/);
+        assert.match(body.notification_url, /\/api\/webhooks\/mercadopago$/);
         return {
           ok: true,
           json: async () => ({ id: 'pref_sync_1', init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref_sync_1' }),
@@ -672,4 +672,192 @@ test('Point Smart suporta pagamento dividido em duas ordens (50 credito + 50 deb
   const pays = store.all('SELECT method, amount_cents FROM payments WHERE member_id = ? ORDER BY id ASC', [member.id]);
   assert.equal(pays.length, 2);
   assert.deepEqual(pays.map((p) => [p.method, p.amount_cents]), [['credit', halfCents], ['debit', restCents]]);
+});
+
+test('getMpNotificationUrl retorna /api/webhooks/mercadopago e createPixCharge diferencia amount_cents', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST', portal_url: 'https://academia.exemplo.com/' });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.duration_days === 30);
+  const member = await access.createMember({ name: 'Aluno Pix Diff', document: '52998224725', plan_id: plan.id });
+
+  let seq = 100;
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, opts = {}) => {
+      if (url.endsWith('/v1/payments') && opts.method === 'POST') {
+        const currentId = ++seq;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            id: currentId,
+            point_of_interaction: { transaction_data: { qr_code: `QR_${currentId}`, qr_code_base64: 'AA==', ticket_url: `https://mp/${currentId}` } },
+          }),
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  assert.equal(gw.getMpNotificationUrl(), 'https://academia.exemplo.com/api/webhooks/mercadopago');
+
+  const [p50, p80] = await Promise.all([
+    gw.createPixCharge({ member_id: member.id, amount_cents: 5000 }),
+    gw.createPixCharge({ member_id: member.id, amount_cents: 8000 }),
+  ]);
+  assert.equal(p50.amount_cents, 5000);
+  assert.equal(p80.amount_cents, 8000);
+  assert.notEqual(p50.external_id, p80.external_id);
+
+  const p50Again = await gw.createPixCharge({ member_id: member.id, amount_cents: 5000 });
+  assert.equal(p50Again.id, p50.id);
+});
+
+test('_settleChargeOnce quita cobranca com desconto sem 409 e faz rollback atomico em batchItems', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST' });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.price_cents === 12000);
+  const member = await access.createMember({ name: 'Aluno Desconto', document: '52998224725', plan_id: plan.id });
+  const openCharge = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  assert.equal(openCharge.amount, 12000);
+
+  const gw = new GatewayService(store, access);
+  const ins = store.run(
+    `INSERT INTO gateway_charges (provider, external_id, member_id, plan_id, amount_cents, status, membership_charge_id)
+     VALUES ('mercadopago', 'EXT_DESC_1', ?, ?, 9000, 'pending', ?)`,
+    [member.id, plan.id, openCharge.id],
+  );
+  const gc = store.get('SELECT * FROM gateway_charges WHERE id = ?', [ins.lastInsertRowid]);
+  const settled = await gw.settleCharge(gc, { paymentId: 'EXT_DESC_1', method: 'pix' });
+  assert.equal(settled.alreadyPaid, false);
+  assert.equal(settled.paymentResult.payment.amount_cents, 9000);
+  assert.ok(store.get('SELECT payment_id FROM membership_charges WHERE id = ?', [openCharge.id]).payment_id);
+
+  // Batch com item invalido nao pode deixar item 1 pago
+  const m2 = await access.createMember({ name: 'Aluno Lote Ok', document: '39053344705', plan_id: plan.id });
+  const batchIns = store.run(
+    `INSERT INTO gateway_charges (provider, external_id, member_id, plan_id, amount_cents, status, batch_items_json)
+     VALUES ('mercadopago', 'EXT_BATCH_FAIL', ?, ?, 24000, 'pending', ?)`,
+    [
+      m2.id,
+      plan.id,
+      JSON.stringify([
+        { member_id: m2.id, plan_id: plan.id, amount_cents: 12000 },
+        { member_id: 999999, plan_id: plan.id, amount_cents: 12000 },
+      ]),
+    ],
+  );
+  const batchGc = store.get('SELECT * FROM gateway_charges WHERE id = ?', [batchIns.lastInsertRowid]);
+  await assert.rejects(() => gw.settleCharge(batchGc, { paymentId: 'EXT_BATCH_FAIL', method: 'pix' }));
+  assert.equal(store.all('SELECT id FROM payments WHERE member_id = ?', [m2.id]).length, 0);
+  assert.equal(store.get('SELECT status FROM gateway_charges WHERE id = ?', [batchGc.id]).status, 'pending');
+});
+
+test('_markPointOrderPaid registra cash_movements e whatsapp na parcela parcial e protege batchItems', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({ controlid_mock_mode: 'true', mp_access_token: 'APP_USR_TEST', mp_point_terminal_id: 'TERM_1' });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.price_cents === 12000);
+  const member = await access.createMember({ name: 'Aluno Parcial Caixa', document: '52998224725', phone: '62999990000', plan_id: plan.id });
+  const openCharge = store.get('SELECT * FROM membership_charges WHERE member_id = ? AND payment_id IS NULL', [member.id]);
+  store.run("INSERT INTO cash_sessions (opening_cents, status) VALUES (10000, 'open')");
+
+  const enqueued = [];
+  const gw = new GatewayService(store, access, {
+    whatsappService: {
+      enqueuePaymentReceipt: async (res) => { enqueued.push(res.payment.id); },
+    },
+  });
+
+  const ordIns = store.run(
+    `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, membership_charge_id, provider)
+     VALUES ('ORD_PARTIAL_1', 'TERM_1', ?, ?, 5000, 'credit', 'pending', ?, 'mercadopago')`,
+    [member.id, plan.id, openCharge.id],
+  );
+  const ord = gw.getPointOrderById(ordIns.lastInsertRowid);
+  const res = await gw._markPointOrderPaid(ord, 'credit', 'mp_order:ORD_PARTIAL_1', 'Point Smart');
+  assert.equal(res.partial, true);
+  assert.equal(enqueued.length, 1);
+  const movements = store.all("SELECT * FROM cash_movements WHERE type = 'payment'");
+  assert.equal(movements.length, 1);
+  assert.equal(movements[0].amount_cents, 5000);
+
+  // Batch com erro no 2o item nao marca point_orders como paid nem grava 1o item
+  const m2 = await access.createMember({ name: 'Aluno Carrinho Ok', document: '39053344705', plan_id: plan.id });
+  const batchOrdIns = store.run(
+    `INSERT INTO point_orders (order_id, terminal_id, member_id, plan_id, amount_cents, payment_method, status, provider, batch_items_json)
+     VALUES ('ORD_BATCH_FAIL', 'TERM_1', ?, ?, 24000, 'credit', 'pending', 'mercadopago', ?)`,
+    [
+      m2.id,
+      plan.id,
+      JSON.stringify([
+        { member_id: m2.id, plan_id: plan.id, amount_cents: 12000 },
+        { member_id: 999999, plan_id: plan.id, amount_cents: 12000 },
+      ]),
+    ],
+  );
+  const batchOrd = gw.getPointOrderById(batchOrdIns.lastInsertRowid);
+  await assert.rejects(() => gw._markPointOrderPaid(batchOrd, 'credit', 'mp_order:ORD_BATCH_FAIL', 'Point Smart'));
+  assert.equal(gw.getPointOrderById(batchOrd.id).status, 'pending');
+  assert.equal(store.all('SELECT id FROM payments WHERE member_id = ?', [m2.id]).length, 0);
+});
+
+test('Stone POS: bloqueia carrinho, valida reutilizacao de pendente, valida valor em checkPointOrder e metodo em webhook', async () => {
+  const store = await DatabaseStore.create(null);
+  store.updateSettings({
+    controlid_mock_mode: 'true',
+    pos_provider: 'stone',
+    stone_api_key: 'sk_test_stone',
+    stone_terminal_serial: 'SN_STONE_1',
+  });
+  const access = new AccessService(store, new ControlIdClient(() => store.getSettings()));
+  const plan = access.listPlans().find((p) => p.price_cents === 12000);
+  const member = await access.createMember({ name: 'Aluno Stone', document: '52998224725', plan_id: plan.id });
+
+  let orderSeq = 0;
+  let stoneCheckResponse = { status: 'paid', charges: [{ payment_method: 'debit_card', last_transaction: { amount: 99999 } }] };
+  const gw = new GatewayService(store, access, {
+    fetchFn: async (url, opts = {}) => {
+      if (url === 'https://api.pagar.me/core/v5/orders' && opts.method === 'POST') {
+        orderSeq += 1;
+        return { ok: true, json: async () => ({ id: `or_stone_${orderSeq}` }) };
+      }
+      if (url.startsWith('https://api.pagar.me/core/v5/orders/or_stone_')) {
+        return { ok: true, json: async () => stoneCheckResponse };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  await assert.rejects(
+    () => gw.createPointOrder({ provider: 'stone', items: [{ member_id: member.id }] }),
+    (err) => err.statusCode === 400 && /Point Smart Mercado Pago/i.test(err.message),
+  );
+
+  const o1 = await gw.createPointOrder({ member_id: member.id, provider: 'stone', payment_method: 'credit', terminal_id: 'SN_STONE_1' });
+  const o1Same = await gw.createPointOrder({ member_id: member.id, provider: 'stone', payment_method: 'credit', terminal_id: 'SN_STONE_1' });
+  assert.equal(o1Same.id, o1.id);
+
+  // Metodo diferente cria nova ordem
+  const o2 = await gw.createPointOrder({ member_id: member.id, provider: 'stone', payment_method: 'debit', terminal_id: 'SN_STONE_1' });
+  assert.notEqual(o2.id, o1.id);
+
+  // Valor divergente no checkPointOrder lanca 400
+  await assert.rejects(
+    () => gw.checkPointOrder(o2.id),
+    (err) => err.statusCode === 400 && /difere da cobrança/i.test(err.message),
+  );
+
+  // Webhook Stone le payment_method de data.charges[0].payment_method
+  const wh = await gw.handleStoneWebhook({
+    type: 'order.paid',
+    data: {
+      id: o2.order_id,
+      amount: 12000,
+      charges: [{ amount: 12000, payment_method: 'debit_card' }],
+    },
+  });
+  assert.equal(wh.paid, true);
+  assert.equal(wh.paymentResult.payment.method, 'debit');
 });

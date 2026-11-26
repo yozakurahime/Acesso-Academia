@@ -1360,8 +1360,17 @@ export class AccessService {
     return parts;
   }
 
-  async recordPayment({ member_id, plan_id, amount_cents, method = 'pix', external_id = null, notes = null, charge_id = null, use_credit = false, credit_excess_cents = 0, staff_id = null, commission_cents = 0, split_payments = null, debt_cents = 0, debt_due_date = null, debt_notes = null },
-    { requireOpenCash = false, reconcileOpenCharge = false, exactCharge = false, onRecorded = null, separateOnlineCash = false, backgroundSync = false } = {}) {
+  async recordPayment(payload, options = {}) {
+    const { backgroundSync = false } = options;
+    const { _updatedMember, ...result } = this.recordPaymentSync(payload, options);
+    const sync = _updatedMember
+      ? (backgroundSync ? this.scheduleMemberSync(_updatedMember) : await this.trySyncMemberToDevice(_updatedMember))
+      : null;
+    return { ...result, sync };
+  }
+
+  recordPaymentSync({ member_id, plan_id, amount_cents, method = 'pix', external_id = null, notes = null, charge_id = null, use_credit = false, credit_excess_cents = 0, staff_id = null, commission_cents = 0, split_payments = null, debt_cents = 0, debt_due_date = null, debt_notes = null } = {},
+    { requireOpenCash = false, reconcileOpenCharge = false, exactCharge = false, onRecorded = null, separateOnlineCash = false } = {}) {
     const existing = external_id && this.store.get('SELECT * FROM payments WHERE external_id = ?', [external_id]);
     if (existing) {
       const creditUsed = this.store.get(
@@ -1410,9 +1419,10 @@ export class AccessService {
     }
     const plan = chosenPlanId ? this.store.get('SELECT * FROM plans WHERE id = ?', [chosenPlanId]) : null;
     if (!plan) throw new Error('Selecione um plano para registrar a mensalidade.');
+    const hasExplicitAmount = amount_cents !== undefined && amount_cents !== null;
     const finalAmount = exactCharge || reconcileOpenCharge
-      ? (charge?.amount ?? (amount_cents !== undefined ? Number(amount_cents) : plan?.price_cents))
-      : (amount_cents !== undefined ? Number(amount_cents) : (charge?.amount ?? plan?.price_cents));
+      ? (charge?.amount ?? (hasExplicitAmount ? Number(amount_cents) : plan?.price_cents))
+      : (hasExplicitAmount ? Number(amount_cents) : (charge?.amount ?? plan?.price_cents));
 
     if (!Number.isSafeInteger(finalAmount) || finalAmount <= 0) {
       throw new Error('Valor do pagamento invalido.');
@@ -1448,6 +1458,9 @@ export class AccessService {
     }
     if (parsedDebtCents > 0 && parsedExcessCreditCents > 0) {
       throw Object.assign(new Error('Não é possível registrar débito e crédito excedente simultaneamente.'), { statusCode: 400 });
+    }
+    if (parsedSplits !== null && parsedExcessCreditCents > 0) {
+      throw Object.assign(new Error('Não é possível registrar pagamento dividido e crédito excedente simultaneamente.'), { statusCode: 400 });
     }
     if (reconcileOpenCharge && (parsedSplits !== null || parsedDebtCents > 0 || parsedExcessCreditCents > 0)) {
       throw Object.assign(new Error('Conciliação automática não suporta pagamento dividido, débito ou crédito excedente.'), { statusCode: 400 });
@@ -1552,6 +1565,8 @@ export class AccessService {
 
       if (charge && primaryPaymentId != null) {
         this.store.run('UPDATE membership_charges SET payment_id = ? WHERE id = ?', [primaryPaymentId, charge.id]);
+      } else if (charge && primaryPaymentId == null && parsedDebtCents > 0) {
+        this.store.run('DELETE FROM membership_charges WHERE id = ? AND payment_id IS NULL', [charge.id]);
       }
       const overdue = charge && this.store.get(
         'SELECT id FROM membership_charges WHERE member_id = ? AND payment_id IS NULL AND due < ? LIMIT 1', [member.id, today],
@@ -1584,12 +1599,11 @@ export class AccessService {
           );
         }
       }
-      if (onRecorded && primaryPaymentId != null) onRecorded(primaryPaymentId);
+      if (onRecorded && (primaryPaymentId != null || createdDebtId != null)) onRecorded(primaryPaymentId);
       return { insertedPaymentIds, createdDebtId };
     });
 
     const updatedMember = this.getMember(member.id);
-    const sync = backgroundSync ? this.scheduleMemberSync(updatedMember) : await this.trySyncMemberToDevice(updatedMember);
     const payments = txResult.insertedPaymentIds.map((pid) => this.store.get('SELECT * FROM payments WHERE id = ?', [pid]));
     const debt = txResult.createdDebtId ? this.store.get('SELECT * FROM member_debts WHERE id = ?', [txResult.createdDebtId]) : null;
 
@@ -1598,8 +1612,9 @@ export class AccessService {
       payments,
       debt,
       member: this.getMemberSummary(member.id),
-      sync,
+      sync: null,
       credit_used_cents: creditUsedCents,
+      _updatedMember: updatedMember,
     };
   }
 
@@ -1660,21 +1675,25 @@ export class AccessService {
       this.store.run('UPDATE member_debts SET origin_payment_id = NULL WHERE origin_payment_id = ?', [id]);
       this.store.run("DELETE FROM commissions WHERE source_type = 'payment' AND source_id = ?", [id]);
 
-      if (payment.cash_session_id) {
-        const openSession = this.store.get(
-          "SELECT id FROM cash_sessions WHERE id = ? AND status = 'open'",
-          [payment.cash_session_id],
+      const openSession = this.store.get(
+        "SELECT id FROM cash_sessions WHERE status = 'open' ORDER BY id DESC LIMIT 1",
+      );
+      if (openSession && Number(payment.amount_cents) > 0) {
+        this.store.run(
+          `DELETE FROM cash_movements WHERE id IN (
+            SELECT id FROM cash_movements
+            WHERE session_id = ? AND type = 'payment' AND amount_cents = ? AND method = ?
+              AND (? IS NULL OR description LIKE ?)
+            ORDER BY id DESC LIMIT 1
+          )`,
+          [
+            openSession.id,
+            payment.amount_cents,
+            payment.method,
+            member?.name || null,
+            member?.name ? `Mensalidade: ${member.name}%` : null,
+          ],
         );
-        if (openSession) {
-          this.store.run(
-            `DELETE FROM cash_movements WHERE id IN (
-              SELECT id FROM cash_movements
-              WHERE cash_session_id = ? AND type = 'payment' AND amount_cents = ? AND method = ?
-              ORDER BY id DESC LIMIT 1
-            )`,
-            [payment.cash_session_id, payment.amount_cents, payment.method],
-          );
-        }
       }
 
       this.store.run('DELETE FROM payments WHERE id = ?', [id]);
