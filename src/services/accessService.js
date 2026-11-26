@@ -381,6 +381,30 @@ export class AccessService {
       if (!member && name) {
         const target = normalizeName(name);
         member = candidates.find((c) => normalizeName(c.name) === target) || null;
+        if (!member) {
+          const targetTokens = target.split(' ').filter((t) => t.length >= 2);
+          if (targetTokens.length >= 2) {
+            const matchesTokensInOrder = (fullName) => {
+              const norm = normalizeName(fullName);
+              if (norm.startsWith(`${target} `)) return true;
+              const fullTokens = norm.split(' ');
+              let idx = 0;
+              for (const tok of targetTokens) {
+                while (idx < fullTokens.length && fullTokens[idx] !== tok) idx += 1;
+                if (idx >= fullTokens.length) return false;
+                idx += 1;
+              }
+              return true;
+            };
+            const wellhubMatches = candidates.filter((c) => c.partner_provider === 'wellhub' && matchesTokensInOrder(c.name));
+            if (wellhubMatches.length === 1) {
+              member = wellhubMatches[0];
+            } else if (wellhubMatches.length === 0) {
+              const allMatches = candidates.filter((c) => matchesTokensInOrder(c.name));
+              if (allMatches.length === 1) member = allMatches[0];
+            }
+          }
+        }
       }
 
       if (!member) {

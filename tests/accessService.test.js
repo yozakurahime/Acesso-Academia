@@ -1024,6 +1024,11 @@ test('syncWellhubExtensionCheckins registra check-in por nome e aprova solicitac
     document: nextCpf(),
     partner_provider: 'wellhub',
   });
+  const partialMember = await service.createMember({
+    name: 'Thais Vitoria Moreira Nascimento',
+    document: nextCpf(),
+    partner_provider: 'wellhub',
+  });
   store.run(
     `INSERT INTO partner_access_requests (member_id, provider, status, request_date)
      VALUES (?, 'wellhub', 'pending', date('now', 'localtime'))`,
@@ -1032,13 +1037,15 @@ test('syncWellhubExtensionCheckins registra check-in por nome e aprova solicitac
 
   const res = await service.syncWellhubExtensionCheckins([
     { name: 'ordely rodrigues de sousa', modality: 'Musculação', time_text: '26 de nov., 18:10' },
+    { name: 'Thais Vitoria', modality: 'Musculação', time_text: '26 de nov., 20:04' },
     { name: 'Pessoa Nao Cadastrada', modality: 'Musculação' },
   ]);
 
-  assert.equal(res.syncedCount, 1);
-  assert.equal(res.matched.length, 1);
+  assert.equal(res.syncedCount, 2);
+  assert.equal(res.matched.length, 2);
   assert.equal(res.matched[0].member_id, partnerMember.id);
   assert.equal(res.matched[0].approved_request, true);
+  assert.equal(res.matched[1].member_id, partialMember.id);
   assert.equal(res.unmatched.length, 1);
 
   const reqRow = store.get('SELECT status FROM partner_access_requests WHERE member_id = ?', [partnerMember.id]);

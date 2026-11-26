@@ -1193,7 +1193,12 @@ async function renderBalcaoQuickResults(rawQuery = '') {
   box.innerHTML = matches
     .map(({ member: m }) => {
       const st = m.access_status || m.status || 'pending';
-      const due = m.valid_until ? `Venc: ${fmtDate(m.valid_until)}` : 'Sem plano ativo';
+      const isPartner = m.partner_provider === 'wellhub' || m.partner_provider === 'totalpass';
+      const partnerTitle = m.partner_provider === 'wellhub'
+        ? `Wellhub${m.wellhub_id ? ` · ID ${m.wellhub_id}` : ' (Gympass)'}`
+        : 'TotalPass (CPF)';
+      const planLabel = isPartner ? partnerTitle : (m.plan_name || 'Sem plano');
+      const due = isPartner ? 'Convênio ativo' : (m.valid_until ? `Venc: ${fmtDate(m.valid_until)}` : 'Sem plano ativo');
       return `
         <div class="balcao-result-item">
           <div class="balcao-result-meta">
@@ -1201,12 +1206,12 @@ async function renderBalcaoQuickResults(rawQuery = '') {
               <strong>${escapeHtml(m.name)}</strong>
               <span class="badge ${statusTone[st] || 'badge-neutral'}">${statusLabel[st] || escapeHtml(st)}</span>
             </div>
-            <small class="muted">${escapeHtml(m.plan_name || 'Sem plano')} · ${escapeHtml(due)}</small>
+            <small class="muted">${escapeHtml(planLabel)} · ${escapeHtml(due)}</small>
           </div>
           <div class="balcao-result-actions">
             <button type="button" class="btn btn-secondary btn-sm" data-balcao-profile="${m.id}">Abrir ficha</button>
             <button type="button" class="btn ${m.face_enrolled ? 'btn-secondary' : 'btn-primary'} btn-sm" data-balcao-face="${m.id}">${m.face_enrolled ? 'FaceID' : 'Cadastrar FaceID'}</button>
-            <button type="button" class="btn btn-success btn-sm" data-balcao-pay="${m.id}">Receber</button>
+            ${isPartner ? '' : `<button type="button" class="btn btn-success btn-sm" data-balcao-pay="${m.id}">Receber</button>`}
             <button type="button" class="btn btn-primary btn-sm" data-balcao-release="${m.id}">Liberar catraca</button>
           </div>
         </div>`;
