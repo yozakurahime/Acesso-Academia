@@ -1428,6 +1428,29 @@ export class AccessService {
       throw new Error('Valor do pagamento invalido.');
     }
 
+    const hasSplitsOrDebt = (Array.isArray(split_payments) && split_payments.length > 0) || Number(debt_cents || 0) > 0;
+    if ((reconcileOpenCharge || requireOpenCash) && !hasSplitsOrDebt) {
+      const recentSame = this.store.get(
+        `SELECT * FROM payments
+         WHERE member_id = ? AND status = 'paid' AND amount_cents = ?
+           AND COALESCE(notes, '') NOT LIKE '%Débito restante%'
+           AND paid_at >= datetime('now', 'localtime', '-3 minutes')
+           ${reconcileOpenCharge ? 'AND external_id IS NULL' : ''}
+         ORDER BY id DESC LIMIT 1`,
+        [member.id, finalAmount],
+      );
+      if (recentSame) {
+        if (reconcileOpenCharge) {
+          if (onRecorded) this.store.transaction(() => onRecorded(recentSame.id));
+          return { payment: recentSame, member: this.getMember(member.id), sync: null, alreadyRecorded: true };
+        }
+        throw Object.assign(
+          new Error('Já existe um pagamento igual registrado para este aluno nos últimos 3 minutos. Confira o histórico antes de lançar novamente.'),
+          { statusCode: 409 },
+        );
+      }
+    }
+
     const today = this.store.get("SELECT date('now', 'localtime') AS today").today;
     const enrollment = this.getPlanEnrollment(member.id);
     const currentDue = [enrollment?.ends_on, member.valid_until]

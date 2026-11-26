@@ -949,3 +949,32 @@ test('recordPayment bloqueia split + credito excedente, aceita amount_cents null
     0,
   );
 });
+
+test('recordPayment bloqueia duplicidade em 3 minutos no caixa e evita baixa dupla na conciliacao Point', async () => {
+  const { store, service } = await createTestEnv();
+  store.run("INSERT INTO cash_sessions (opening_cents, status) VALUES (5000, 'open')");
+  const plan = service.createPlan({ name: 'Mensal AntiDup', price_cents: 10000, duration_days: 30 });
+  const member = await service.createMember({ name: 'Aluno AntiDuplicidade', document: nextCpf(), plan_id: plan.id });
+
+  const first = await service.recordPayment(
+    { member_id: member.id, plan_id: plan.id, amount_cents: 10000, method: 'pix' },
+    { requireOpenCash: true },
+  );
+  assert.ok(first.payment?.id);
+
+  await assert.rejects(
+    () => service.recordPayment(
+      { member_id: member.id, plan_id: plan.id, amount_cents: 10000, method: 'pix' },
+      { requireOpenCash: true },
+    ),
+    { statusCode: 409, message: /últimos 3 minutos/ },
+  );
+
+  const pointConfirm = await service.recordPayment(
+    { member_id: member.id, plan_id: plan.id, amount_cents: 10000, method: 'pix', external_id: 'point_dup_test_1' },
+    { reconcileOpenCharge: true },
+  );
+  assert.equal(pointConfirm.alreadyRecorded, true);
+  assert.equal(pointConfirm.payment.id, first.payment.id);
+  assert.equal(store.all("SELECT id FROM payments WHERE member_id = ? AND status = 'paid'", [member.id]).length, 1);
+});

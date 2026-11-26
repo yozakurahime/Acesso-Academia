@@ -894,10 +894,15 @@
                         </div>
                       </details>
                       <div id="quickConfirmMethods" class="billing-aside-secondary" role="group" aria-label="Confirmar recebimento por forma de pagamento">
-                        <button type="button" class="btn btn-secondary" data-quick-confirm="pix" disabled>💠 Confirmar Pix</button>
-                        <button type="button" class="btn btn-secondary" data-quick-confirm="credit" disabled>💳 Confirmar Crédito</button>
-                        <button type="button" class="btn btn-secondary" data-quick-confirm="debit" disabled>🏧 Confirmar Débito</button>
                         <button type="button" class="btn btn-secondary" data-quick-confirm="cash" disabled>💵 Confirmar Dinheiro</button>
+                        <details class="pix-qr-details" style="grid-column:1 / -1;margin:2px 0 0;">
+                          <summary style="font-size:12.5px;">Recebimento Manual (fora da maquininha)</summary>
+                          <div class="billing-aside-secondary" style="margin-top:8px;">
+                            <button type="button" class="btn btn-secondary" data-quick-confirm="pix" disabled>💠 Confirmar Pix</button>
+                            <button type="button" class="btn btn-secondary" data-quick-confirm="credit" disabled>💳 Confirmar Crédito</button>
+                            <button type="button" class="btn btn-secondary" data-quick-confirm="debit" disabled>🏧 Confirmar Débito</button>
+                          </div>
+                        </details>
                       </div>
                       <button type="submit" id="btnSubmitPayment" class="btn btn-secondary billing-submit-btn hidden" disabled>Confirmar recebimento</button>
                       <button type="button" id="btnAddBillingToCart" class="btn btn-secondary billing-submit-btn" disabled>+ Adicionar ao carrinho</button>
