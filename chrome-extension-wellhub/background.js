@@ -12,13 +12,13 @@ async function getConfig() {
   return { ...DEFAULT_CONFIG, ...saved };
 }
 
-async function postSync(baseUrl, items, cfg, allowRelogin = true) {
+async function postSync(baseUrl, items, cfg, allowRelogin = true, provider = 'wellhub') {
   const cleanUrl = String(baseUrl || DEFAULT_CONFIG.apiUrl).replace(/\/+$/, '');
   const resp = await fetch(`${cleanUrl}/api/partners/wellhub/extension-sync`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ provider, items }),
   });
 
   if (resp.status === 401 && allowRelogin && cfg.username && cfg.password) {
@@ -35,7 +35,7 @@ async function postSync(baseUrl, items, cfg, allowRelogin = true) {
     if (!loginResp.ok) {
       throw new Error('Falha ao autenticar no sistema Oxigênio (verifique usuário/senha).');
     }
-    return postSync(cleanUrl, items, cfg, false);
+    return postSync(cleanUrl, items, cfg, false, provider);
   }
 
   if (!resp.ok) {
@@ -56,12 +56,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return;
     }
     const items = Array.isArray(message.items) ? message.items : [];
+    const provider = message.provider === 'totalpass' ? 'totalpass' : 'wellhub';
     if (!items.length) {
       sendResponse({ ok: true, syncedCount: 0, matched: [], unmatched: [] });
       return;
     }
 
-    const result = await postSync(cfg.apiUrl, items, cfg);
+    const result = await postSync(cfg.apiUrl, items, cfg, true, provider);
     await chrome.storage.local.set({
       lastSyncAt: new Date().toLocaleTimeString('pt-BR'),
       lastError: '',

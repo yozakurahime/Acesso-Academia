@@ -2522,7 +2522,10 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     '/partners/wellhub/extension-sync',
     requireReception,
     handle(async (req, res) => {
-      const result = await accessService.syncWellhubExtensionCheckins(req.body?.items || []);
+      const result = await accessService.syncWellhubExtensionCheckins(
+        req.body?.items || [],
+        req.body?.provider || 'wellhub',
+      );
       res.json(result);
     }),
   );

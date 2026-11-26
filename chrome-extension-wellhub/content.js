@@ -5,6 +5,10 @@
     refreshSeconds: 8,
   };
 
+  const isTotalpass = location.hostname.includes('totalpass.com');
+  const provider = isTotalpass ? 'totalpass' : 'wellhub';
+  const providerLabel = isTotalpass ? 'TotalPass' : 'Wellhub';
+
   let cfg = { ...DEFAULTS };
   let sentNamesToday = new Set();
   let lastRefreshAt = 0;
@@ -30,7 +34,7 @@
       'font:600 12px/1.4 system-ui,-apple-system,sans-serif',
       'box-shadow:0 8px 24px rgba(0,0,0,.25)',
       'border:1px solid rgba(255,255,255,.15)',
-      'max-width:300px',
+      'max-width:310px',
       'pointer-events:none',
     ].join(';');
     document.body.appendChild(badgeEl);
@@ -88,6 +92,17 @@
     if (now - lastRefreshAt < intervalMs) return;
     lastRefreshAt = now;
 
+    if (isTotalpass) {
+      const btn = [...document.querySelectorAll('button, [role="button"]')].find((el) => {
+        if (el.disabled || el.closest('#oxigenio-wellhub-badge')) return false;
+        const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.toLowerCase();
+        return txt === 'atualizar' || txt === 'refresh' || label.includes('atualiz') || label.includes('refresh');
+      });
+      if (btn) btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      return;
+    }
+
     [findPendingCard(), findConfirmedCard()].forEach((card) => {
       if (!card) return;
       const clickables = [...card.querySelectorAll('button, [role="button"], svg')];
@@ -117,17 +132,54 @@
     const confirmBtns = [...document.querySelectorAll('button')].filter((btn) => {
       if (btn.disabled || btn.closest('#oxigenio-wellhub-badge')) return false;
       const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      return /^(confirmar|aceitar|validar|confirm|accept)$/.test(txt);
+      return /^(confirmar|aceitar|validar|validar check-?in|confirm|accept)$/.test(txt);
     });
 
     if (confirmBtns.length > 0) {
       lastConfirmClickAt = now;
       confirmBtns[0].click();
-      updateBadge('Oxigênio Bot: Confirmando check-in no Wellhub...');
+      updateBadge(`Oxigênio Bot (${providerLabel}): Validando check-in...`);
     }
   }
 
+  function extractTotalpassCheckins() {
+    const mainEl = document.querySelector('main') || document.body;
+    if (!mainEl) return [];
+    const ignored = /^(check-ins|consulta de plano|validar check-in|histórico de visitas|faltas e cancelamentos tardios|saiba mais|não encontramos nenhum check-in ativo|validar|confirmar|atualizar)$/i;
+    const rows = [...mainEl.querySelectorAll('tr, [role="row"], li, [role="listitem"], div')].filter((el) => {
+      if (el.closest('#oxigenio-wellhub-badge')) return false;
+      const text = (el.textContent || '').trim();
+      if (!text || text.length > 260) return false;
+      if (text.includes('Validar Check-In') && text.includes('Histórico de visitas')) return false;
+      return (/\d{1,2}[h:]\d{2}/.test(text) || /\d{3}\.\d{3}\.\d{3}-\d{2}/.test(text))
+        && el.querySelectorAll('div, td, p, span').length <= 12;
+    });
+
+    const items = [];
+    const seen = new Set();
+    for (const row of rows) {
+      const text = (row.innerText || '').trim();
+      const cpfMatch = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
+      const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !ignored.test(l) && !/^(atualizado em|atenção:|todos os check-ins|olá\. precisa de ajuda)/i.test(l));
+      const candidateName = lines.find((l) => l.length >= 4 && !/\d/.test(l) && !/^(musculação|pilates|dança|hidro|natação|ativo|validado)/i.test(l)) || '';
+      const key = (cpfMatch?.[0] || candidateName).toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        name: candidateName,
+        cpf: cpfMatch ? cpfMatch[0] : '',
+        time_text: text.match(/\d{1,2}[h:]\d{2}/)?.[0] || '',
+      });
+    }
+    return items;
+  }
+
   function extractConfirmedCheckins() {
+    if (isTotalpass) return extractTotalpassCheckins();
+
     const confirmedCard = findConfirmedCard();
     if (!confirmedCard) return [];
 
@@ -174,7 +226,7 @@
   function scanAndSync() {
     if (!document.body) return;
     if (!cfg.enabled) {
-      updateBadge('Oxigênio Bot: Pausado');
+      updateBadge(`Oxigênio Bot (${providerLabel}): Pausado`);
       return;
     }
 
@@ -182,23 +234,29 @@
     tryAutoConfirmPending();
 
     const confirmed = extractConfirmedCheckins();
-    const pendingToSend = confirmed.filter((item) => !sentNamesToday.has(item.name.toLowerCase()));
+    const pendingToSend = confirmed.filter((item) => {
+      const k = (item.cpf || item.name || '').toLowerCase();
+      return k && !sentNamesToday.has(k);
+    });
     if (!pendingToSend.length) {
-      updateBadge(`Oxigênio Bot: Vigiando (${confirmed.length} confirmado(s) na tela)`);
+      updateBadge(`Oxigênio Bot (${providerLabel}): Vigiando (${confirmed.length} na tela)`);
       return;
     }
 
-    chrome.runtime.sendMessage({ type: 'WELLHUB_SYNC_CHECKINS', items: pendingToSend }, (res) => {
+    chrome.runtime.sendMessage({ type: 'WELLHUB_SYNC_CHECKINS', provider, items: pendingToSend }, (res) => {
       if (chrome.runtime.lastError) {
-        updateBadge(`Oxigênio Bot: ${chrome.runtime.lastError.message}`, true);
+        updateBadge(`Oxigênio Bot (${providerLabel}): ${chrome.runtime.lastError.message}`, true);
         return;
       }
       if (!res || res.error) {
-        updateBadge(`Oxigênio Bot: ${res?.error || 'Falha ao sincronizar'}`, true);
+        updateBadge(`Oxigênio Bot (${providerLabel}): ${res?.error || 'Falha ao sincronizar'}`, true);
         return;
       }
-      pendingToSend.forEach((item) => sentNamesToday.add(item.name.toLowerCase()));
-      updateBadge(`Oxigênio Bot: ${res.matched?.length || 0} liberado(s) · ${res.unmatched?.length || 0} não encontrado(s)`);
+      pendingToSend.forEach((item) => {
+        const k = (item.cpf || item.name || '').toLowerCase();
+        if (k) sentNamesToday.add(k);
+      });
+      updateBadge(`Oxigênio Bot (${providerLabel}): ${res.matched?.length || 0} liberado(s) · ${res.unmatched?.length || 0} não encontrado(s)`);
     });
   }
 

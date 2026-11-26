@@ -1048,6 +1048,19 @@ test('syncWellhubExtensionCheckins registra check-in por nome e aprova solicitac
   assert.equal(res.matched[1].member_id, partialMember.id);
   assert.equal(res.unmatched.length, 1);
 
+  const tpCpf = nextCpf();
+  const tpMember = await service.createMember({
+    name: 'Aluno TotalPass Ext',
+    document: tpCpf,
+    partner_provider: 'totalpass',
+  });
+  const tpRes = await service.syncWellhubExtensionCheckins(
+    [{ name: 'Aluno TotalPass', cpf: tpCpf, time_text: '20:41' }],
+    'totalpass',
+  );
+  assert.equal(tpRes.syncedCount, 1);
+  assert.equal(tpRes.matched[0].member_id, tpMember.id);
+
   const reqRow = store.get('SELECT status FROM partner_access_requests WHERE member_id = ?', [partnerMember.id]);
   assert.equal(reqRow.status, 'approved');
 });

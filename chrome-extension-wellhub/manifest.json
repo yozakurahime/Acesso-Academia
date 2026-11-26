@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Oxigênio · Wellhub Auto Check-in",
-  "version": "1.0.0",
-  "description": "Vigia o painel do Wellhub/Gympass aberto, confirma check-ins pendentes e libera automaticamente no sistema Oxigênio.",
+  "name": "Oxigênio · Wellhub & TotalPass Auto Check-in",
+  "version": "1.1.0",
+  "description": "Vigia os painéis do Wellhub/Gympass e TotalPass abertos, confirma check-ins pendentes e libera automaticamente no sistema Oxigênio.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://partners.gympass.com/*",
     "https://partners.wellhub.com/*",
+    "https://booking.totalpass.com/*",
     "https://sistema.academiaoxigenio.com/*",
     "http://localhost/*"
   ],
@@ -19,7 +20,8 @@
         "https://partners.gympass.com/new/validation/*",
         "https://partners.wellhub.com/new/validation/*",
         "https://partners.gympass.com/validation/*",
-        "https://partners.wellhub.com/validation/*"
+        "https://partners.wellhub.com/validation/*",
+        "https://booking.totalpass.com/br/check-ins*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
@@ -27,6 +29,6 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Oxigênio · Wellhub Auto Check-in"
+    "default_title": "Oxigênio · Wellhub & TotalPass Auto Check-in"
   }
 }

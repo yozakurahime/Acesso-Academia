@@ -350,7 +350,8 @@ export class AccessService {
     return { approved: true, requestId: id, checkin, releaseError: null };
   }
 
-  async syncWellhubExtensionCheckins(items = []) {
+  async syncWellhubExtensionCheckins(items = [], provider = 'wellhub') {
+    const targetProvider = String(provider || 'wellhub').trim().toLowerCase() === 'totalpass' ? 'totalpass' : 'wellhub';
     const list = Array.isArray(items) ? items : [];
     const partnerService = new PartnerService(this.store);
     const normalizeName = (v) =>
@@ -362,10 +363,11 @@ export class AccessService {
         .trim();
 
     const candidates = this.store.all(
-      `SELECT id, name, partner_provider, wellhub_id, status, access_role
+      `SELECT id, name, document, partner_provider, wellhub_id, status, access_role
        FROM members
        WHERE access_role = 'student' AND status <> 'blocked'
-       ORDER BY CASE WHEN partner_provider = 'wellhub' THEN 0 ELSE 1 END, id ASC`,
+       ORDER BY CASE WHEN partner_provider = ? THEN 0 ELSE 1 END, id ASC`,
+      [targetProvider],
     );
 
     const matched = [];
@@ -375,9 +377,15 @@ export class AccessService {
     for (const rawItem of list) {
       const name = String(rawItem?.name || '').trim();
       const wellhubId = String(rawItem?.wellhub_id || '').trim() || null;
-      if (!name && !wellhubId) continue;
+      const cpfRaw = String(rawItem?.cpf || rawItem?.document || '').replace(/\D/g, '');
+      if (!name && !wellhubId && !cpfRaw) continue;
 
-      let member = wellhubId ? partnerService.findMemberByPartner('wellhub', wellhubId) : null;
+      let member = targetProvider === 'wellhub' && wellhubId
+        ? partnerService.findMemberByPartner('wellhub', wellhubId)
+        : null;
+      if (!member && targetProvider === 'totalpass' && cpfRaw.length === 11) {
+        member = partnerService.findMemberByPartner('totalpass', cpfRaw);
+      }
       if (!member && name) {
         const target = normalizeName(name);
         member = candidates.find((c) => normalizeName(c.name) === target) || null;
@@ -396,10 +404,10 @@ export class AccessService {
               }
               return true;
             };
-            const wellhubMatches = candidates.filter((c) => c.partner_provider === 'wellhub' && matchesTokensInOrder(c.name));
-            if (wellhubMatches.length === 1) {
-              member = wellhubMatches[0];
-            } else if (wellhubMatches.length === 0) {
+            const providerMatches = candidates.filter((c) => c.partner_provider === targetProvider && matchesTokensInOrder(c.name));
+            if (providerMatches.length === 1) {
+              member = providerMatches[0];
+            } else if (providerMatches.length === 0) {
               const allMatches = candidates.filter((c) => matchesTokensInOrder(c.name));
               if (allMatches.length === 1) member = allMatches[0];
             }
@@ -408,17 +416,19 @@ export class AccessService {
       }
 
       if (!member) {
-        unmatched.push({ name: name || wellhubId, wellhub_id: wellhubId });
+        unmatched.push({ name: name || wellhubId || cpfRaw, wellhub_id: wellhubId });
         continue;
       }
       if (seenMemberIds.has(member.id)) continue;
       seenMemberIds.add(member.id);
 
-      const alreadyChecked = partnerService.hasCheckinToday(member.id, 'wellhub');
+      const alreadyChecked = partnerService.hasCheckinToday(member.id, targetProvider);
       const checkin = partnerService.recordCheckin({
-        provider: 'wellhub',
+        provider: targetProvider,
         memberId: member.id,
-        identifier: member.wellhub_id || wellhubId || member.name,
+        identifier: targetProvider === 'wellhub'
+          ? (member.wellhub_id || wellhubId || member.name)
+          : (member.document || cpfRaw || member.name),
         source: 'extension',
         externalId: rawItem?.external_id || null,
         rawPayload: rawItem,
@@ -426,9 +436,9 @@ export class AccessService {
 
       const pendingReq = this.store.get(
         `SELECT id FROM partner_access_requests
-         WHERE member_id = ? AND provider = 'wellhub' AND request_date = date('now', 'localtime') AND status = 'pending'
+         WHERE member_id = ? AND provider = ? AND request_date = date('now', 'localtime') AND status = 'pending'
          ORDER BY id DESC LIMIT 1`,
-        [member.id],
+        [member.id, targetProvider],
       );
       if (pendingReq) {
         this.store.run(
