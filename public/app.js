@@ -161,11 +161,11 @@ function renderPartnerRequestNotifications() {
           </div>
           <div class="partner-request-body">
             <strong>${escapeHtml(req.member_name || 'Aluno de convênio')} (#${req.member_id})</strong>
-            <span class="muted" style="font-size:12px;">${docPart ? `${docPart} · ` : ''}Confirma o check-in?</span>
+            <span class="muted" style="font-size:12px;">${docPart ? `${docPart} · ` : ''}Aguardando check-in no app ${escapeHtml(req.provider === 'wellhub' ? 'Wellhub' : 'TotalPass')}</span>
           </div>
           <div class="partner-request-actions">
-            <button type="button" class="btn btn-primary btn-sm" data-approve-partner-req="${req.id}">Sim</button>
-            <button type="button" class="btn btn-secondary btn-sm" data-cancel-partner-req="${req.id}">Não</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-open-partner-member="${req.member_id}">Abrir ficha</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-cancel-partner-req="${req.id}">Dispensar</button>
           </div>
         </div>`;
     })
@@ -184,20 +184,10 @@ async function loadPendingPartnerRequests() {
 }
 
 document.getElementById('partnerRequestNotifications')?.addEventListener('click', async (event) => {
-  const approveBtn = event.target.closest('button[data-approve-partner-req]');
-  if (approveBtn) {
-    const reqId = Number(approveBtn.dataset.approvePartnerReq);
-    await withLoading(approveBtn, async () => {
-      try {
-        const res = await api(`/api/partner-requests/${reqId}/approve`, { method: 'POST' });
-        pendingPartnerRequests = pendingPartnerRequests.filter((r) => Number(r.id) !== reqId);
-        renderPartnerRequestNotifications();
-        showToast('Check-in de convênio confirmado para hoje! O aluno já pode passar o FaceID.');
-        await Promise.allSettled([loadDashboard(), loadLogs(), loadBalcaoRecentLogs()]);
-      } catch (err) {
-        showToast(err.message, true);
-      }
-    });
+  const openBtn = event.target.closest('button[data-open-partner-member]');
+  if (openBtn) {
+    const memberId = Number(openBtn.dataset.openPartnerMember);
+    if (memberId) openProfile(memberId);
     return;
   }
 
@@ -209,7 +199,7 @@ document.getElementById('partnerRequestNotifications')?.addEventListener('click'
         await api(`/api/partner-requests/${reqId}/cancel`, { method: 'POST' });
         pendingPartnerRequests = pendingPartnerRequests.filter((r) => Number(r.id) !== reqId);
         renderPartnerRequestNotifications();
-        showToast('Solicitação de convênio cancelada.');
+        showToast('Aviso dispensado.');
       } catch (err) {
         showToast(err.message, true);
       }
