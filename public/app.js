@@ -2643,6 +2643,7 @@ function renderBillingSummary() {
   const pointBtn = document.getElementById('btnSendPointOrder');
   const waBtn = document.getElementById('btnSendBillingWhatsapp');
   const addCartBtn = document.getElementById('btnAddBillingToCart');
+  const payLaterBtn = document.getElementById('btnBillingPayLater');
   const quickConfirmBox = document.getElementById('quickConfirmMethods');
   if (typeof renderBillingPlanPicker === 'function') renderBillingPlanPicker();
   const coveredByCredit = effectiveCreditUsed > 0 && finalDisplayAmount === 0 && finalPaidCents === 0;
@@ -2677,6 +2678,9 @@ function renderBillingSummary() {
   if (waSubBtn) waSubBtn.disabled = actionDisabled;
   if (addCartBtn) {
     addCartBtn.disabled = actionDisabled;
+  }
+  if (payLaterBtn) {
+    payLaterBtn.disabled = !member;
   }
   if (quickConfirmBox) {
     quickConfirmBox.classList.toggle('hidden', splitActive);
@@ -5685,6 +5689,7 @@ function setMemberPartnerProvider(provider) {
   document.getElementById('mPartnerNoChargeNote')?.classList.toggle('hidden', !clean);
   document.getElementById('memberPlanCardsWrap')?.classList.toggle('hidden', Boolean(clean));
   document.getElementById('btnMemberAddToCart')?.classList.toggle('hidden', Boolean(clean));
+  document.getElementById('btnMemberPayLater')?.classList.toggle('hidden', Boolean(clean));
   const submitBtn = document.getElementById('btnMemberSubmit');
   if (submitBtn) {
     submitBtn.textContent = clean ? 'Confirmar cadastro (Sem cobrança)' : 'Confirmar e ir para pagamento';
@@ -5992,7 +5997,7 @@ document.getElementById('mNameCheckAlert').addEventListener('click', (e) => {
 
 document.getElementById('btnMemberStep2Back').addEventListener('click', () => setMemberWizardStep(1));
 
-async function submitMemberWizard({ addToCart = false, triggerEl = null } = {}) {
+async function submitMemberWizard({ addToCart = false, payLater = false, triggerEl = null } = {}) {
   if (memberWizardStep !== 2) return;
   const partnerProvider = document.getElementById('mPartnerProvider')?.value || null;
   const wellhubId = document.getElementById('mWellhubId')?.value.trim() || null;
@@ -6044,6 +6049,10 @@ async function submitMemberWizard({ addToCart = false, triggerEl = null } = {}) 
         state.pendingFaceAfterPaymentId = null;
         showToast(`Aluno #${created.id} cadastrado sem plano contratado (bloqueado para entrar).`);
         openFaceModal(created.id, created.name);
+      } else if (payLater) {
+        state.pendingFaceAfterPaymentId = null;
+        showToast(`Aluno #${created.id} cadastrado! Pagamento deixado para depois (catraca bloqueada até pagar).`);
+        openFaceModal(created.id, created.name);
       } else {
         state.pendingFaceAfterPaymentId = created.id;
         showToast(`Aluno #${created.id} cadastrado! Avançando para o pagamento.`);
@@ -6057,6 +6066,10 @@ async function submitMemberWizard({ addToCart = false, triggerEl = null } = {}) 
 
 document.getElementById('btnMemberAddToCart')?.addEventListener('click', (e) => {
   submitMemberWizard({ addToCart: true, triggerEl: e.currentTarget });
+});
+
+document.getElementById('btnMemberPayLater')?.addEventListener('click', (e) => {
+  submitMemberWizard({ payLater: true, triggerEl: e.currentTarget });
 });
 
 document.getElementById('memberForm').addEventListener('submit', async (e) => {
@@ -6158,6 +6171,19 @@ function finishPaymentAndReturnHome(options = {}) {
     balcaoQuickSearch?.focus();
   }
 }
+
+document.getElementById('btnBillingPayLater')?.addEventListener('click', () => {
+  const memberId = Number(document.getElementById('pMember')?.value) || 0;
+  const member = memberId ? state.members.find((m) => Number(m.id) === memberId) : null;
+  const shouldOpenFace = Boolean(member && state.pendingFaceAfterPaymentId === memberId);
+  finishPaymentAndReturnHome({ keepPendingFace: false });
+  if (shouldOpenFace) {
+    showToast(`Cadastro de ${member.name} concluído! Pagamento deixado para depois.`);
+    openFaceModal(member.id, member.name);
+  } else {
+    showToast('Pagamento deixado para depois.');
+  }
+});
 
 document.getElementById('paymentForm').addEventListener('submit', async (e) => {
   e.preventDefault();
