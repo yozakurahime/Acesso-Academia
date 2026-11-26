@@ -548,8 +548,6 @@ export class EdgeSyncClient {
       }
       return;
     }
-      return;
-    }
     if (cmd.type === 'register_face') {
       if (cmd.payload?.memberId && cmd.payload?.imageBase64 && typeof this.accessService?.registerFace === 'function') {
         await this.syncOnce();
