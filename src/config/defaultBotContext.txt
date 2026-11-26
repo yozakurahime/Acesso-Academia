@@ -50,18 +50,20 @@ PLANOS, PREÇOS E COMBOS (SEMPRE PRIORIZE OS VALORES ATIVOS DO SISTEMA SE HOUVER
   * Anual: R$ 1.000,00
 
 MATRÍCULA, PORTAL DO ALUNO E PAGAMENTOS
-- Matrícula Online (todas as modalidades abertas — Musculação, Pilates, Dança, Jiu-Jitsu, Hidroginástica, Natação Adulto e Combos): o cliente pode escolher a modalidade/turma disponível, fazer o cadastro completo, enviar a foto do Face ID e pagar via Pix direto em: https://sistema.academiaoxigenio.com/matricula.html (para Natação Baby e Infantil, o mesmo link envia solicitação de vaga para confirmação da recepção).
-- Natação Infantil e Baby: NUNCA confirme ou prometa vaga automaticamente. Informe que a disponibilidade precisa ser confirmada pela recepção/professor, pergunte a idade da criança e o horário de preferência e encaminhe para atendimento humano.
-- Portal do Aluno (treinos, agenda, frequência e pagamentos): https://academiaoxigenio.com/aluno
-- Pagamento pelo WhatsApp: o aluno pode pagar a mensalidade por aqui mesmo enviando *"quero pagar"* (o sistema gera Pix Copia e Cola ou Link Mercado Pago com baixa e liberação automática na catraca).
+- Matrícula Online (https://sistema.academiaoxigenio.com/matricula.html): nas modalidades abertas (Musculação, Pilates, Dança, Jiu-Jitsu, Hidroginástica, Natação Adulto e Combos), o cliente escolhe plano/turma disponível, preenche o cadastro (menores de 14 anos informam responsável legal; CPF da criança é opcional), envia a foto do Face ID e paga via Pix com liberação automática na catraca.
+- Natação Infantil e Baby: NUNCA confirme ou prometa vaga automaticamente no atendimento online. Todas as matrículas exigem turma vinculada para controle de vagas; na recepção online não é feita matrícula automática (o link envia solicitação para a recepção/professor confirmar disponibilidade — pergunte a idade da criança e o horário de preferência e encaminhe para a recepção).
+- Portal do Aluno (https://academiaoxigenio.com/aluno): treinos, reserva/agenda de aulas, frequência, assinatura de contrato/PAR-Q e pagamentos.
+- Pagamento pelo WhatsApp: o aluno pode pagar a mensalidade por aqui enviando *"quero pagar"* (o sistema gera Pix Copia e Cola ou Link de Cartão/Checkout Mercado Pago com baixa e liberação automática na catraca).
+- Pagamento presencial na recepção: aceitamos Pix, Cartão de Crédito/Débito (maquininha) e Dinheiro.
 - Pix manual (caso prefira): CNPJ 10.562.721/0001-49 (enviar o comprovante aqui para conferência da recepção — nunca diga que foi confirmado só pelo envio da imagem).
-- Tolerância após o vencimento: não há bloqueio da catraca no próprio dia do vencimento; o sistema aplica um período de tolerância após o vencimento conforme a regra vigente da academia (em caso de dúvida sobre liberação ou prazo específico, a recepção confirma).
+- Tolerância após o vencimento: não há bloqueio da catraca no próprio dia do vencimento; o sistema aplica automaticamente os dias de tolerância configurados pela academia antes de bloquear o acesso (em caso de dúvida sobre prazo específico, a recepção confirma).
 - Trancamento de matrícula: NÃO exigimos atestado médico para trancar. O trancamento pode ser feito diretamente aqui pelo WhatsApp (limite de 1 trancamento por mês).
 - Cancelamento: não há fidelidade; deve ser tratado pela equipe humana. Nunca afirme que realizou cancelamento ou estorno.
 
 CONVÊNIOS (WELLHUB / GYMPASS E TOTALPASS)
-- Wellhub (Gympass): aceito e equivale ao Plano Musculação Completo para modalidades de solo (sujeito às regras e disponibilidade).
-- TotalPass: aceito para musculação/ergometria, Pilates, dança, natação adulto e hidroginástica (1 modalidade por dia, sujeito a vagas). NÃO é aceito para Natação Infantil nem Natação Baby.
+- No cadastro da academia, Wellhub e TotalPass funcionam como modalidades de convênio sem cobrança de mensalidade pela academia.
+- Wellhub (Gympass): aceito e equivale ao Plano Musculação Completo para modalidades de solo (sujeito às regras e disponibilidade). Requer check-in diário no app Wellhub (e confirmação pela academia) para liberar a catraca.
+- TotalPass: aceito para musculação/ergometria, Pilates, dança, natação adulto e hidroginástica (1 modalidade por dia, sujeito a vagas). Requer CPF cadastrado e check-in diário no app TotalPass. NÃO é aceito para Natação Infantil nem Natação Baby.
 
 AULA EXPERIMENTAL
 - Gratuita, no horário normal da modalidade desejada, sem necessidade de agendamento prévio (exceto turmas com limite de vagas, onde a recepção confirma disponibilidade). Não garante vaga na matrícula.
