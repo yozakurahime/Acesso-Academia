@@ -419,3 +419,30 @@ test('brPhoneVariants e areEquivalentBrPhones tratam 12 e 13 digitos BR como equ
   assert.equal(areEquivalentBrPhones('123', '5562992093611'), false);
   assert.deepEqual(brPhoneVariants('invalido'), []);
 });
+
+test('WhatsappService.handleIncomingText sincroniza opt-out e reativacao entre 12 e 13 digitos sem duplicar chat ou colidir DDD', async () => {
+  const store = await DatabaseStore.create(null);
+  const service = new WhatsappService(store, {});
+  store.run(
+    "INSERT INTO members (name, document, phone, status, access_role) VALUES ('Maria Goias', '52998224725', '6292093611', 'active', 'student')",
+  );
+  store.run(
+    "INSERT INTO members (name, document, phone, status, access_role) VALUES ('Outro DDD', '15350946056', '11992093611', 'active', 'student')",
+  );
+  store.run(
+    "INSERT INTO whatsapp_chats (phone, opt_out, last_message_at) VALUES ('556292093611', 0, datetime('now', 'localtime'))",
+  );
+
+  assert.equal(service.handleIncomingText('5562992093611', 'sair'), true);
+  assert.equal(store.all('SELECT phone FROM whatsapp_chats').length, 1);
+  assert.equal(store.get("SELECT opt_out FROM whatsapp_chats WHERE phone = '556292093611'").opt_out, 1);
+  assert.equal(store.get("SELECT whatsapp_opt_out FROM members WHERE phone = '6292093611'").whatsapp_opt_out, 1);
+  assert.equal(store.get("SELECT whatsapp_opt_out FROM members WHERE phone = '11992093611'").whatsapp_opt_out, 0);
+  assert.equal(service.enqueueMessage({ phone: '556292093611', kind: 'due_reminder', message: 'Teste' }), null);
+
+  assert.equal(service.handleIncomingText('5562992093611', 'voltar'), true);
+  assert.equal(store.all('SELECT phone FROM whatsapp_chats').length, 1);
+  assert.equal(store.get("SELECT opt_out FROM whatsapp_chats WHERE phone = '556292093611'").opt_out, 0);
+  assert.equal(store.get("SELECT whatsapp_opt_out FROM members WHERE phone = '6292093611'").whatsapp_opt_out, 0);
+  assert.ok(service.enqueueMessage({ phone: '556292093611', kind: 'due_reminder', message: 'Teste liberado' }));
+});

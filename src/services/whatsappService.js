@@ -792,39 +792,75 @@ export class WhatsappService {
     const normalized = normalizeBrPhone(senderPhone);
     if (!normalized) return false;
     const clean = String(text || '').trim().toLowerCase();
+    const localVariants = brPhoneVariants(normalized);
+    const placeholders = localVariants.map(() => '?').join(', ');
     if (/^(sair|parar|stop|cancelar|descadastrar|nao quero|não quero)\b/.test(clean)) {
-      const localVariants = brPhoneVariants(normalized);
-      for (const p of localVariants) {
+      const memberCandidates = this.store.all(
+        "SELECT id, phone FROM members WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
+        [normalized.slice(-8)],
+      );
+      for (const m of memberCandidates) {
+        if (areEquivalentBrPhones(m.phone, normalized)) {
+          this.store.run(
+            "UPDATE members SET whatsapp_opt_out = 1, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            [m.id],
+          );
+        }
+      }
+      const existingChat = this.store.get(
+        `SELECT phone FROM whatsapp_chats WHERE phone IN (${placeholders}) LIMIT 1`,
+        localVariants,
+      );
+      if (existingChat) {
         this.store.run(
-          "UPDATE members SET whatsapp_opt_out = 1, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
-          [p.slice(-8)],
+          `UPDATE whatsapp_chats SET opt_out = 1 WHERE phone IN (${placeholders})`,
+          localVariants,
+        );
+      } else {
+        this.store.run(
+          `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
+           VALUES (?, 1, datetime('now', 'localtime'))
+           ON CONFLICT(phone) DO UPDATE SET opt_out = 1`,
+          [normalized],
         );
       }
       this.store.run(
-        `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
-         VALUES (?, 1, datetime('now', 'localtime'))
-         ON CONFLICT(phone) DO UPDATE SET opt_out = 1`,
-        [normalized],
-      );
-      this.store.run(
         `UPDATE whatsapp_logs SET status = 'skipped', error = 'Opt-out solicitado pelo aluno'
-         WHERE phone IN (${localVariants.map(() => '?').join(', ')}) AND status = 'queued'`,
+         WHERE phone IN (${placeholders}) AND status = 'queued'`,
         localVariants,
       );
       return true;
     }
     if (/^(voltar|ativar|receber)\b/.test(clean)) {
-      const localVariants = brPhoneVariants(normalized);
-      this.store.run(
-        `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
-         VALUES (?, 0, datetime('now', 'localtime'))
-         ON CONFLICT(phone) DO UPDATE SET opt_out = 0`,
-        [normalized],
+      const existingChat = this.store.get(
+        `SELECT phone FROM whatsapp_chats WHERE phone IN (${placeholders}) LIMIT 1`,
+        localVariants,
       );
-      this.store.run(
-        "UPDATE members SET whatsapp_opt_out = 0, updated_at = datetime('now', 'localtime') WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
+      if (existingChat) {
+        this.store.run(
+          `UPDATE whatsapp_chats SET opt_out = 0 WHERE phone IN (${placeholders})`,
+          localVariants,
+        );
+      } else {
+        this.store.run(
+          `INSERT INTO whatsapp_chats (phone, opt_out, last_message_at)
+           VALUES (?, 0, datetime('now', 'localtime'))
+           ON CONFLICT(phone) DO UPDATE SET opt_out = 0`,
+          [normalized],
+        );
+      }
+      const memberCandidates = this.store.all(
+        "SELECT id, phone FROM members WHERE replace(replace(replace(replace(COALESCE(phone, ''), ' ', ''), '-', ''), '(', ''), ')', '') LIKE '%' || ?",
         [normalized.slice(-8)],
       );
+      for (const m of memberCandidates) {
+        if (areEquivalentBrPhones(m.phone, normalized)) {
+          this.store.run(
+            "UPDATE members SET whatsapp_opt_out = 0, updated_at = datetime('now', 'localtime') WHERE id = ?",
+            [m.id],
+          );
+        }
+      }
       return true;
     }
     return false;

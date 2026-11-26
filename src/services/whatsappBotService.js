@@ -10,7 +10,7 @@ const DEFAULT_CONTEXT_PATH = path.resolve(__dirname, '..', 'config', 'defaultBot
 export const CONTEXT_MISSING_HANDOFF_MARKER = '[[HUMAN_HANDOFF_CONTEXT_MISSING]]';
 
 const HUMAN_REQUEST_REGEX = /\b(atendente|humano|pessoa\s+real|falar\s+com\s+(?:algu[eé]m|atendente|recep[cç][aã]o|gerente|dono)|chamar\s+atendente|suporte\s+humano)\b/i;
-const LLM_HANDOFF_PROMISE_REGEX = /\b(?:vou\s+(?:encaminhar|passar|transferir|chamar)\b[^.\n]*\b(?:recep[cç][aã]o|equipe|atendente|humano)|(?:nossa\s+)?(?:recep[cç][aã]o|equipe)\s+(?:vai|ir[aá]|precisa)\s+(?:confirmar|verificar|conferir|responder|concluir|assumir|te\s+chamar|te\s+atender))\b/i;
+const LLM_HANDOFF_PROMISE_REGEX = /\b(?:(?:vou|estou|j[aá])\s+(?:encaminhar|encaminhando|encaminhei|passar|passando|passei|transferir|transferindo|chamar|chamando)\b[^.\n]*\b(?:recep[cç][aã]o|equipe|atendente|humano)|(?:nossa\s+)?(?:recep[cç][aã]o|equipe)\s+(?:vai|ir[aá]|precisa)\s+(?:confirmar|verificar|conferir|responder|concluir|assumir|te\s+chamar|te\s+atender))\b/i;
 
 const DEFAULT_PLAYBOOKS = [
   'Mensalidade: Quando perguntarem valor da mensalidade ou preço de plano, responda com os valores que existirem no contexto. Se não houver valor no contexto, encaminhe para o atendimento humano.',
