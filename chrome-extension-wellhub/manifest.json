@@ -17,7 +17,9 @@
     {
       "matches": [
         "https://partners.gympass.com/new/validation/*",
-        "https://partners.wellhub.com/new/validation/*"
+        "https://partners.wellhub.com/new/validation/*",
+        "https://partners.gympass.com/validation/*",
+        "https://partners.wellhub.com/validation/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

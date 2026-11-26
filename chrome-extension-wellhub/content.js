@@ -48,18 +48,18 @@
     }
   }
 
-  function findSectionCardByTitle(titleSubstring) {
-    const target = titleSubstring.toLowerCase();
-    const otherTitle = target.includes('para confirmar') ? 'check-ins confirmados' : 'check-ins para confirmar';
+  function findSectionCardByTitle(titles, excludeTitles) {
+    const targets = titles.map((t) => t.toLowerCase());
+    const excludes = excludeTitles.map((t) => t.toLowerCase());
     const candidates = [...document.querySelectorAll('h1,h2,h3,h4,h5,p,span,strong,div')];
     for (const el of candidates) {
       if (el.closest('#oxigenio-wellhub-badge')) continue;
       const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      if (!txt.includes(target) || txt.length > 70) continue;
+      if (!targets.some((t) => txt.includes(t)) || txt.length > 70) continue;
       let card = el.parentElement;
       for (let i = 0; i < 8 && card && card !== document.body; i += 1) {
         const cardText = (card.textContent || '').toLowerCase();
-        if (cardText.includes(otherTitle)) break;
+        if (excludes.some((ex) => cardText.includes(ex))) break;
         const rect = card.getBoundingClientRect();
         if (rect.width > 220 && rect.height > 120) return card;
         card = card.parentElement;
@@ -68,20 +68,34 @@
     return null;
   }
 
+  function findPendingCard() {
+    return findSectionCardByTitle(
+      ['Check-ins para confirmar', 'Check-ins para validar'],
+      ['Check-ins confirmados', 'Check-ins validados'],
+    );
+  }
+
+  function findConfirmedCard() {
+    return findSectionCardByTitle(
+      ['Check-ins confirmados', 'Check-ins validados'],
+      ['Check-ins para confirmar', 'Check-ins para validar'],
+    );
+  }
+
   function clickRefreshButtons() {
     const now = Date.now();
     const intervalMs = Math.max(4, Number(cfg.refreshSeconds) || 8) * 1000;
     if (now - lastRefreshAt < intervalMs) return;
     lastRefreshAt = now;
 
-    ['Check-ins para confirmar', 'Check-ins confirmados'].forEach((title) => {
-      const card = findSectionCardByTitle(title);
+    [findPendingCard(), findConfirmedCard()].forEach((card) => {
       if (!card) return;
       const clickables = [...card.querySelectorAll('button, [role="button"], svg')];
       const refreshTarget = clickables.find((el) => {
+        const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (txt === 'atualizar' || txt === 'refresh') return true;
         const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.toLowerCase();
         if (label.includes('atualiz') || label.includes('refresh') || label.includes('reload')) return true;
-        const txt = (el.textContent || '').trim();
         if (txt) return false;
         const rect = el.getBoundingClientRect();
         return rect.width >= 12 && rect.width <= 44 && rect.height >= 12 && rect.height <= 44;
@@ -114,7 +128,7 @@
   }
 
   function extractConfirmedCheckins() {
-    const confirmedCard = findSectionCardByTitle('Check-ins confirmados');
+    const confirmedCard = findConfirmedCard();
     if (!confirmedCard) return [];
 
     const lines = (confirmedCard.innerText || '')
@@ -122,14 +136,13 @@
       .map((l) => l.trim())
       .filter(Boolean);
 
-    const timeRegex = /^\d{1,2}\s+de\s+[a-zç.]+\s*,?\s*\d{1,2}:\d{2}$|^\d{1,2}:\d{2}$/i;
-    const headerIgnore = /^(check-ins confirmados|ver check-ins de hoje|nenhum check-in|\d+)$/i;
+    const timeRegex = /^(?:\d{1,2}\s+de\s+[a-zç.]+\s*,?\s*\d{1,2}:\d{2}|\d{1,2}:\d{2}|validado\s+[aà]s\s+\d{1,2}[h:]\d{2})$/i;
+    const headerIgnore = /^(check-ins confirmados|check-ins validados|ver check-ins de hoje|atualizar|nenhum check-in.*|atualize para novos check-ins|\d+)$/i;
     const items = [];
     const seen = new Set();
 
     for (let i = 0; i < lines.length; i += 1) {
       if (!timeRegex.test(lines[i])) continue;
-      // Look 1-2 lines above the timestamp for the student's name and modality
       const prev1 = lines[i - 1] || '';
       const prev2 = lines[i - 2] || '';
       const candidateName = prev2 && !headerIgnore.test(prev2) && !timeRegex.test(prev2) ? prev2 : prev1;
