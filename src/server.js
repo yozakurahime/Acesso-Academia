@@ -309,11 +309,6 @@ async function start() {
         edgeSyncClient.pushPendingLogs().catch(() => {});
       }
     });
-    unsubscribeDesktopPartner = accessService.onPartnerRequest((type, payload) => {
-      if (type === 'partner_request') {
-        desktopNotifier.notifyPartnerRequest(payload);
-      }
-    });
     if (edgeRole === 'edge' && process.env.EDGE_CLOUD_URL && process.env.EDGE_SYNC_TOKEN) {
       edgeSyncClient = new EdgeSyncClient({
         store,

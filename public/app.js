@@ -290,13 +290,6 @@ function startTurnstileEventsStream() {
       if (idx >= 0) pendingPartnerRequests[idx] = req;
       else pendingPartnerRequests.unshift(req);
       renderPartnerRequestNotifications();
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        const providerLabel = req.provider === 'wellhub' ? 'Wellhub' : 'TotalPass';
-        new Notification(`Confirma o check-in? (${providerLabel})`, {
-          body: `${req.member_name || 'Aluno de convênio'} (#${req.member_id}) aguarda liberação na catraca.`,
-          tag: `partner-req-${req.id}`,
-        });
-      }
     } catch {
       // Ignora payload malformado.
     }
