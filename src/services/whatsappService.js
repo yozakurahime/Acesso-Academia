@@ -951,7 +951,7 @@ export class WhatsappService {
     return row;
   }
 
-  async enqueueClassRemovalNotice({ member, removedClasses = [], graceDays = 5 }) {
+  async enqueueClassRemovalNotice({ member, removedClasses = [], graceDays = 10 }) {
     const settings = this.store.getSettings();
     if (settings.whatsapp_enabled !== '1') return null;
     if (!member?.phone || !removedClasses.length) return null;

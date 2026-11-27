@@ -321,7 +321,7 @@ test('updatePlan e deletePlan atualizam, excluem plano livre e bloqueiam plano e
   assert.equal(service.listPlans().some((p) => p.id === unused.id), false);
 });
 
-test('removeOverdueClassEnrollments remove da turma apos 5 dias de tolerancia e enfileira aviso no WhatsApp', async () => {
+test('removeOverdueClassEnrollments remove da turma apos 10 dias de tolerancia sem acessos recentes e enfileira aviso no WhatsApp', async () => {
   const { store, service } = await createTestEnv();
   store.updateSettings({ whatsapp_enabled: '1' });
   const gym = new GymService(store);
@@ -331,26 +331,34 @@ test('removeOverdueClassEnrollments remove da turma apos 5 dias de tolerancia e 
   const cls = gym.createClass({ name: 'Natação 18:00', modality_id: mod.id, schedule: 'Ter/Qui 18:00', capacity: 8 });
 
   const mWithinGrace = await service.createMember({ name: 'Dentro Tolerancia', document: nextCpf(), phone: '11999990001', plan_id: plan.id });
+  const mRecentAccess = await service.createMember({ name: 'Com Acesso Recente', document: nextCpf(), phone: '11999990003', plan_id: plan.id });
   const mOverdue = await service.createMember({ name: 'Fora Tolerancia', document: nextCpf(), phone: '11999990002', plan_id: plan.id });
 
-  store.run("UPDATE members SET status = 'active', valid_until = '2026-05-07' WHERE id = ?", [mWithinGrace.id]);
-  store.run("UPDATE members SET status = 'active', valid_until = '2026-05-04' WHERE id = ?", [mOverdue.id]);
+  store.run("UPDATE members SET status = 'active', valid_until = '2026-05-03' WHERE id = ?", [mWithinGrace.id]);
+  store.run("UPDATE members SET status = 'active', valid_until = '2026-04-28' WHERE id = ?", [mRecentAccess.id]);
+  store.run("UPDATE members SET status = 'active', valid_until = '2026-04-28' WHERE id = ?", [mOverdue.id]);
+  store.run(
+    "INSERT INTO access_logs (member_id, controlid_user_id, event_code, event_label, occurred_at) VALUES (?, ?, 7, 'Liberado', '2026-05-05 18:00:00')",
+    [mRecentAccess.id, mRecentAccess.id],
+  );
   gym.enrollMemberInClass(cls.id, mWithinGrace.id);
+  gym.enrollMemberInClass(cls.id, mRecentAccess.id);
   gym.enrollMemberInClass(cls.id, mOverdue.id);
 
-  // Referência: 2026-05-10 -> 2026-05-07 (3 dias atrás, dentro da tolerância), 2026-05-04 (6 dias atrás, > 5 dias)
-  const removed = service.removeOverdueClassEnrollments(5, new Date('2026-05-10T12:00:00'));
+  // Referência: 2026-05-10 -> cutoff 2026-04-30; 2026-05-03 (7d, dentro), 2026-04-28 c/ acesso em 2026-05-05 (mantem), 2026-04-28 sem acesso (remove)
+  const removed = service.removeOverdueClassEnrollments(10, new Date('2026-05-10T12:00:00'));
   assert.equal(removed.length, 1);
   assert.equal(removed[0].id, mOverdue.id);
   assert.equal(removed[0].removedClasses[0].name, 'Natação 18:00');
 
   assert.ok(store.get('SELECT 1 FROM class_enrollments WHERE member_id = ?', [mWithinGrace.id]));
+  assert.ok(store.get('SELECT 1 FROM class_enrollments WHERE member_id = ?', [mRecentAccess.id]));
   assert.equal(store.get('SELECT 1 FROM class_enrollments WHERE member_id = ?', [mOverdue.id]), null);
 
-  const msg = await wa.enqueueClassRemovalNotice({ member: removed[0], removedClasses: removed[0].removedClasses, graceDays: 5 });
+  const msg = await wa.enqueueClassRemovalNotice({ member: removed[0], removedClasses: removed[0].removedClasses, graceDays: 10 });
   assert.ok(msg.id);
   assert.equal(msg.kind, 'class_removal');
-  assert.match(msg.message, /5 dias de tolerância/);
+  assert.match(msg.message, /10 dias de tolerância/);
   assert.match(msg.message, /Natação 18:00/);
 });
 

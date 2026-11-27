@@ -222,16 +222,16 @@ async function start() {
       if (blocked.length > 0) {
         console.log(`[${label}] ${blocked.length} cliente(s) bloqueado(s) por vencimento.`);
       }
-      const removedFromClasses = accessService.removeOverdueClassEnrollments(5);
+      const removedFromClasses = accessService.removeOverdueClassEnrollments(10);
       if (removedFromClasses.length > 0) {
         for (const item of removedFromClasses) {
           await whatsappService.enqueueClassRemovalNotice({
             member: item,
             removedClasses: item.removedClasses,
-            graceDays: 5,
+            graceDays: 10,
           }).catch(() => {});
         }
-        console.log(`[${label}] ${removedFromClasses.length} aluno(s) removido(s) da turma após 5 dias de tolerância.`);
+        console.log(`[${label}] ${removedFromClasses.length} aluno(s) removido(s) da turma após 10 dias de tolerância sem acessos recentes.`);
       }
     } catch (err) {
       console.error(`[${label}] Erro ao verificar vencimentos:`, err.message);

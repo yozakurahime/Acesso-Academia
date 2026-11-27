@@ -2264,9 +2264,11 @@ export class AccessService {
    * Remove da(s) turma(s) alunos cujo vencimento passou há mais de `graceDays` dias (padrão: 5 dias de tolerância).
    * Retorna os alunos afetados junto com as turmas liberadas para notificação.
    */
-  removeOverdueClassEnrollments(graceDays = 5, now = new Date()) {
+  removeOverdueClassEnrollments(graceDays = 10, now = new Date()) {
     const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const cutoffIso = addDays(todayIso, -Math.max(0, Number(graceDays ?? 5)));
+    const days = Math.max(0, Number(graceDays ?? 10));
+    const cutoffIso = addDays(todayIso, -days);
+    const recentAccessCutoff = `${cutoffIso} 00:00:00`;
 
     const candidates = this.store.all(
       `SELECT DISTINCT m.id, m.name, m.phone, COALESCE(e.ends_on, m.valid_until) AS valid_until
@@ -2275,9 +2277,16 @@ export class AccessService {
        LEFT JOIN plan_enrollments e ON e.member_id = m.id
        WHERE m.access_role = 'student'
          AND COALESCE(m.manual_access, 0) = 0
+         AND (m.partner_provider IS NULL OR m.partner_provider NOT IN ('wellhub', 'totalpass'))
          AND COALESCE(e.ends_on, m.valid_until) IS NOT NULL
-         AND COALESCE(e.ends_on, m.valid_until) < ?`,
-      [cutoffIso],
+         AND COALESCE(e.ends_on, m.valid_until) < ?
+         AND NOT EXISTS (
+           SELECT 1 FROM access_logs al
+           WHERE al.member_id = m.id
+             AND al.event_code IN (7, 11, 12)
+             AND al.occurred_at >= ?
+         )`,
+      [cutoffIso, recentAccessCutoff],
     );
 
     if (!candidates.length) return [];
