@@ -93,13 +93,11 @@
     lastRefreshAt = now;
 
     if (isTotalpass) {
-      const btn = [...document.querySelectorAll('button, [role="button"]')].find((el) => {
-        if (el.disabled || el.closest('#oxigenio-wellhub-badge')) return false;
-        const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-        const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.toLowerCase();
-        return txt === 'atualizar' || txt === 'refresh' || label.includes('atualiz') || label.includes('refresh');
-      });
-      if (btn) btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      // O painel TotalPass nao possui botao manual de atualizar; recarrega suavemente no intervalo configurado (min 15s)
+      const tpIntervalMs = Math.max(15000, intervalMs);
+      if (performance.now() > tpIntervalMs && !document.hidden) {
+        location.reload();
+      }
       return;
     }
 
@@ -143,37 +141,65 @@
   }
 
   function extractTotalpassCheckins() {
-    const mainEl = document.querySelector('main') || document.body;
-    if (!mainEl) return [];
-    const ignored = /^(check-ins|consulta de plano|validar check-in|histórico de visitas|faltas e cancelamentos tardios|saiba mais|não encontramos nenhum check-in ativo|validar|confirmar|atualizar)$/i;
-    const rows = [...mainEl.querySelectorAll('tr, [role="row"], li, [role="listitem"], div')].filter((el) => {
-      if (el.closest('#oxigenio-wellhub-badge')) return false;
-      const text = (el.textContent || '').trim();
-      if (!text || text.length > 260) return false;
-      if (text.includes('Validar Check-In') && text.includes('Histórico de visitas')) return false;
-      return (/\d{1,2}[h:]\d{2}/.test(text) || /\d{3}\.\d{3}\.\d{3}-\d{2}/.test(text))
-        && el.querySelectorAll('div, td, p, span').length <= 12;
-    });
-
+    const todayBr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
     const items = [];
     const seen = new Set();
-    for (const row of rows) {
-      const text = (row.innerText || '').trim();
-      const cpfMatch = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
-      const lines = text
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l && !ignored.test(l) && !/^(atualizado em|atenção:|todos os check-ins|olá\. precisa de ajuda)/i.test(l));
-      const candidateName = lines.find((l) => l.length >= 4 && !/\d/.test(l) && !/^(musculação|pilates|dança|hidro|natação|ativo|validado)/i.test(l)) || '';
-      const key = (cpfMatch?.[0] || candidateName).toLowerCase();
+
+    // 1) Linhas estruturadas da tabela MUI (Historico de visitas / Validar Check-in)
+    const tableRows = [...document.querySelectorAll('tbody[data-testid="tableBody"] tr.MuiTableRow-root')];
+    for (const row of tableRows) {
+      const dateText = (row.querySelector('[data-testid="dateTimeBodyCell"]')?.innerText || '').trim();
+      if (dateText && !dateText.includes(todayBr)) continue;
+
+      const statusText = (row.querySelector('[data-testid="statusChip"] .MuiChip-label')?.textContent || '').trim().toLowerCase();
+      if (statusText && statusText.includes('expirado')) continue;
+
+      const nameCell = row.querySelector('[data-testid="nameDocumentBodyCell"]');
+      if (!nameCell) continue;
+      const ps = [...nameCell.querySelectorAll('p')];
+      const name = (ps[0]?.textContent || '').trim();
+      const cpfRaw = (ps[1]?.textContent || '').replace(/\D/g, '');
+      const key = (cpfRaw || name).toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);
       items.push({
-        name: candidateName,
-        cpf: cpfMatch ? cpfMatch[0] : '',
-        time_text: text.match(/\d{1,2}[h:]\d{2}/)?.[0] || '',
+        name,
+        cpf: cpfRaw,
+        time_text: dateText.replace(/\s+/g, ' '),
       });
     }
+
+    // 2) Cards/itens dentro da aba "Validar Check-in" (div[data-testid="validateTab"])
+    const validateContainer = document.querySelector('[data-testid="validateTab"], #tabpanel-0');
+    if (validateContainer && !validateContainer.querySelector('[data-testid="emptyWrapper"]')) {
+      const ignored = /^(atenção:|saiba mais|validar|confirmar|validar check-?in)$/i;
+      const blocks = [...validateContainer.querySelectorAll('tr, [role="row"], li, [role="listitem"], div')].filter((el) => {
+        if (el.closest('#oxigenio-wellhub-badge') || el.closest('[data-testid="checkInsValidateWarnWrapper"]')) return false;
+        const text = (el.textContent || '').trim();
+        if (!text || text.length > 260) return false;
+        return (/\b\d{11}\b/.test(text) || /\d{3}\.\d{3}\.\d{3}-\d{2}/.test(text) || /\d{1,2}[h:]\d{2}/.test(text))
+          && el.querySelectorAll('div, td, p, span').length <= 12;
+      });
+      for (const block of blocks) {
+        const text = (block.innerText || '').trim();
+        const cpfMatch = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
+        const lines = text
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l && !ignored.test(l) && !/^(atenção:|todos os check-ins)/i.test(l));
+        const candidateName = lines.find((l) => l.length >= 4 && !/\d/.test(l)) || '';
+        const cpfDigits = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : '';
+        const key = (cpfDigits || candidateName).toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        items.push({
+          name: candidateName,
+          cpf: cpfDigits,
+          time_text: text.match(/\d{1,2}[h:]\d{2}/)?.[0] || '',
+        });
+      }
+    }
+
     return items;
   }
 
