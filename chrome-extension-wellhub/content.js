@@ -166,6 +166,17 @@
       btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       btn.click();
       updateBadge(`Oxigênio Bot (${providerLabel}): Validando check-in...`);
+      if (isTotalpass && btn.dataset?.testid === 'buttonValidate') {
+        const card = btn.closest('.css-fwvxvs, [role="row"], li, div[style]') || btn.parentElement?.parentElement;
+        const name = (card?.querySelector('[data-testid="nameItem"]')?.textContent || '').trim();
+        if (name) {
+          const cardText = (card?.innerText || '').trim();
+          const cpfMatch = cardText.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
+          const cpf = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : '';
+          const timeText = (card?.querySelector('[data-testid="hourItem"]')?.textContent || cardText.match(/\d{1,2}[h:]\d{2}/)?.[0] || '').trim();
+          syncItemsToSystem([{ name, cpf, time_text: timeText }]);
+        }
+      }
       return true;
     }
     return false;
@@ -281,27 +292,12 @@
     }, delayMs);
   }
 
-  function scanAndSync() {
-    if (!document.body) return;
-    if (!cfg.enabled) {
-      updateBadge(`Oxigênio Bot (${providerLabel}): Pausado`);
-      return;
-    }
-
-    clickRefreshButtons();
-    const validatingNow = tryAutoConfirmPending();
-
-    const confirmed = extractConfirmedCheckins();
-    const pendingToSend = confirmed.filter((item) => {
+  function syncItemsToSystem(items) {
+    const pendingToSend = (items || []).filter((item) => {
       const k = (item.cpf || item.name || '').toLowerCase();
       return k && !sentNamesToday.has(k);
     });
-    if (!pendingToSend.length) {
-      if (!validatingNow) {
-        updateBadge(`Oxigênio Bot (${providerLabel}): Vigiando (${confirmed.length} na tela)`);
-      }
-      return;
-    }
+    if (!pendingToSend.length) return false;
 
     chrome.runtime.sendMessage({ type: 'WELLHUB_SYNC_CHECKINS', provider, items: pendingToSend }, (res) => {
       if (chrome.runtime.lastError) {
@@ -318,6 +314,27 @@
       });
       updateBadge(`Oxigênio Bot (${providerLabel}): ${res.matched?.length || 0} liberado(s) · ${res.unmatched?.length || 0} não encontrado(s)`);
     });
+    return true;
+  }
+
+  function scanAndSync() {
+    if (!document.body) return;
+    if (!cfg.enabled) {
+      updateBadge(`Oxigênio Bot (${providerLabel}): Pausado`);
+      return;
+    }
+
+    clickRefreshButtons();
+    const validatingNow = tryAutoConfirmPending();
+
+    const confirmed = extractConfirmedCheckins();
+    const sent = syncItemsToSystem(confirmed);
+    if (!sent) {
+      if (!validatingNow) {
+        updateBadge(`Oxigênio Bot (${providerLabel}): Vigiando (${confirmed.length} na tela)`);
+      }
+      return;
+    }
   }
 
   async function init() {
