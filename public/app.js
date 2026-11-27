@@ -7920,6 +7920,18 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
     });
     return;
   }
+  const cartMethodCard = e.target.closest('.billing-method-card[data-cart-point-method]');
+  if (cartMethodCard) {
+    const code = cartMethodCard.dataset.cartPointMethod || 'credit';
+    const hiddenInput = document.getElementById('cartPointMethod');
+    if (hiddenInput) hiddenInput.value = code;
+    document.querySelectorAll('#cartPointMethodCards .billing-method-card[data-cart-point-method]').forEach((card) => {
+      const active = card.dataset.cartPointMethod === code;
+      card.classList.toggle('active', active);
+      card.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    return;
+  }
   const pointCartBtn = e.target.closest('#btnCartSendPoint');
   if (pointCartBtn) {
     if (!state.billingCart?.length) return;

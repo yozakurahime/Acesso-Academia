@@ -752,12 +752,31 @@
           </div>
           <div id="billingCartItems" class="billing-cart-items"></div>
           <div class="billing-cart-actions">
-            <div class="inline-actions" style="flex-wrap:wrap;gap:8px;align-items:center;">
-              <select id="cartPointMethod" aria-label="Forma de pagamento na maquininha" style="min-width:140px;">
-                <option value="pix">Pix (Maquininha)</option>
-                <option value="credit" selected>Crédito (Maquininha)</option>
-                <option value="debit">Débito (Maquininha)</option>
-              </select>
+            <div class="inline-actions" style="flex-wrap:wrap;gap:10px;align-items:stretch;">
+              <div id="cartPointMethodCards" class="billing-method-cards" role="radiogroup" aria-label="Forma de pagamento na maquininha" style="flex:1;min-width:260px;">
+                <button type="button" class="billing-method-card" data-cart-point-method="pix" role="radio" aria-checked="false">
+                  <span class="billing-method-icon" aria-hidden="true">💠</span>
+                  <span class="billing-method-body">
+                    <span class="billing-method-name">Pix</span>
+                    <span class="billing-method-hint">QR Code na maquininha</span>
+                  </span>
+                </button>
+                <button type="button" class="billing-method-card active" data-cart-point-method="credit" role="radio" aria-checked="true">
+                  <span class="billing-method-icon" aria-hidden="true">💳</span>
+                  <span class="billing-method-body">
+                    <span class="billing-method-name">Crédito</span>
+                    <span class="billing-method-hint">Passar na maquininha</span>
+                  </span>
+                </button>
+                <button type="button" class="billing-method-card" data-cart-point-method="debit" role="radio" aria-checked="false">
+                  <span class="billing-method-icon" aria-hidden="true">🏧</span>
+                  <span class="billing-method-body">
+                    <span class="billing-method-name">Débito</span>
+                    <span class="billing-method-hint">Passar na maquininha</span>
+                  </span>
+                </button>
+              </div>
+              <input type="hidden" id="cartPointMethod" value="credit" />
               <button type="button" id="btnCartSendPoint" class="btn btn-primary">Enviar carrinho para a maquininha</button>
             </div>
             <div class="billing-cart-quick-methods">
