@@ -1036,6 +1036,21 @@ export class WhatsappService {
     return row;
   }
 
+  _groupCandidatesByPhone(candidates) {
+    const groups = [];
+    for (const member of candidates) {
+      const normalized = normalizeBrPhone(member.phone);
+      if (!normalized) continue;
+      let group = groups.find((g) => areEquivalentBrPhones(g.phone, normalized));
+      if (!group) {
+        group = { phone: normalized, members: [] };
+        groups.push(group);
+      }
+      group.members.push(member);
+    }
+    return groups;
+  }
+
   enqueueDueReminders(now = new Date()) {
     const settings = this.store.getSettings();
     if (settings.whatsapp_enabled !== '1' || settings.whatsapp_notify_due !== '1') return 0;
@@ -1060,28 +1075,48 @@ export class WhatsappService {
     );
 
     let queued = 0;
-    for (const member of candidates) {
+    for (const group of this._groupCandidatesByPhone(candidates)) {
       if (queued >= remainingBudget) break;
-      const message = this.renderTemplate(
-        settings.whatsapp_tpl_due ||
-          '{saudacao} {primeiro_nome}! {Passando para lembrar que seu|Lembrando que seu} plano {plano} na {academia} vence em {vencimento}. {Se quiser renovar por aqui mesmo, responda *quero pagar*|Quer renovar sem pegar fila? Responda *quero pagar* que gero o Pix ou link na hora}!',
-        {
-          name: member.name,
-          planName: member.plan_name || 'Plano',
-          validUntil: member.valid_until,
-          gymName: settings.gym_name,
-        },
-      );
-      const inserted = this.enqueueMessage({
-        memberId: member.id,
-        phone: member.phone,
-        kind: 'due_reminder',
-        refKey: `due:${member.valid_until}`,
-        message,
-        templateName: 'academia_lembrete_vencimento',
-        templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
-      });
-      if (inserted) queued += 1;
+      if (group.members.length === 1) {
+        const member = group.members[0];
+        const message = this.renderTemplate(
+          settings.whatsapp_tpl_due ||
+            '{saudacao} {primeiro_nome}! {Passando para lembrar que seu|Lembrando que seu} plano {plano} na {academia} vence em {vencimento}. {Se quiser renovar por aqui mesmo, responda *quero pagar*|Quer renovar sem pegar fila? Responda *quero pagar* que gero o Pix ou link na hora}!',
+          {
+            name: member.name,
+            planName: member.plan_name || 'Plano',
+            validUntil: member.valid_until,
+            gymName: settings.gym_name,
+          },
+        );
+        const inserted = this.enqueueMessage({
+          memberId: member.id,
+          phone: member.phone,
+          kind: 'due_reminder',
+          refKey: `due:${member.valid_until}`,
+          message,
+          templateName: 'academia_lembrete_vencimento',
+          templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
+        });
+        if (inserted) queued += 1;
+      } else {
+        const lines = group.members.map((m) => {
+          const first = String(m.name || 'Aluno').trim().split(/\s+/)[0];
+          return `• *${first}* (${m.plan_name || 'Plano'}) — vence em ${formatDateBr(m.valid_until) || '-'}`;
+        });
+        const message = this.renderTemplate(
+          `{saudacao}! Passando para lembrar que as mensalidades na {academia} estão próximas do vencimento:\n${lines.join('\n')}\n\nSe quiser renovar por aqui mesmo, responda *quero pagar*!`,
+          { name: group.members[0].name, gymName: settings.gym_name },
+        );
+        const inserted = this.enqueueMessage({
+          memberId: group.members[0].id,
+          phone: group.members[0].phone,
+          kind: 'due_reminder',
+          refKey: `due:${todayIso}:group:${group.members.map((m) => m.id).join(',')}`,
+          message,
+        });
+        if (inserted) queued += 1;
+      }
     }
     return queued;
   }
@@ -1108,27 +1143,47 @@ export class WhatsappService {
     );
 
     let queued = 0;
-    for (const member of candidates) {
+    for (const group of this._groupCandidatesByPhone(candidates)) {
       if (queued >= remainingBudget) break;
-      const message = this.renderTemplate(
-        '{saudacao} {primeiro_nome}! {Sua mensalidade|Seu plano} ({plano}) venceu ontem ({vencimento}). {Para renovar rápido sem bloqueio na catraca, responda *quero pagar* por aqui que eu gero seu Pix ou link na hora|Quer evitar bloqueio na catraca? Responda *quero pagar* que já envio seu Pix ou link de pagamento}!',
-        {
-          name: member.name,
-          planName: member.plan_name || 'Plano',
-          validUntil: member.valid_until,
-          gymName: settings.gym_name,
-        },
-      );
-      const inserted = this.enqueueMessage({
-        memberId: member.id,
-        phone: member.phone,
-        kind: 'overdue_reminder',
-        refKey: `overdue:${member.valid_until}`,
-        message,
-        templateName: 'cobranca_vencida',
-        templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
-      });
-      if (inserted) queued += 1;
+      if (group.members.length === 1) {
+        const member = group.members[0];
+        const message = this.renderTemplate(
+          '{saudacao} {primeiro_nome}! {Sua mensalidade|Seu plano} ({plano}) venceu ontem ({vencimento}). {Para renovar rápido sem bloqueio na catraca, responda *quero pagar* por aqui que eu gero seu Pix ou link na hora|Quer evitar bloqueio na catraca? Responda *quero pagar* que já envio seu Pix ou link de pagamento}!',
+          {
+            name: member.name,
+            planName: member.plan_name || 'Plano',
+            validUntil: member.valid_until,
+            gymName: settings.gym_name,
+          },
+        );
+        const inserted = this.enqueueMessage({
+          memberId: member.id,
+          phone: member.phone,
+          kind: 'overdue_reminder',
+          refKey: `overdue:${member.valid_until}`,
+          message,
+          templateName: 'cobranca_vencida',
+          templateParams: [String(member.name || 'Aluno').trim().split(/\s+/)[0], member.plan_name || 'Plano', formatDateBr(member.valid_until) || '-'],
+        });
+        if (inserted) queued += 1;
+      } else {
+        const lines = group.members.map((m) => {
+          const first = String(m.name || 'Aluno').trim().split(/\s+/)[0];
+          return `• *${first}* (${m.plan_name || 'Plano'}) — venceu em ${formatDateBr(m.valid_until) || '-'}`;
+        });
+        const message = this.renderTemplate(
+          `{saudacao}! As mensalidades abaixo venceram ontem:\n${lines.join('\n')}\n\nPara renovar rápido sem bloqueio na catraca, responda *quero pagar* por aqui que eu gero seu Pix ou link na hora!`,
+          { name: group.members[0].name, gymName: settings.gym_name },
+        );
+        const inserted = this.enqueueMessage({
+          memberId: group.members[0].id,
+          phone: group.members[0].phone,
+          kind: 'overdue_reminder',
+          refKey: `overdue:${yesterdayIso}:group:${group.members.map((m) => m.id).join(',')}`,
+          message,
+        });
+        if (inserted) queued += 1;
+      }
     }
     return queued;
   }

@@ -446,3 +446,39 @@ test('WhatsappService.handleIncomingText sincroniza opt-out e reativacao entre 1
   assert.equal(store.get("SELECT whatsapp_opt_out FROM members WHERE phone = '6292093611'").whatsapp_opt_out, 0);
   assert.ok(service.enqueueMessage({ phone: '556292093611', kind: 'due_reminder', message: 'Teste liberado' }));
 });
+
+test('WhatsappService consolida lembretes de vencimento e atraso em 1 mensagem quando ha mais de uma matricula no mesmo numero', async () => {
+  const store = await DatabaseStore.create(null);
+  const service = new WhatsappService(store, {});
+  store.run(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('whatsapp_enabled', '1'), ('whatsapp_notify_due', '1'), ('whatsapp_due_days_before', '1')",
+  );
+
+  store.run("INSERT INTO plans (name, duration_days, price_cents) VALUES ('Musculacao Mensal', 30, 10000)");
+  const planId = store.get('SELECT id FROM plans LIMIT 1').id;
+
+  const now = new Date('2026-11-27T12:00:00');
+  store.run(
+    "INSERT INTO members (name, document, phone, plan_id, status, valid_until, access_role) VALUES ('Lorena Braga', '52998224725', '62998325661', ?, 'active', '2026-11-27', 'student')",
+    [planId],
+  );
+  store.run(
+    "INSERT INTO members (name, document, phone, plan_id, status, valid_until, access_role) VALUES ('Keylla Braga', '39053344705', '62998325661', ?, 'active', '2026-11-28', 'student')",
+    [planId],
+  );
+
+  const dueCount = service.enqueueDueReminders(now);
+  assert.equal(dueCount, 1);
+  const dueRows = store.all("SELECT message FROM whatsapp_logs WHERE kind = 'due_reminder'");
+  assert.equal(dueRows.length, 1);
+  assert.match(dueRows[0].message, /Lorena/);
+  assert.match(dueRows[0].message, /Keylla/);
+
+  store.run("UPDATE members SET valid_until = '2026-11-26'");
+  const overdueCount = service.enqueueOverdueTodayReminders(now);
+  assert.equal(overdueCount, 1);
+  const overdueRows = store.all("SELECT message FROM whatsapp_logs WHERE kind = 'overdue_reminder'");
+  assert.equal(overdueRows.length, 1);
+  assert.match(overdueRows[0].message, /Lorena/);
+  assert.match(overdueRows[0].message, /Keylla/);
+});
