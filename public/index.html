@@ -1570,6 +1570,29 @@
               </div>
             </section>
 
+            <section class="panel settings-card" id="settings-printer" data-settings-cat="general" data-settings-keywords="impressora recibo cupom termica mp-4200 imprimir automatico">
+              <div class="settings-card-head">
+                <div>
+                  <h3>Impressora &amp; Recibos</h3>
+                  <p class="muted">Configure a impressora térmica do balcão (ex.: MP-4200 TH) e a impressão automática ao receber.</p>
+                </div>
+              </div>
+              <form id="printerSettingsForm" class="form-stack">
+                <div class="form-grid">
+                  <label>Nome da impressora no Windows (USB/Spooler)
+                    <input type="text" id="sPrinterName" placeholder="MP-4200 TH" />
+                  </label>
+                </div>
+                <div class="settings-check-grid">
+                  <label class="checkbox-label"><input type="checkbox" id="sReceiptDirectPrint" checked /> Imprimir automaticamente na térmica ao receber</label>
+                  <label class="checkbox-label"><input type="checkbox" id="sAutoPrintBrowser" checked /> Abrir janela de impressão do navegador se a térmica direta não estiver conectada</label>
+                </div>
+                <div class="settings-form-actions">
+                  <button type="submit" class="btn btn-primary">Salvar Impressora</button>
+                </div>
+              </form>
+            </section>
+
             <!-- CATEGORIA: CATRACAS & LEITORES -->
             <div class="settings-ops-grid" data-settings-cat="devices" data-settings-keywords="operacoes catraca testar toletus faceid sincronizar faces bloquear inadimplentes tela monitor">
               <section class="panel settings-card" data-settings-cat="devices" data-settings-keywords="operacoes catraca testar toletus faceid sincronizar faces bloquear inadimplentes">

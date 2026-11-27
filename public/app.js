@@ -5600,6 +5600,11 @@ async function loadSettings() {
   document.getElementById('sToletusPort').value = s.toletus_port || '7878';
   document.getElementById('sToletusEnabled').checked = s.toletus_enabled !== 'false';
   document.getElementById('sMockMode').checked = s.controlid_mock_mode === 'true';
+  if (document.getElementById('sPrinterName')) {
+    document.getElementById('sPrinterName').value = s.receipt_printer_name || 'MP-4200 TH';
+    document.getElementById('sReceiptDirectPrint').checked = s.receipt_direct_print !== '0';
+    document.getElementById('sAutoPrintBrowser').checked = isAutoPrintReceiptEnabled();
+  }
 
   if (document.getElementById('sWellhubEnabled')) {
     document.getElementById('sWellhubEnabled').checked = s.wellhub_enabled !== 'false';
@@ -8341,6 +8346,31 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
         }),
       });
       showToast('Configurações salvas!');
+      await loadSettings();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
+});
+
+document.getElementById('printerSettingsForm')?.addEventListener('submit', async (e) => {
+  await withLoading(e.currentTarget, async () => {
+    e.preventDefault();
+    try {
+      const printerName = document.getElementById('sPrinterName')?.value?.trim() || 'MP-4200 TH';
+      const directPrint = document.getElementById('sReceiptDirectPrint')?.checked ? '1' : '0';
+      const browserAuto = document.getElementById('sAutoPrintBrowser')?.checked ? '1' : '0';
+      localStorage.setItem('oxigenio_auto_receipt', browserAuto);
+      const modalChk = document.getElementById('chkAutoPrintReceipt');
+      if (modalChk) modalChk.checked = browserAuto === '1';
+      await api('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          receipt_printer_name: printerName,
+          receipt_direct_print: directPrint,
+        }),
+      });
+      showToast('Configurações da impressora salvas!');
       await loadSettings();
     } catch (err) {
       showToast(err.message, true);

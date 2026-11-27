@@ -542,7 +542,10 @@ export class EdgeSyncClient {
     }
     if (cmd.type === 'print_receipt') {
       try {
-        await printReceiptToWindowsPrinter(cmd.payload || {});
+        await printReceiptToWindowsPrinter(
+          cmd.payload || {},
+          cmd.payload?.printerName ? { printerName: cmd.payload.printerName } : undefined,
+        );
       } catch (err) {
         this.lastError = `Erro ao imprimir recibo na MP-4200 TH: ${err.message}`;
       }

@@ -1532,14 +1532,17 @@ export class AccessService {
 
   dispatchReceiptPrint(payment, member = null) {
     if (!payment) return false;
-    const payload = buildPaymentReceiptPayload(this.store, payment, member);
+    const settings = this.store.getSettings();
+    if (settings.receipt_direct_print === '0') return false;
+    const printerName = String(settings.receipt_printer_name || '').trim() || process.env.EDGE_PRINTER_NAME || 'MP-4200 TH';
+    const payload = { ...buildPaymentReceiptPayload(this.store, payment, member), printerName };
     if (this.edgeCloudHub?.hasConnectedEdge?.()) {
       this.edgeCloudHub.enqueueCommand('print_receipt', payload);
       return true;
     }
     const isCloudRole = String(process.env.EDGE_ROLE || '').trim().toLowerCase() === 'cloud';
     if (!isCloudRole && process.platform === 'win32') {
-      printReceiptToWindowsPrinter(payload).catch(() => {});
+      printReceiptToWindowsPrinter(payload, { printerName }).catch(() => {});
       return true;
     }
     return false;
