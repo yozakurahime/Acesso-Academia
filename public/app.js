@@ -8778,7 +8778,13 @@ async function startFaceWebcam({ silent = false } = {}) {
   const capture = state.faceCapture = Symbol();
   try {
     stopWebcam({ clearMirror: true });
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        facingMode: 'user',
+      },
+    });
     if (state.faceCapture !== capture) {
       stream.getTracks().forEach((track) => track.stop());
       return;
@@ -8816,10 +8822,14 @@ document.getElementById('btnStartCam').addEventListener('click', () => startFace
 document.getElementById('btnSnapCam').addEventListener('click', () => {
   const video = document.getElementById('webcamVideo');
   const canvas = document.getElementById('webcamCanvas');
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
   canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  let dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  for (const q of [0.85, 0.78, 0.7]) {
+    if (dataUrl.length <= 1_250_000) break;
+    dataUrl = canvas.toDataURL('image/jpeg', q);
+  }
   state.selectedFaceBase64 = dataUrl;
   const preview = document.getElementById('facePreview');
   preview.src = dataUrl;
@@ -8827,9 +8837,9 @@ document.getElementById('btnSnapCam').addEventListener('click', () => {
   document.getElementById('btnSaveFace').disabled = false;
   stopWebcam({ clearMirror: false });
   const mirrorCanvas = document.createElement('canvas');
-  mirrorCanvas.width = 360;
-  mirrorCanvas.height = 270;
-  mirrorCanvas.getContext('2d')?.drawImage(canvas, 0, 0, 360, 270);
+  mirrorCanvas.width = 480;
+  mirrorCanvas.height = Math.max(270, Math.round(480 * (canvas.height / canvas.width)));
+  mirrorCanvas.getContext('2d')?.drawImage(canvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
   publishFaceMirror({
     active: true,
     captured: true,
