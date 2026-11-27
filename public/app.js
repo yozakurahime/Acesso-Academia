@@ -3239,16 +3239,33 @@ window.openProfile = async (id) => {
     document.getElementById('btnProfPay').classList.toggle('hidden', team);
     document.getElementById('btnConvertVisitor')?.classList.toggle('hidden', team || !m.is_visitor);
     const today = billingDateFormat.format(new Date());
-    const accessStatus = team ? 'active' : m.status === 'blocked' || (enrollment?.ends_on && enrollment.ends_on < today && !data.inGrace)
-      ? 'blocked' : !enrollment?.plan_name || !enrollment.ends_on ? 'pending' : m.status;
+    const isPartner = m.partner_provider === 'wellhub' || m.partner_provider === 'totalpass';
+    const partnerLabel = m.partner_provider === 'wellhub'
+      ? `Wellhub${m.wellhub_id ? ` (ID ${m.wellhub_id})` : ' (Gympass)'}`
+      : 'TotalPass (CPF)';
+    const accessStatus = team
+      ? 'active'
+      : m.status === 'blocked' || (enrollment?.ends_on && enrollment.ends_on < today && !data.inGrace)
+        ? 'blocked'
+        : isPartner
+          ? 'active'
+          : !enrollment?.plan_name || !enrollment.ends_on
+            ? 'pending'
+            : m.status;
     const badgeCfg = statusMap[accessStatus] || { text: accessStatus, cls: 'badge badge-pending' };
-    const grace = !team && accessStatus === 'active' && data.inGrace;
+    const grace = !team && !isPartner && accessStatus === 'active' && data.inGrace;
     statusBadge.textContent = grace ? 'Em tolerância' : badgeCfg.text;
     statusBadge.className = grace ? 'badge badge-pending' : badgeCfg.cls;
 
     const planSummaryParts = [
       `ID #${m.id}`,
-      team ? `${accessRoles[role]} · acesso permanente` : m.plan_name ? `Plano: ${m.plan_name}` : 'Sem plano',
+      team
+        ? `${accessRoles[role]} · acesso permanente`
+        : isPartner
+          ? `Convênio: ${partnerLabel}`
+          : m.plan_name
+            ? `Plano: ${m.plan_name}`
+            : 'Sem plano',
       m.last_sync_error ? `Aviso catraca: ${m.last_sync_error}` : null,
     ].filter(Boolean);
     document.getElementById('profPlanSummary').textContent = planSummaryParts.join(' • ');
@@ -3297,7 +3314,11 @@ window.openProfile = async (id) => {
     const kpiCredit = document.getElementById('profKpiCredit');
     if (kpiStatus) {
       const kpiText = grace ? 'Em tolerância' : badgeCfg.text;
-      kpiStatus.textContent = enrollment?.ends_on && !team ? `${kpiText} · até ${fmtDate(enrollment.ends_on)}` : kpiText;
+      kpiStatus.textContent = isPartner && !team
+        ? `${kpiText} · Convênio`
+        : enrollment?.ends_on && !team
+          ? `${kpiText} · até ${fmtDate(enrollment.ends_on)}`
+          : kpiText;
     }
     if (kpiDebt) kpiDebt.textContent = fmtMoney(Number(m.open_debt_cents || 0));
     if (kpiCredit) kpiCredit.textContent = fmtMoney(Number(m.credit_cents || 0));
@@ -3420,6 +3441,7 @@ function renderProfileEnrollmentTable(data) {
   const filter = state.profileEnrollmentFilter || 'active';
   const today = billingDateFormat.format(new Date());
   const planObj = state.plans.find((p) => Number(p.id) === Number(enrollment?.plan_id || m.plan_id));
+  const isPartner = m.partner_provider === 'wellhub' || m.partner_provider === 'totalpass';
   const hasEnrollment = Boolean(enrollment?.plan_name || m.plan_name);
 
   let rowHtml = '';
@@ -3460,6 +3482,39 @@ function renderProfileEnrollmentTable(data) {
             <strong style="color:var(--cyan);margin-right:8px;">${escapeHtml(priceText)}</strong>
             ${statusMark}
             <button type="button" class="btn btn-secondary btn-sm" style="margin-left:6px;padding:4px 8px;" data-edit-plan-enrollment="1" title="Alterar plano ou vigência">🔍</button>
+          </td>
+        </tr>`;
+    }
+  } else if (isPartner) {
+    const isBlocked = m.status === 'blocked';
+    const showRow =
+      filter === 'all' ||
+      (filter === 'active' && !isBlocked) ||
+      (filter === 'cancelled' && isBlocked);
+    if (showRow) {
+      const partnerTitle = m.partner_provider === 'wellhub' ? 'Wellhub (Gympass)' : 'TotalPass (CPF)';
+      const partnerSub = m.partner_provider === 'wellhub'
+        ? (m.wellhub_id ? `Convênio sem cobrança · ID ${m.wellhub_id}` : 'Convênio sem cobrança')
+        : 'Convênio sem cobrança · CPF cadastrado';
+      const startText = m.created_at ? fmtDate(String(m.created_at).slice(0, 10)) : 'Ativa';
+      const statusMark = isBlocked
+        ? '<span class="prof-enr-status is-expired" title="Bloqueado">✕</span>'
+        : '<span class="prof-enr-status is-ok" title="Ativo">✓</span>';
+      rowHtml = `
+        <tr>
+          <td>
+            <strong class="prof-enr-plan-name">${escapeHtml(partnerTitle)}</strong>
+            <div class="muted" style="font-size:12px;">${escapeHtml(partnerSub)}</div>
+          </td>
+          <td>
+            <strong>${escapeHtml(startText)}</strong>
+            <div class="muted" style="font-size:12px;">Sem vencimento (Convênio)</div>
+          </td>
+          <td><strong>Convênio</strong></td>
+          <td style="text-align:right;white-space:nowrap;">
+            <strong style="color:var(--cyan);margin-right:8px;">R$ 0,00</strong>
+            ${statusMark}
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-left:6px;padding:4px 8px;" data-edit-plan-enrollment="1" title="Alterar modalidade ou convênio">🔍</button>
           </td>
         </tr>`;
     }
