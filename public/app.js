@@ -7340,7 +7340,7 @@ function startPaymentAutoPoll({ type, id, stayOnMember = false, isCart = false }
           if (activePixChargeId === Number(id) && res.charge) renderPixChargeBox(res.charge);
           showToast(type === 'charge' ? 'Cobrança confirmada e mensalidade baixada!' : 'Pix confirmado e mensalidade baixada!');
           await Promise.all([loadGatewayCharges(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
-          if (isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
+          if (!res.directPrinted && isAutoPrintReceiptEnabled() && res.payment) openPaymentReceipt(res.payment, null, { autoPrint: true });
           finishPaymentAndReturnHome();
           return;
         }
@@ -7361,7 +7361,7 @@ function startPaymentAutoPoll({ type, id, stayOnMember = false, isCart = false }
           await Promise.all([loadPointOrders(), loadPayments(), loadCurrentCash(), loadMembers(), loadDashboard()]);
           if (keepMember) advanceSplitAfterPointPaid(res);
           const firstPayment = res.payment || res.paymentResult?.payment || res.paymentResults?.[0]?.payment;
-          if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
+          if (!res.directPrinted && isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
           if (!keepMember) finishPaymentAndReturnHome();
           return;
         }
@@ -7938,7 +7938,7 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
         (res.results || []).forEach((r) => { if (r?.member) patchMemberInState(r.member); });
         Promise.allSettled([loadPayments(), loadCurrentCash(), loadDashboard()]).catch(() => {});
         const firstPayment = res.results?.[0]?.payment;
-        if (isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
+        if (!res.directPrinted && isAutoPrintReceiptEnabled() && firstPayment) openPaymentReceipt(firstPayment, null, { autoPrint: true });
       } catch (err) {
         if (err.code === 'CASH_CLOSED') await openCashFromBilling({ autoSubmit: false });
         else showToast(err.message, true);

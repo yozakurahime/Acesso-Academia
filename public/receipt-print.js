@@ -253,14 +253,13 @@
   }
 
   function printReceiptHtml(html) {
-    let frame = document.getElementById('mp4200PrintFrame');
-    if (!frame) {
-      frame = document.createElement('iframe');
-      frame.id = 'mp4200PrintFrame';
-      frame.setAttribute('sandbox', 'allow-modals allow-same-origin');
-      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
-      document.body.appendChild(frame);
-    }
+    const oldFrame = document.getElementById('mp4200PrintFrame');
+    if (oldFrame) oldFrame.remove();
+    const frame = document.createElement('iframe');
+    frame.id = 'mp4200PrintFrame';
+    frame.setAttribute('sandbox', 'allow-modals allow-same-origin');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    document.body.appendChild(frame);
     const doc = frame.contentDocument || frame.contentWindow.document;
     doc.open();
     doc.write(html);
