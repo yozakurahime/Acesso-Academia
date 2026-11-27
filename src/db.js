@@ -942,6 +942,10 @@ export class DatabaseStore {
     this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_logs_edge_event_id ON access_logs(edge_event_id)');
     this.db.run(`
       CREATE INDEX IF NOT EXISTS idx_access_logs_event_occurred ON access_logs(event_code, occurred_at);
+      CREATE INDEX IF NOT EXISTS idx_members_phone ON members(phone);
+      CREATE INDEX IF NOT EXISTS idx_payments_status_paid_at ON payments(status, paid_at);
+      CREATE INDEX IF NOT EXISTS idx_membership_charges_member_payment_due ON membership_charges(member_id, payment_id, due);
+      CREATE INDEX IF NOT EXISTS idx_student_workout_completions_member_date ON student_workout_completions(member_id, completed_on);
       CREATE INDEX IF NOT EXISTS idx_gateway_charges_checkout_ref ON gateway_charges(checkout_ref);
       CREATE INDEX IF NOT EXISTS idx_gateway_charges_membership_charge ON gateway_charges(membership_charge_id);
       CREATE INDEX IF NOT EXISTS idx_mp_subscriptions_external_ref ON mp_subscriptions(external_ref);

@@ -129,6 +129,7 @@ async function start() {
     '/', '/aluno', '/aluno/', '/aluno.html', '/aluno.css', '/aluno.js',
     '/professor', '/professor/', '/professor.html', '/professor.css', '/professor.js',
     '/matricula', '/matricula/', '/matricula.html', '/matricula.js',
+    '/pagar.html',
     '/landing', '/landing/', '/landing.html',
     '/styles.css', '/exercises.js', '/exercise-catalog.js', '/oxigenio.jpg',
     '/manifest.json', '/sw.js', '/favicon.ico',

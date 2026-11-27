@@ -246,6 +246,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   const requireAdmin = authService ? authService.requireRole('admin') : (_req, _res, next) => next();
   const requireReception = authService ? authService.requireRole('admin', 'reception') : (_req, _res, next) => next();
   const requireInstructor = authService ? authService.requireRole('admin', 'instructor') : (_req, _res, next) => next();
+  const requireStaff = authService ? authService.requireRole('admin', 'reception', 'instructor') : (_req, _res, next) => next();
   const clientIpKey = (req) => {
     const remote = req.socket?.remoteAddress;
     if (remote && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)) {
@@ -516,12 +517,17 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       }
     }
 
+    const pixStatusToken = pixCharge?.id && authService?.signPixViewToken
+      ? authService.signPixViewToken(pixCharge.id)
+      : null;
+
     res.status(201).json({
       mode: 'enrolled',
       member: { id: member.id, name: member.name, status: member.status },
       faceSaved,
       faceError,
       pixCharge,
+      pixStatusToken,
       pixError,
       message: pixCharge
         ? 'Cadastro criado! Realize o pagamento via PIX abaixo para liberar a catraca.'
@@ -529,15 +535,58 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     });
   }));
 
-  router.get('/public/pix/:id/status', handle(async (req, res) => {
+  router.get('/public/pix/:id/status', limitPixCheck, handle(async (req, res) => {
     if (!gatewayService || typeof gatewayService.checkChargeStatus !== 'function') {
       return res.status(404).json({ error: 'Gateway PIX indisponivel.' });
     }
-    const charge = await gatewayService.checkChargeStatus(Number(req.params.id));
+    const chargeId = Number(req.params.id);
+    if (!Number.isInteger(chargeId) || chargeId <= 0) {
+      return res.status(400).json({ error: 'Cobrança inválida.' });
+    }
+    if (authService) {
+      const parsed = authService.verifyPixViewToken(req.query?.t);
+      if (!parsed || parsed.chargeId !== chargeId) {
+        return res.status(401).json({ error: 'Token inválido ou expirado.' });
+      }
+    }
+    const result = await gatewayService.checkChargeStatus(chargeId);
+    const charge = result?.charge || {};
+    const paid = Boolean(result?.paid || charge.status === 'paid');
     res.set('Cache-Control', 'no-store').json({
-      id: charge.id,
-      status: charge.status,
+      id: charge.id ?? chargeId,
+      status: paid ? 'paid' : (charge.status || 'pending'),
+      paid,
       paid_at: charge.paid_at || null,
+    });
+  }));
+
+  router.get('/public/pix-charge', limitExpensive, handle(async (req, res) => {
+    const parsed = authService?.verifyPixViewToken(req.query?.t);
+    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado. Peça um novo Pix à recepção.' });
+    const row = store.get(
+      `SELECT gc.id, gc.status, gc.amount_cents, gc.qr_code, gc.qr_base64, gc.paid_at,
+              m.name AS member_name, p.name AS plan_name
+       FROM gateway_charges gc
+       JOIN members m ON m.id = gc.member_id
+       LEFT JOIN plans p ON p.id = gc.plan_id
+       WHERE gc.id = ?`,
+      [parsed.chargeId],
+    );
+    if (!row) return res.status(404).json({ error: 'Cobrança não encontrada.' });
+    res.set('Cache-Control', 'no-store').json({
+      ...row,
+      gym_name: store.getSettings().gym_name || 'Academia Oxigênio',
+    });
+  }));
+
+  router.post('/public/pix-charge/check', limitPixCheck, handle(async (req, res) => {
+    if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
+    const parsed = authService?.verifyPixViewToken(req.body?.token);
+    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado.' });
+    const result = await gatewayService.checkChargeStatus(parsed.chargeId);
+    res.set('Cache-Control', 'no-store').json({
+      paid: Boolean(result?.paid),
+      status: result?.paid ? 'paid' : 'pending',
     });
   }));
 
@@ -808,7 +857,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
       hasPassword: Boolean(settings.auth_password_hash),
       idleTimeoutMinutes: authService.getIdleTimeoutMinutes(),
       sessionTtlHours: Math.round(authService.getSessionTtlMs() / (60 * 60 * 1000)),
-      operators: enabled ? authService.listLoginOperators() : [],
+      operators: enabled && authenticated ? authService.listLoginOperators() : [],
     });
   });
 
@@ -1049,6 +1098,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
 
   router.get(
     '/dashboard',
+    requireReception,
     handle(async (_req, res) => {
       res.json(accessService.getDashboardSummary());
     }),
@@ -1375,8 +1425,23 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   );
 
   // Clientes / Membros
-  router.get('/members', (req, res) => {
+  router.get('/members', requireStaff, (req, res) => {
     const search = req.query.q || '';
+    if (req.authRole === 'instructor') {
+      const list = accessService.listMembers(search, { summary: true });
+      return res.json(
+        list.map((m) => ({
+          id: m.id,
+          name: m.name,
+          access_role: m.access_role,
+          status: m.status,
+          access_status: m.access_status,
+          modality_name: m.modality_name,
+          plan_name: m.plan_name,
+          face_registered: m.face_registered,
+        })),
+      );
+    }
     res.json(accessService.listMembers(search, { summary: req.query.view === 'summary' }));
   });
   router.get(
@@ -1780,13 +1845,14 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   );
 
   // Logs
-  router.get('/logs', (_req, res) => {
+  router.get('/logs', requireReception, (_req, res) => {
     res.json(store.all('SELECT * FROM access_logs ORDER BY id DESC LIMIT 50'));
   });
 
   // Perfil do Aluno
   router.get(
     '/members/:id/profile',
+    requireReception,
     handle(async (req, res) => {
       res.json(gymService.getMemberProfile(req.params.id));
     }),
@@ -2034,7 +2100,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   );
 
   // WhatsApp (QR Code / Baileys com fila anti-ban)
-  router.get('/whatsapp/status', (_req, res) => {
+  router.get('/whatsapp/status', requireReception, (_req, res) => {
     if (!whatsappService) return res.status(503).json({ error: 'Serviço WhatsApp não inicializado.' });
     res.json(whatsappService.getStatus());
   });
@@ -2076,7 +2142,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
-  router.get('/whatsapp/logs', (req, res) => {
+  router.get('/whatsapp/logs', requireReception, (req, res) => {
     if (!whatsappService) return res.json([]);
     res.json(whatsappService.listLogs(req.query.limit || 40, req.query.status || ''));
   });
@@ -2291,36 +2357,6 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
-  router.get('/public/pix-charge', limitExpensive, handle(async (req, res) => {
-    const parsed = authService?.verifyPixViewToken(req.query?.t);
-    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado. Peça um novo Pix à recepção.' });
-    const row = store.get(
-      `SELECT gc.id, gc.status, gc.amount_cents, gc.qr_code, gc.qr_base64, gc.paid_at,
-              m.name AS member_name, p.name AS plan_name
-       FROM gateway_charges gc
-       JOIN members m ON m.id = gc.member_id
-       LEFT JOIN plans p ON p.id = gc.plan_id
-       WHERE gc.id = ?`,
-      [parsed.chargeId],
-    );
-    if (!row) return res.status(404).json({ error: 'Cobrança não encontrada.' });
-    res.set('Cache-Control', 'no-store').json({
-      ...row,
-      gym_name: store.getSettings().gym_name || 'Academia Oxigênio',
-    });
-  }));
-
-  router.post('/public/pix-charge/check', limitExpensive, handle(async (req, res) => {
-    if (!gatewayService) throw new Error('Gateway de pagamento não inicializado.');
-    const parsed = authService?.verifyPixViewToken(req.body?.token);
-    if (!parsed) return res.status(401).json({ error: 'Link inválido ou expirado.' });
-    const result = await gatewayService.checkChargeStatus(parsed.chargeId);
-    res.set('Cache-Control', 'no-store').json({
-      paid: Boolean(result?.paid),
-      status: result?.paid ? 'paid' : 'pending',
-    });
-  }));
-
   // Assinaturas Recorrentes Mercado Pago
   router.get('/gateways/mp/subscriptions', requireReception, (req, res) => {
     if (!gatewayService) return res.json([]);
@@ -2493,6 +2529,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   // Convênios (Wellhub / Gympass e TotalPass)
   router.get(
     '/partners/checkins',
+    requireReception,
     handle(async (req, res) => {
       res.json(
         partnerService.listCheckins({

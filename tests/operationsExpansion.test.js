@@ -69,6 +69,48 @@ test('getCurrentOccupancy, antipassback_minutes and max_capacity enforce entry r
   assert.equal(service.getCurrentOccupancy().count, 1);
 });
 
+test('antipassback nao bloqueia saida (direction=exit) e lotacao com free_side=exit usa janela de 90 min', async () => {
+  const { store, service } = await createTestEnv();
+  const mensal = service.listPlans().find((p) => p.name === 'Mensal');
+
+  const m1 = await service.createMember({ name: 'Carlos Saida', document: nextCpf(), plan_id: mensal.id });
+  const m2 = await service.createMember({ name: 'Diana Antiga', document: nextCpf(), plan_id: mensal.id });
+  await service.recordPayment({ member_id: m1.id, plan_id: mensal.id, amount_cents: mensal.price_cents });
+  await service.recordPayment({ member_id: m2.id, plan_id: mensal.id, amount_cents: mensal.price_cents });
+
+  // Cria catraca e leitor de saida
+  const primary = store.get('SELECT id FROM turnstiles ORDER BY id ASC LIMIT 1');
+  const turnstileId = primary
+    ? primary.id
+    : store.run(
+        "INSERT INTO turnstiles (name, driver, ip, port, default_direction, free_side, active) VALUES ('Principal', 'toletus', '192.168.0.200', 7878, 'entry', 'exit', 1)",
+      ).lastInsertRowid;
+  store.run("UPDATE turnstiles SET free_side = 'exit' WHERE id = ?", [turnstileId]);
+  store.run(
+    "INSERT INTO readers (name, ip, turnstile_id, direction, active) VALUES ('Leitor Saida', '192.168.0.130', ?, 'exit', 1)",
+    [turnstileId],
+  );
+  store.updateSettings({ antipassback_minutes: '10', turnstile_free_side: 'exit' });
+
+  // Entrada de m1 -> permitida
+  const entryRes = await service.handleFaceIdentified(m1.controlid_user_id);
+  assert.equal(entryRes.allowed, true);
+
+  // Saida imediata pelo leitor de saida NAO deve ser bloqueada pelo antipassback
+  const exitRes = await service.handleFaceIdentified(m1.controlid_user_id, { readerIp: '192.168.0.130' });
+  assert.equal(exitRes.allowed, true);
+
+  // Insere log antigo (> 90 min) para m2 -> nao deve contar na lotacao com free_side='exit'
+  store.run(
+    `INSERT INTO access_logs (controlid_user_id, member_id, member_name, event_code, event_label, occurred_at)
+     VALUES (?, ?, ?, 7, 'Acesso liberado', datetime('now', 'localtime', '-120 minutes'))`,
+    [m2.controlid_user_id, m2.id, m2.name],
+  );
+  const occ = service.getCurrentOccupancy();
+  assert.equal(occ.count, 1);
+  assert.deepEqual(occ.members.map((m) => m.id), [m1.id]);
+});
+
 test('plan allowed_start_time/allowed_end_time and weekly_limit are enforced in getAccessDenial', async () => {
   const { store, service } = await createTestEnv();
 

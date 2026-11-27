@@ -203,6 +203,30 @@ export class AccessService {
   }
 
   getCurrentOccupancy() {
+    const settings = this.store.getSettings() || {};
+    const devices = new DeviceService(this.store, this.controlId, this.toletus);
+    const turnstile = typeof devices.getPrimaryTurnstile === 'function' ? devices.getPrimaryTurnstile() : null;
+    const freeSide = settings.turnstile_free_side && settings.turnstile_free_side !== 'none'
+      ? settings.turnstile_free_side
+      : (turnstile?.free_side || settings.turnstile_free_side || 'none');
+    const maxCap = Number(settings.max_capacity || 0) || 0;
+
+    if (freeSide === 'exit') {
+      const rows = this.store.all(
+        `SELECT DISTINCT l.member_id, m.name
+         FROM access_logs l
+         JOIN members m ON m.id = l.member_id
+         WHERE l.event_code = 7 AND l.member_id IS NOT NULL
+           AND l.occurred_at >= datetime('now', 'localtime', '-90 minutes')
+         ORDER BY m.name ASC`,
+      );
+      return {
+        count: rows.length,
+        maxCapacity: maxCap > 0 ? maxCap : null,
+        members: rows.map((r) => ({ id: r.member_id, name: r.name })),
+      };
+    }
+
     const today = fitnessToday();
     const rows = this.store.all(
       `SELECT l.member_id, m.name, COUNT(*) AS passes
@@ -214,7 +238,6 @@ export class AccessService {
        ORDER BY m.name ASC`,
       [`${today} 00:00:00`, `${today} 23:59:59`],
     );
-    const maxCap = Number(this.store.getSettings()?.max_capacity || 0) || 0;
     return {
       count: rows.length,
       maxCapacity: maxCap > 0 ? maxCap : null,
@@ -2487,7 +2510,7 @@ export class AccessService {
     const direction = reader?.direction || turnstile?.default_direction || settings.turnstile_direction || 'entry';
 
     const antipassbackMinutes = Math.max(0, Math.floor(Number(settings.antipassback_minutes || 0)));
-    if (antipassbackMinutes > 0 && currentMember.access_role === 'student') {
+    if (antipassbackMinutes > 0 && direction !== 'exit' && currentMember.access_role === 'student') {
       const recentPass = this.store.get(
         `SELECT id FROM access_logs
          WHERE member_id = ? AND event_code = 7 AND occurred_at >= datetime('now', 'localtime', ?)

@@ -466,9 +466,10 @@
     }
   });
 
-  function startPixPolling(chargeId) {
+  function startPixPolling(chargeId, pixToken = null) {
     if (pixPollTimer) clearInterval(pixPollTimer);
     let attempts = 0;
+    const qs = pixToken ? `?t=${encodeURIComponent(pixToken)}` : '';
     pixPollTimer = setInterval(async () => {
       attempts += 1;
       if (attempts > 120) {
@@ -477,10 +478,10 @@
         return;
       }
       try {
-        const res = await fetch(`/api/public/pix/${chargeId}/status`);
+        const res = await fetch(`/api/public/pix/${chargeId}/status${qs}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.status === 'paid') {
+        if (data.paid || data.status === 'paid') {
           clearInterval(pixPollTimer);
           pixPollTimer = null;
           pixStatusText.textContent = '✅ Pagamento confirmado! Seu acesso na catraca já está liberado.';
@@ -629,7 +630,7 @@
             pixQrImg.hidden = false;
           }
           pixCopy.textContent = data.pixCharge.qr_code || '';
-          if (data.pixCharge.id) startPixPolling(data.pixCharge.id);
+          if (data.pixCharge.id) startPixPolling(data.pixCharge.id, data.pixStatusToken || null);
         } else {
           pixArea.hidden = true;
           const text = encodeURIComponent(`Olá! Acabei de fazer meu cadastro de ${payload.modality_name} no site (${payload.name}) e gostaria de concluir o pagamento.`);

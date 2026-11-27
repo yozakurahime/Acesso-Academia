@@ -40,7 +40,7 @@ const ROLE_RESTRICTED_ADMIN_SELECTORS = [
   '#btnCheckExpired',
 ];
 
-const INSTRUCTOR_HIDDEN_TABS = ['billing', 'cash', 'products', 'reports'];
+const INSTRUCTOR_HIDDEN_TABS = ['balcao', 'billing', 'cash', 'products', 'reports'];
 
 function isTabAllowedForRole(tabName, role = state.authRole) {
   const effectiveRole = role || 'admin';
@@ -50,7 +50,14 @@ function isTabAllowedForRole(tabName, role = state.authRole) {
   return true;
 }
 
-function applyRoleUi(role) {
+function getDefaultTabForRole(role = state.authRole) {
+  for (const candidate of ['balcao', 'members', 'workouts']) {
+    if (isTabAllowedForRole(candidate, role)) return candidate;
+  }
+  return 'members';
+}
+
+function applyRoleUi(role, { syncTab = true } = {}) {
   const effectiveRole = role || 'admin';
   state.authRole = effectiveRole;
   const isAdmin = effectiveRole === 'admin';
@@ -67,8 +74,8 @@ function applyRoleUi(role) {
   document.getElementById('btnQuickDockRegister')?.classList.toggle('hidden', !canMembers);
   document.getElementById('btnQuickDockPay')?.classList.toggle('hidden', !canBilling);
   document.getElementById('quickSideDock')?.classList.toggle('hidden', !canMembers && !canBilling);
-  if (!isTabAllowedForRole(state.activeTab, effectiveRole)) {
-    switchTab('balcao');
+  if (syncTab && !isTabAllowedForRole(state.activeTab, effectiveRole)) {
+    switchTab(getDefaultTabForRole(effectiveRole));
   }
 }
 
@@ -735,9 +742,10 @@ function loadTab(tabName) {
 const VOLATILE_TABS = new Set(['balcao', 'billing', 'cash', 'logs', 'reports', 'settings']);
 
 function switchTab(tabName, { updateHash = true } = {}) {
+  const fallbackTab = getDefaultTabForRole();
   const normalizedTab = tabName === 'dashboard' ? 'balcao' : tabName;
-  let target = Object.hasOwn(tabLoaders, normalizedTab) ? normalizedTab : 'balcao';
-  if (!isTabAllowedForRole(target)) target = 'balcao';
+  let target = Object.hasOwn(tabLoaders, normalizedTab) ? normalizedTab : fallbackTab;
+  if (!isTabAllowedForRole(target)) target = fallbackTab;
   if (state.activeTab !== target) stopPaymentAutoPoll();
   state.activeTab = target;
   if (VOLATILE_TABS.has(target)) tabRequests.delete(target);
@@ -776,7 +784,11 @@ function switchTab(tabName, { updateHash = true } = {}) {
 
 function getTabFromHash() {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
-  return Object.hasOwn(tabLoaders, raw) ? raw : 'balcao';
+  const normalized = raw === 'dashboard' ? 'balcao' : raw;
+  if (Object.hasOwn(tabLoaders, normalized) && isTabAllowedForRole(normalized)) {
+    return normalized;
+  }
+  return getDefaultTabForRole();
 }
 
 window.addEventListener('hashchange', () => {
@@ -1276,6 +1288,7 @@ document.getElementById('sidebarLiveWidget')?.addEventListener('click', () => {
 });
 
 async function loadDashboard() {
+  if (!isTabAllowedForRole('balcao')) return null;
   const [data, occupancy, chatsData, onlineCash] = await Promise.all([
     api('/api/dashboard'),
     api('/api/occupancy').catch(() => null),
@@ -9488,7 +9501,7 @@ document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
       document.getElementById('loginPass').value = '';
       updateLogoutButton(true, resolvedUser);
       hideLoginOverlay();
-      applyRoleUi(role);
+      applyRoleUi(role, { syncTab: isSwitch || wasLock });
       startIdleLockMonitor(idleMins || 0);
       if (isSwitch) {
         showToast(`Operador alterado para ${resolvedUser}.`);
@@ -9594,7 +9607,7 @@ async function openInitialMemberFromUrl() {
         showLoginOverlay({ mode: 'login' });
         return;
       }
-      applyRoleUi(auth.role || 'admin');
+      applyRoleUi(auth.role || 'admin', { syncTab: false });
       if (auth.enabled) {
         startIdleLockMonitor(auth.idleTimeoutMinutes || 0);
       }
