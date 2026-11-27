@@ -28,6 +28,13 @@
     },
     {
       "matches": [
+        "https://booking.totalpass.com/br*"
+      ],
+      "js": ["totalpass-redirect.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
         "https://sistema.academiaoxigenio.com/*",
         "http://localhost/*"
       ],
