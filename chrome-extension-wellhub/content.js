@@ -133,14 +133,27 @@
       return /^(confirmar|aceitar|validar|sim|ok|confirm|accept)$/.test(txt);
     });
 
+    const tpValidateBtns = [...document.querySelectorAll('button[data-testid="buttonValidate"]')].filter(
+      (btn) => !btn.disabled && btn.getAttribute('aria-disabled') !== 'true',
+    );
+
     const confirmBtns = dialogBtns.length
       ? dialogBtns
-      : [...document.querySelectorAll('button[data-testid="buttonValidate"], button')].filter((btn) => {
-          if (btn.disabled || btn.getAttribute('aria-disabled') === 'true' || btn.closest('#oxigenio-wellhub-badge')) return false;
-          if (btn.dataset.testid === 'buttonValidate') return true;
-          const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-          return /^(confirmar|aceitar|validar|validar check-?in|confirm|accept)$/.test(txt);
-        });
+      : tpValidateBtns.length
+        ? tpValidateBtns
+        : [...document.querySelectorAll('button')].filter((btn) => {
+            if (
+              btn.disabled ||
+              btn.getAttribute('aria-disabled') === 'true' ||
+              btn.getAttribute('role') === 'tab' ||
+              btn.closest('[role="tablist"]') ||
+              btn.closest('#oxigenio-wellhub-badge')
+            ) {
+              return false;
+            }
+            const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            return /^(confirmar|aceitar|validar|confirm|accept)$/.test(txt);
+          });
 
     if (confirmBtns.length > 0) {
       const btn = confirmBtns[0];
