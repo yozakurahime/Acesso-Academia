@@ -7765,11 +7765,12 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
   const pointCartBtn = e.target.closest('#btnCartSendPoint');
   if (pointCartBtn) {
     if (!state.billingCart?.length) return;
+    const cartMethod = document.getElementById('cartPointMethod')?.value || 'credit';
     await withLoading(pointCartBtn, async () => {
       try {
         const order = await api('/api/gateways/mp/point-orders', {
           method: 'POST',
-          body: JSON.stringify({ items: state.billingCart, payment_method: 'credit' }),
+          body: JSON.stringify({ items: state.billingCart, payment_method: cartMethod }),
         });
         const label = `Carrinho (${state.billingCart.length} alunos): ${state.billingCart.map((i) => i.member_name).join(', ')}`;
         openPointWaitModal(order, label, { isCart: true });

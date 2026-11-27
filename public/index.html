@@ -751,12 +751,24 @@
           </div>
           <div id="billingCartItems" class="billing-cart-items"></div>
           <div class="billing-cart-actions">
-            <button type="button" id="btnCartSendPoint" class="btn btn-primary">Enviar carrinho para a maquininha</button>
+            <div class="inline-actions" style="flex-wrap:wrap;gap:8px;align-items:center;">
+              <select id="cartPointMethod" aria-label="Forma de pagamento na maquininha" style="min-width:140px;">
+                <option value="pix">Pix (Maquininha)</option>
+                <option value="credit" selected>Crédito (Maquininha)</option>
+                <option value="debit">Débito (Maquininha)</option>
+              </select>
+              <button type="button" id="btnCartSendPoint" class="btn btn-primary">Enviar carrinho para a maquininha</button>
+            </div>
             <div class="billing-cart-quick-methods">
-              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="pix">💠 Confirmar Pix</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="credit">💳 Confirmar Crédito</button>
-              <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="debit">🏧 Confirmar Débito</button>
               <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="cash">💵 Confirmar Dinheiro</button>
+              <details class="pix-qr-details" style="margin:0;">
+                <summary style="font-size:12px;">Recebimento Manual (fora da maquininha)</summary>
+                <div class="inline-actions" style="margin-top:6px;gap:6px;flex-wrap:wrap;">
+                  <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="pix">💠 Confirmar Pix</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="credit">💳 Confirmar Crédito</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-cart-pay-method="debit">🏧 Confirmar Débito</button>
+                </div>
+              </details>
             </div>
           </div>
         </div>
