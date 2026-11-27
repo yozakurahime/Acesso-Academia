@@ -123,26 +123,33 @@
   }
 
   function tryAutoConfirmPending() {
-    if (!cfg.autoConfirm) return;
+    if (!cfg.autoConfirm) return false;
     const now = Date.now();
-    if (now - lastConfirmClickAt < 1800) return;
+    if (now - lastConfirmClickAt < 1800) return false;
 
-    const confirmBtns = [...document.querySelectorAll('button[data-testid="buttonValidate"], button')].filter((btn) => {
-      if (btn.disabled || btn.getAttribute('aria-disabled') === 'true' || btn.closest('#oxigenio-wellhub-badge')) return false;
-      if (btn.dataset.testid === 'buttonValidate') return true;
+    const dialogBtns = [...document.querySelectorAll('[role="dialog"] button')].filter((btn) => {
+      if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') return false;
       const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      return /^(confirmar|aceitar|validar|validar check-?in|confirm|accept)$/.test(txt);
+      return /^(confirmar|aceitar|validar|sim|ok|confirm|accept)$/.test(txt);
     });
+
+    const confirmBtns = dialogBtns.length
+      ? dialogBtns
+      : [...document.querySelectorAll('button[data-testid="buttonValidate"], button')].filter((btn) => {
+          if (btn.disabled || btn.getAttribute('aria-disabled') === 'true' || btn.closest('#oxigenio-wellhub-badge')) return false;
+          if (btn.dataset.testid === 'buttonValidate') return true;
+          const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return /^(confirmar|aceitar|validar|validar check-?in|confirm|accept)$/.test(txt);
+        });
 
     if (confirmBtns.length > 0) {
       const btn = confirmBtns[0];
       lastConfirmClickAt = now;
-      btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      if (typeof btn.click === 'function') btn.click();
+      btn.click();
       updateBadge(`Oxigênio Bot (${providerLabel}): Validando check-in...`);
+      return true;
     }
+    return false;
   }
 
   function extractTotalpassCheckins() {
@@ -263,7 +270,7 @@
     }
 
     clickRefreshButtons();
-    tryAutoConfirmPending();
+    const validatingNow = tryAutoConfirmPending();
 
     const confirmed = extractConfirmedCheckins();
     const pendingToSend = confirmed.filter((item) => {
@@ -271,7 +278,9 @@
       return k && !sentNamesToday.has(k);
     });
     if (!pendingToSend.length) {
-      updateBadge(`Oxigênio Bot (${providerLabel}): Vigiando (${confirmed.length} na tela)`);
+      if (!validatingNow) {
+        updateBadge(`Oxigênio Bot (${providerLabel}): Vigiando (${confirmed.length} na tela)`);
+      }
       return;
     }
 
