@@ -127,15 +127,20 @@
     const now = Date.now();
     if (now - lastConfirmClickAt < 1800) return;
 
-    const confirmBtns = [...document.querySelectorAll('button')].filter((btn) => {
-      if (btn.disabled || btn.closest('#oxigenio-wellhub-badge')) return false;
+    const confirmBtns = [...document.querySelectorAll('button[data-testid="buttonValidate"], button')].filter((btn) => {
+      if (btn.disabled || btn.getAttribute('aria-disabled') === 'true' || btn.closest('#oxigenio-wellhub-badge')) return false;
+      if (btn.dataset.testid === 'buttonValidate') return true;
       const txt = (btn.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
       return /^(confirmar|aceitar|validar|validar check-?in|confirm|accept)$/.test(txt);
     });
 
     if (confirmBtns.length > 0) {
+      const btn = confirmBtns[0];
       lastConfirmClickAt = now;
-      confirmBtns[0].click();
+      btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      if (typeof btn.click === 'function') btn.click();
       updateBadge(`Oxigênio Bot (${providerLabel}): Validando check-in...`);
     }
   }
@@ -177,36 +182,28 @@
       });
     }
 
-    // 2) Cards/itens dentro da aba "Validar Check-in" (div[data-testid="validateTab"]) ou tabpanels ativos
-    const validateContainer = document.querySelector('[data-testid="validateTab"], #tabpanel-0, #tabpanel-1, [role="tabpanel"]');
-    if (validateContainer && !validateContainer.querySelector('[data-testid="emptyWrapper"]')) {
-      const ignored = /^(atenção:|saiba mais|validar|confirmar|validar check-?in|validado|check-?in regular)$/i;
-      const blocks = [...validateContainer.querySelectorAll('tr, [role="row"], li, [role="listitem"], div')].filter((el) => {
-        if (el.closest('#oxigenio-wellhub-badge') || el.closest('[data-testid="checkInsValidateWarnWrapper"]')) return false;
-        const text = (el.textContent || '').trim();
-        if (!text || text.length > 320) return false;
-        return (/\b\d{11}\b/.test(text) || /\d{3}\.\d{3}\.\d{3}-\d{2}/.test(text) || /\d{1,2}[h:]\d{2}/.test(text))
-          && el.querySelectorAll('div, td, p, span').length <= 24;
-      });
-      for (const block of blocks) {
-        const text = (block.innerText || '').trim();
-        if (!isTodayText(text)) continue;
-        const cpfMatch = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
-        const lines = text
-          .split('\n')
-          .map((l) => l.trim())
-          .filter((l) => l && !ignored.test(l) && !/^(atenção:|todos os check-ins)/i.test(l));
-        const candidateName = lines.find((l) => l.length >= 4 && !/\d/.test(l)) || '';
-        const cpfDigits = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : '';
-        const key = (cpfDigits || candidateName).toLowerCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        items.push({
-          name: candidateName,
-          cpf: cpfDigits,
-          time_text: text.match(/\d{1,2}[h:]\d{2}/)?.[0] || '',
-        });
+    // 2) Cards/itens dentro da aba "Validar Check-in" (div[data-testid="validateTab"])
+    const nameEls = [...document.querySelectorAll('[data-testid="validateTab"] [data-testid="nameItem"], #tabpanel-0 [data-testid="nameItem"]')];
+    for (const nameEl of nameEls) {
+      const card = nameEl.closest('.css-fwvxvs, [role="row"], li, div[style]') || nameEl.parentElement?.parentElement?.parentElement;
+      const candidateName = (nameEl.textContent || '').trim();
+      if (!candidateName) continue;
+      const cardText = (card?.innerText || '').trim();
+      if (!isTodayText(cardText)) continue;
+      // Se ainda tem o botao Validar habilitado e autoConfirm esta ativo, deixa validar primeiro
+      if (cfg.autoConfirm && card?.querySelector('button[data-testid="buttonValidate"]:not(:disabled)')) {
+        continue;
       }
+      const cpfMatch = cardText.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
+      const cpfDigits = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : '';
+      const key = (cpfDigits || candidateName).toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        name: candidateName,
+        cpf: cpfDigits,
+        time_text: cardText.match(/\d{1,2}[h:]\d{2}/)?.[0] || '',
+      });
     }
 
     return items;
