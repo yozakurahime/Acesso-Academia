@@ -93,9 +93,9 @@
     lastRefreshAt = now;
 
     if (isTotalpass) {
-      // O painel TotalPass nao possui botao manual de atualizar; recarrega suavemente no intervalo configurado (min 15s)
+      // O painel TotalPass nao possui botao manual de atualizar; recarrega suavemente no intervalo configurado (min 15s), mesmo em segundo plano
       const tpIntervalMs = Math.max(15000, intervalMs);
-      if (performance.now() > tpIntervalMs && !document.hidden) {
+      if (performance.now() > tpIntervalMs) {
         location.reload();
       }
       return;
@@ -304,6 +304,9 @@
       });
       observer.observe(document.body, { childList: true, subtree: true });
     }
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg?.type === 'OXIGENIO_TICK_SCAN') scanAndSync();
+    });
     setInterval(scanAndSync, 3000);
     setTimeout(scanAndSync, 2000);
   }
