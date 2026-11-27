@@ -15,6 +15,7 @@ for (const batch of [regularFiles, allFiles.includes(perfFile) ? [perfFile] : []
   if (!batch.length) continue;
   const result = spawnSync(process.execPath, ['--test', ...batch], {
     stdio: 'inherit',
+    env: { ...process.env, NODE_ENV: 'test', OXIGENIO_DISABLE_PRINTER: '1' },
   });
   if ((result.status ?? 1) !== 0) {
     process.exit(result.status ?? 1);

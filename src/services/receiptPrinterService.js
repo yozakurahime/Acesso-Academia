@@ -226,6 +226,9 @@ if (-not [RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)) {
 `;
 
 export function printReceiptToWindowsPrinter(receipt, { printerName = process.env.EDGE_PRINTER_NAME || 'MP-4200 TH' } = {}) {
+  if (process.env.NODE_ENV === 'test' || process.env.OXIGENIO_DISABLE_PRINTER === '1') {
+    return Promise.resolve({ ok: false, skipped: true, reason: 'test_env' });
+  }
   if (process.platform !== 'win32') {
     return Promise.resolve({ ok: false, skipped: true, reason: 'not_win32' });
   }
