@@ -9,7 +9,7 @@
     "runner": "node src/edge-runner.js",
     "dev": "node --watch src/server.js",
     "restart": "reiniciar.bat",
-    "test": "node --test --test-concurrency=1 tests",
+    "test": "node scripts/run-tests.mjs",
     "smoke:ui": "powershell -ExecutionPolicy Bypass -File scripts/smoke-ui.ps1"
   },
   "dependencies": {
