@@ -1676,6 +1676,15 @@ function openClassEditModal(cls = null) {
   showModal('classEditModal', 'btnCloseClassEditModal');
 }
 
+function statusBadge(status) {
+  const map = {
+    active: '<span class="badge badge-active">Ativo</span>',
+    blocked: '<span class="badge badge-blocked">Bloqueado</span>',
+    pending: '<span class="badge badge-pending">Pendente</span>',
+  };
+  return map[status] || `<span class="badge badge-pending">${escapeHtml(status || 'Pendente')}</span>`;
+}
+
 async function openClassMembersModal(classId) {
   activeClassMembersId = Number(classId);
   const tbody = document.getElementById('classMembersBody');
