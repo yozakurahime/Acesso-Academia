@@ -3311,13 +3311,7 @@ window.openProfile = async (id) => {
     if (document.getElementById('profGuardianPhone')) document.getElementById('profGuardianPhone').value = formatPhoneMask(m.guardian_phone || '');
     if (document.getElementById('profGuardianRel')) document.getElementById('profGuardianRel').value = m.guardian_relationship || '';
     syncProfileGuardianVisibility(Boolean(m.guardian_name || m.guardian_cpf));
-    const profPartner = document.getElementById('profPartnerProvider');
-    const profWellhubWrap = document.getElementById('profWellhubWrap');
-    const profWellhubId = document.getElementById('profWellhubId');
     const btnPartnerCheckin = document.getElementById('btnPartnerCheckinNow');
-    if (profPartner) profPartner.value = m.partner_provider || '';
-    if (profWellhubId) profWellhubId.value = m.wellhub_id || '';
-    if (profWellhubWrap) profWellhubWrap.classList.toggle('hidden', m.partner_provider !== 'wellhub');
     if (btnPartnerCheckin) btnPartnerCheckin.classList.toggle('hidden', !m.partner_provider);
     const profPlanEl = document.getElementById('profPlan');
     if (profPlanEl) profPlanEl.value = enrollment?.plan_id || '';
@@ -3660,15 +3654,16 @@ document.getElementById('profEnrollmentsTableBody')?.addEventListener('click', (
 function renderNewEnrModalityPills() {
   const container = document.getElementById('newEnrModalityPills');
   if (!container) return;
-  const activeMod = state.newEnrModality || '';
+  const activePartner = state.newEnrPartner || '';
+  const activeMod = activePartner ? '' : (state.newEnrModality || '');
   const allBtn = `
-    <button type="button" class="modality-pill ${!activeMod ? 'active' : ''}" data-new-enr-mod="">
+    <button type="button" class="modality-pill ${!activePartner && !activeMod ? 'active' : ''}" data-new-enr-mod="">
       <span class="modality-pill-icon" aria-hidden="true">⭐</span>
       <span>Todas</span>
     </button>`;
   const modBtns = state.modalities
     .map((m) => {
-      const isActive = activeMod.toLowerCase() === m.name.toLowerCase();
+      const isActive = !activePartner && activeMod.toLowerCase() === m.name.toLowerCase();
       return `
         <button type="button" class="modality-pill ${isActive ? 'active' : ''}" data-new-enr-mod="${escapeHtml(m.name)}">
           <span class="modality-pill-icon" aria-hidden="true">${modalityIcon(m.name)}</span>
@@ -3676,7 +3671,35 @@ function renderNewEnrModalityPills() {
         </button>`;
     })
     .join('');
-  container.innerHTML = allBtn + modBtns;
+  const partnerBtns = [
+    { key: 'wellhub', label: 'Wellhub (Gympass)' },
+    { key: 'totalpass', label: 'TotalPass (CPF)' },
+  ]
+    .map(
+      (p) => `
+        <button type="button" class="modality-pill ${activePartner === p.key ? 'active' : ''}" data-new-enr-partner="${p.key}">
+          <span class="modality-pill-icon" aria-hidden="true">${modalityIcon(p.label)}</span>
+          <span>${escapeHtml(p.label)}</span>
+        </button>`,
+    )
+    .join('');
+  container.innerHTML = allBtn + modBtns + partnerBtns;
+}
+
+function syncNewEnrPartnerUI() {
+  const partner = state.newEnrPartner || '';
+  const box = document.getElementById('newEnrPartnerBox');
+  const cardsWrap = document.getElementById('newEnrPlanCardsWrap');
+  const wellhubWrap = document.getElementById('newEnrWellhubWrap');
+  const noteEl = document.getElementById('newEnrPartnerNote');
+  if (box) box.classList.toggle('hidden', !partner);
+  if (cardsWrap) cardsWrap.classList.toggle('hidden', Boolean(partner));
+  if (wellhubWrap) wellhubWrap.classList.toggle('hidden', partner !== 'wellhub');
+  if (noteEl) {
+    noteEl.textContent = partner === 'totalpass'
+      ? 'TotalPass ativo pelo CPF do aluno, sem gerar cobrança de mensalidade.'
+      : 'Wellhub (Gympass) ativo sem gerar cobrança de mensalidade pela academia.';
+  }
 }
 
 function renderNewEnrPlanCards() {
@@ -3831,9 +3854,14 @@ async function openNewEnrollmentModal() {
   const hasActive = Boolean((enrollment?.plan_id || m?.plan_id) && (enrollment?.ends_on || m?.valid_until || '') >= today);
 
   document.getElementById('newEnrollmentActiveWarn')?.classList.toggle('hidden', !hasActive);
-  document.getElementById('btnRemoveNewEnrollment')?.classList.toggle('hidden', !(enrollment?.plan_id || m?.plan_id));
+  document.getElementById('btnRemoveNewEnrollment')?.classList.toggle('hidden', !(enrollment?.plan_id || m?.plan_id || m?.partner_provider));
   document.getElementById('newEnrollmentStep1')?.classList.remove('hidden');
   document.getElementById('newEnrollmentStep2')?.classList.add('hidden');
+
+  state.newEnrPartner = m?.partner_provider || '';
+  const wellhubInput = document.getElementById('newEnrWellhubId');
+  if (wellhubInput) wellhubInput.value = m?.wellhub_id || '';
+  syncNewEnrPartnerUI();
 
   const startInput = document.getElementById('newEnrStartDate');
   if (startInput) {
@@ -3856,6 +3884,12 @@ async function submitNewEnrollment(planId, startsOn, endsOn = null) {
   const id = state.selectedProfileId;
   if (!id) return;
   try {
+    if (state.selectedProfileMember?.partner_provider) {
+      await api(`/api/members/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ partner_provider: null, wellhub_id: null }),
+      });
+    }
     const res = await api(`/api/members/${id}/plan-enrollment`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -3870,7 +3904,7 @@ async function submitNewEnrollment(planId, startsOn, endsOn = null) {
       sync.synced
         ? (planId
             ? (charge ? 'Matrícula salva e cobrança gerada.' : 'Matrícula salva com sucesso.')
-            : 'Plano removido — aluno bloqueado para entrar.')
+            : 'Plano/convênio removido — aluno bloqueado para entrar.')
         : `Alteração salva. Aviso da catraca: ${sync.error}`,
       !sync.synced,
     );
@@ -3886,11 +3920,57 @@ async function submitNewEnrollment(planId, startsOn, endsOn = null) {
 }
 
 document.getElementById('newEnrModalityPills')?.addEventListener('click', (e) => {
+  const partnerBtn = e.target.closest('[data-new-enr-partner]');
+  if (partnerBtn) {
+    const chosen = partnerBtn.dataset.newEnrPartner || '';
+    state.newEnrPartner = state.newEnrPartner === chosen ? '' : chosen;
+    if (state.newEnrPartner) state.newEnrModality = '';
+    renderNewEnrModalityPills();
+    syncNewEnrPartnerUI();
+    renderNewEnrPlanCards();
+    return;
+  }
   const btn = e.target.closest('[data-new-enr-mod]');
   if (!btn) return;
+  state.newEnrPartner = '';
   state.newEnrModality = btn.dataset.newEnrMod || '';
   renderNewEnrModalityPills();
+  syncNewEnrPartnerUI();
   renderNewEnrPlanCards();
+});
+
+document.getElementById('btnConfirmPartnerEnrollment')?.addEventListener('click', async (e) => {
+  const id = state.selectedProfileId;
+  const partner = state.newEnrPartner || '';
+  if (!id || !partner) return;
+  const wellhubId = document.getElementById('newEnrWellhubId')?.value.trim() || null;
+  await withLoading(e.currentTarget, async () => {
+    try {
+      const updated = await api(`/api/members/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          partner_provider: partner,
+          wellhub_id: partner === 'wellhub' ? wellhubId : null,
+        }),
+      });
+      if (state.selectedProfileMember?.plan_id || state.selectedProfileEnrollment?.plan_id) {
+        await api(`/api/members/${id}/plan-enrollment`, {
+          method: 'PUT',
+          body: JSON.stringify({ plan_id: null }),
+        });
+      }
+      closeNewEnrollmentModal();
+      showToast(`Convênio ${partner === 'wellhub' ? 'Wellhub' : 'TotalPass'} ativado sem cobrança!`);
+      if (updated?.member) patchMemberInState(updated.member);
+      else loadMembers().catch(() => {});
+      if (state.selectedProfileId === id && !document.getElementById('profileModal').classList.contains('hidden')) {
+        await openProfile(id);
+      }
+      loadDashboard().catch(() => {});
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  });
 });
 
 document.getElementById('newEnrPlanCards')?.addEventListener('click', (e) => {
@@ -4083,8 +4163,7 @@ document.getElementById('btnConvertVisitor')?.addEventListener('click', async (e
 document.getElementById('profileForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = state.selectedProfileId;
-  const partnerVal = document.getElementById('profPartnerProvider')?.value || '';
-  const wellhubVal = document.getElementById('profWellhubId')?.value.trim() || '';
+  const partnerVal = state.selectedProfileMember?.partner_provider || '';
   const hadValidCpfBefore = isValidCpf(cpfDigits(state.selectedProfileMember?.document));
   const allowEmptyCpf = partnerVal === 'wellhub' || !hadValidCpfBefore;
   const cpfCheck = await validateCpfField('profDoc', 'profDocFeedback', {
@@ -4111,8 +4190,6 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
           sex: document.getElementById('profSex').value || null,
           emergency_contact: document.getElementById('profEmergency').value,
           address: document.getElementById('profAddress').value,
-          partner_provider: document.getElementById('profPartnerProvider')?.value || null,
-          wellhub_id: document.getElementById('profWellhubId')?.value.trim() || null,
           notes: document.getElementById('profNotes').value,
           guardian_name: document.getElementById('profGuardianName')?.value.trim() || null,
           guardian_cpf: document.getElementById('profGuardianCpf')?.value.trim() || null,
@@ -8184,11 +8261,6 @@ document.getElementById('partnersForm')?.addEventListener('submit', async (e) =>
       showToast(err.message, true);
     }
   });
-});
-
-document.getElementById('profPartnerProvider')?.addEventListener('change', (e) => {
-  const isWellhub = e.target.value === 'wellhub';
-  document.getElementById('profWellhubWrap')?.classList.toggle('hidden', !isWellhub);
 });
 
 document.getElementById('btnPartnerCheckinNow')?.addEventListener('click', async (e) => {

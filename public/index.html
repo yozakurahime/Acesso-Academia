@@ -2347,12 +2347,6 @@
           </select></label>
           <label>Contato Emergência <input type="text" id="profEmergency" /></label>
           <label>Endereço <input type="text" id="profAddress" /></label>
-          <label>Convênio <select id="profPartnerProvider">
-            <option value="">Nenhum (Plano da academia)</option>
-            <option value="wellhub">Wellhub (Gympass)</option>
-            <option value="totalpass">TotalPass (usa CPF)</option>
-          </select></label>
-          <label id="profWellhubWrap" class="hidden">ID Wellhub (opcional) <input type="text" id="profWellhubId" placeholder="Ex: 1234567890 (opcional)" /></label>
           <label>Observações <input type="text" id="profNotes" /></label>
           <div id="profGuardianBox" class="hidden" style="grid-column:1 / -1;border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
             <p style="margin:0 0 8px;font-weight:600;font-size:13px;">Responsável Legal (menor de 14 anos)</p>
@@ -2372,7 +2366,6 @@
           </div>
           <div class="inline-actions" style="align-self:end;">
             <button type="submit" class="btn btn-primary">Salvar Dados</button>
-            <button type="button" id="btnPartnerCheckinNow" class="btn btn-secondary hidden">Registrar check-in hoje</button>
           </div>
         </form>
 
@@ -2435,7 +2428,10 @@
               <button type="button" class="prof-enr-filter" data-enr-filter="finished"><span class="prof-enr-dot"></span>Finalizadas</button>
               <button type="button" class="prof-enr-filter" data-enr-filter="all"><span class="prof-enr-dot"></span>Todas</button>
             </div>
-            <button type="button" id="btnTogglePlanEnrollmentForm" class="btn btn-primary btn-sm">+ Matrícula</button>
+            <div class="inline-actions">
+              <button type="button" id="btnPartnerCheckinNow" class="btn btn-secondary btn-sm hidden">Registrar check-in hoje</button>
+              <button type="button" id="btnTogglePlanEnrollmentForm" class="btn btn-primary btn-sm">+ Matrícula</button>
+            </div>
           </div>
 
           <div class="table-wrap prof-enr-table-wrap">
@@ -2875,8 +2871,20 @@
         <div class="new-enr-section-label">Filtre por modalidade</div>
         <div id="newEnrModalityPills" class="modality-pills" style="margin-bottom:16px;"></div>
 
-        <div class="new-enr-section-label">Selecione um plano</div>
-        <div id="newEnrPlanCards" class="plan-cards-grid"></div>
+        <div id="newEnrPartnerBox" class="panel hidden" style="margin-bottom:14px;">
+          <p class="muted" id="newEnrPartnerNote" style="margin:0 0 10px;font-size:13px;">
+            Modalidade de convênio ativa sem cobrança de mensalidade pela academia.
+          </p>
+          <div id="newEnrWellhubWrap" class="form-grid hidden" style="margin-bottom:12px;">
+            <label>ID Wellhub (opcional) <input type="text" id="newEnrWellhubId" placeholder="Ex: 1234567890 (opcional)" /></label>
+          </div>
+          <button type="button" id="btnConfirmPartnerEnrollment" class="btn btn-primary">✓ Ativar Convênio (Sem cobrança)</button>
+        </div>
+
+        <div id="newEnrPlanCardsWrap">
+          <div class="new-enr-section-label">Selecione um plano</div>
+          <div id="newEnrPlanCards" class="plan-cards-grid"></div>
+        </div>
 
         <div class="inline-actions" style="margin-top:16px;justify-content:space-between;">
           <button type="button" id="btnRemoveNewEnrollment" class="btn btn-danger btn-sm hidden">Remover plano atual</button>
