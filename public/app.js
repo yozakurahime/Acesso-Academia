@@ -7866,6 +7866,23 @@ document.getElementById('btnAddBillingToCart')?.addEventListener('click', () => 
   }
 });
 
+function selectCartPointMethod(code = 'credit') {
+  const nextCode = code || 'credit';
+  const hiddenInput = document.getElementById('cartPointMethod');
+  if (hiddenInput) hiddenInput.value = nextCode;
+  document.querySelectorAll('#cartPointMethodCards .billing-method-card[data-cart-point-method]').forEach((card) => {
+    const active = card.dataset.cartPointMethod === nextCode;
+    card.classList.toggle('active', active);
+    card.setAttribute('aria-checked', active ? 'true' : 'false');
+  });
+}
+
+document.getElementById('cartPointMethodCards')?.addEventListener('click', (e) => {
+  const card = e.target.closest('.billing-method-card[data-cart-point-method]');
+  if (!card) return;
+  selectCartPointMethod(card.dataset.cartPointMethod);
+});
+
 document.getElementById('billingCartPanel')?.addEventListener('input', (e) => {
   const input = e.target.closest('[data-cart-amount]');
   if (!input) return;
@@ -7922,14 +7939,7 @@ document.getElementById('billingCartPanel')?.addEventListener('click', async (e)
   }
   const cartMethodCard = e.target.closest('.billing-method-card[data-cart-point-method]');
   if (cartMethodCard) {
-    const code = cartMethodCard.dataset.cartPointMethod || 'credit';
-    const hiddenInput = document.getElementById('cartPointMethod');
-    if (hiddenInput) hiddenInput.value = code;
-    document.querySelectorAll('#cartPointMethodCards .billing-method-card[data-cart-point-method]').forEach((card) => {
-      const active = card.dataset.cartPointMethod === code;
-      card.classList.toggle('active', active);
-      card.setAttribute('aria-checked', active ? 'true' : 'false');
-    });
+    selectCartPointMethod(cartMethodCard.dataset.cartPointMethod);
     return;
   }
   const pointCartBtn = e.target.closest('#btnCartSendPoint');
