@@ -141,24 +141,32 @@
   }
 
   function extractTotalpassCheckins() {
-    const todayBr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+    const nowDate = new Date();
+    const todayBr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(nowDate);
+    const todayShort = `${todayBr.slice(0, 6)}${todayBr.slice(8)}`;
+    const isTodayText = (txt) => {
+      const low = String(txt || '').toLowerCase();
+      if (!low) return true;
+      if (low.includes(todayBr) || low.includes(todayShort) || low.includes('hoje')) return true;
+      return !/\d{2}\/\d{2}\/\d{2,4}/.test(low);
+    };
     const items = [];
     const seen = new Set();
 
     // 1) Linhas estruturadas da tabela MUI (Historico de visitas / Validar Check-in)
-    const tableRows = [...document.querySelectorAll('tbody[data-testid="tableBody"] tr.MuiTableRow-root')];
+    const tableRows = [...document.querySelectorAll('tbody[data-testid="tableBody"] tr.MuiTableRow-root, table tbody tr')];
     for (const row of tableRows) {
-      const dateText = (row.querySelector('[data-testid="dateTimeBodyCell"]')?.innerText || '').trim();
-      if (dateText && !dateText.includes(todayBr)) continue;
+      const dateText = (row.querySelector('[data-testid="dateTimeBodyCell"]')?.innerText || row.innerText || '').trim();
+      if (!isTodayText(dateText)) continue;
 
-      const statusText = (row.querySelector('[data-testid="statusChip"] .MuiChip-label')?.textContent || '').trim().toLowerCase();
+      const statusText = (row.querySelector('[data-testid="statusChip"] .MuiChip-label')?.textContent || row.innerText || '').trim().toLowerCase();
       if (statusText && statusText.includes('expirado')) continue;
 
-      const nameCell = row.querySelector('[data-testid="nameDocumentBodyCell"]');
+      const nameCell = row.querySelector('[data-testid="nameDocumentBodyCell"]') || row.querySelector('td');
       if (!nameCell) continue;
       const ps = [...nameCell.querySelectorAll('p')];
-      const name = (ps[0]?.textContent || '').trim();
-      const cpfRaw = (ps[1]?.textContent || '').replace(/\D/g, '');
+      const name = (ps[0]?.textContent || nameCell.innerText.split('\n')[0] || '').trim();
+      const cpfRaw = (ps[1]?.textContent || row.innerText.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/)?.[0] || '').replace(/\D/g, '');
       const key = (cpfRaw || name).toLowerCase();
       if (!key || seen.has(key)) continue;
       seen.add(key);
@@ -169,19 +177,20 @@
       });
     }
 
-    // 2) Cards/itens dentro da aba "Validar Check-in" (div[data-testid="validateTab"])
-    const validateContainer = document.querySelector('[data-testid="validateTab"], #tabpanel-0');
+    // 2) Cards/itens dentro da aba "Validar Check-in" (div[data-testid="validateTab"]) ou tabpanels ativos
+    const validateContainer = document.querySelector('[data-testid="validateTab"], #tabpanel-0, #tabpanel-1, [role="tabpanel"]');
     if (validateContainer && !validateContainer.querySelector('[data-testid="emptyWrapper"]')) {
-      const ignored = /^(atenção:|saiba mais|validar|confirmar|validar check-?in)$/i;
+      const ignored = /^(atenção:|saiba mais|validar|confirmar|validar check-?in|validado|check-?in regular)$/i;
       const blocks = [...validateContainer.querySelectorAll('tr, [role="row"], li, [role="listitem"], div')].filter((el) => {
         if (el.closest('#oxigenio-wellhub-badge') || el.closest('[data-testid="checkInsValidateWarnWrapper"]')) return false;
         const text = (el.textContent || '').trim();
-        if (!text || text.length > 260) return false;
+        if (!text || text.length > 320) return false;
         return (/\b\d{11}\b/.test(text) || /\d{3}\.\d{3}\.\d{3}-\d{2}/.test(text) || /\d{1,2}[h:]\d{2}/.test(text))
-          && el.querySelectorAll('div, td, p, span').length <= 12;
+          && el.querySelectorAll('div, td, p, span').length <= 24;
       });
       for (const block of blocks) {
         const text = (block.innerText || '').trim();
+        if (!isTodayText(text)) continue;
         const cpfMatch = text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/);
         const lines = text
           .split('\n')
