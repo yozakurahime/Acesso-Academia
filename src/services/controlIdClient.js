@@ -342,12 +342,29 @@ export class ControlIdClient {
     }
 
     const timestamp = Math.floor(Date.now() / 1000);
-    return this.requestRaw('/user_set_image.fcgi', {
+    const res = await this.requestRaw('/user_set_image.fcgi', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: imageBuffer,
       query: `user_id=${encodeURIComponent(deviceUserId)}&timestamp=${timestamp}&match=1`,
     });
+
+    if (res && (res.success === false || (Array.isArray(res.errors) && res.errors.length > 0))) {
+      const firstErr = Array.isArray(res.errors) ? res.errors[0] : null;
+      const matchUserId = Number(firstErr?.info?.match_user_id ?? res.match_user_id ?? 0) || null;
+      const msg = String(firstErr?.message || res.error || 'O leitor facial recusou a foto.');
+      const isDuplicate = Boolean(matchUserId) || firstErr?.code === 4 || /already|duplicate|match|existe/i.test(msg);
+      const err = new Error(
+        isDuplicate && matchUserId
+          ? `Rosto já cadastrado no leitor (ID ${matchUserId}).`
+          : msg,
+      );
+      err.statusCode = isDuplicate ? 409 : 400;
+      if (matchUserId) err.matchUserId = matchUserId;
+      throw err;
+    }
+
+    return res;
   }
 
   /**

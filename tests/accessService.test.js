@@ -1099,3 +1099,37 @@ test('recordPayment com autoPrint envia comando print_receipt para o Edge conect
   assert.ok(escpos.includes(Buffer.from('TOTAL PAGO')));
   assert.ok(escpos.subarray(-4).equals(Buffer.from([0x1d, 0x56, 0x42, 0x00])));
 });
+
+test('registerFace bloqueia e identifica dono quando Control iD retorna rosto duplicado (match=1)', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.listPlans()[0];
+  const owner = await service.createMember({ name: 'Dono Original', document: nextCpf(), plan_id: plan.id });
+  const dup = await service.createMember({ name: 'Cadastro Duplicado', document: nextCpf(), plan_id: plan.id });
+
+  const prevMock = process.env.CONTROLID_MOCK;
+  process.env.CONTROLID_MOCK = 'false';
+  store.updateSettings({ controlid_mock_mode: 'false', controlid_base_url: 'http://127.0.0.1:9999' });
+  service.controlId.ensureSession = async () => 'sess';
+  service.controlId.getDeviceUser = async () => null;
+  service.controlId.syncUser = async (m) => ({ controlIdUserId: m.controlid_user_id || m.id });
+  service.controlId.requestRaw = async (endpoint) => {
+    if (endpoint === '/user_set_image.fcgi') {
+      return {
+        success: false,
+        errors: [{ code: 4, message: 'Face already registered', info: { match_user_id: owner.id } }],
+      };
+    }
+    return {};
+  };
+
+  try {
+    await assert.rejects(
+      () => service.registerFace(dup.id, Buffer.from('fake-jpeg').toString('base64')),
+      (err) => err.statusCode === 409 && /Dono Original/.test(err.message) && new RegExp(`#${owner.id}`).test(err.message),
+    );
+    assert.equal(service.getMember(dup.id).face_registered, 0);
+  } finally {
+    if (prevMock == null) delete process.env.CONTROLID_MOCK;
+    else process.env.CONTROLID_MOCK = prevMock;
+  }
+});

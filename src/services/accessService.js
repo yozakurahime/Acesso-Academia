@@ -1059,7 +1059,23 @@ export class AccessService {
 
     const deviceUserId = member.controlid_user_id || member.id;
     this._invalidateDeviceUserCache(deviceUserId);
-    await this.controlId.uploadUserFace(deviceUserId, buffer);
+    try {
+      await this.controlId.uploadUserFace(deviceUserId, buffer);
+    } catch (err) {
+      if (err?.matchUserId && Number(err.matchUserId) !== Number(deviceUserId)) {
+        const owner = this.store.get(
+          'SELECT id, name FROM members WHERE controlid_user_id = ? OR id = ? ORDER BY id LIMIT 1',
+          [Number(err.matchUserId), Number(err.matchUserId)],
+        );
+        const dupErr = new Error(
+          `Esse rosto já está cadastrado no leitor (ID ${err.matchUserId}${owner ? ` — ${owner.name}, cadastro #${owner.id}` : ''}).`,
+        );
+        dupErr.statusCode = 409;
+        dupErr.matchUserId = Number(err.matchUserId);
+        throw dupErr;
+      }
+      throw err;
+    }
 
     for (const { client } of this._getSecondaryControlIdClients()) {
       try {
