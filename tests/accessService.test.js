@@ -1133,3 +1133,36 @@ test('registerFace bloqueia e identifica dono quando Control iD retorna rosto du
     else process.env.CONTROLID_MOCK = prevMock;
   }
 });
+
+test('getTurnstileKioskDisplay expõe streak, monthlyVisits, returning e nearGoal sem ocultar streak na 2ª passagem do dia', async () => {
+  const { store, service } = await createTestEnv();
+  const plan = service.listPlans()[0];
+  const member = await service.createMember({ name: 'Marina Dias', document: nextCpf(), plan_id: plan.id });
+  await service.recordPayment({ member_id: member.id, plan_id: plan.id, amount_cents: plan.price_cents, method: 'pix' });
+  store.run('UPDATE members SET controlid_user_id = ? WHERE id = ?', [5050, member.id]);
+
+  // Visita antiga de 20 dias atrás -> configura retorno (14+ dias fora)
+  const oldDate = new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10);
+  store.run(
+    "INSERT INTO access_logs (controlid_user_id, member_id, member_name, event_code, event_label, occurred_at) VALUES (?, ?, ?, 7, 'Acesso autorizado (FaceID)', ?)",
+    [5050, member.id, member.name, `${oldDate} 09:00:00`],
+  );
+
+  // 1ª passagem hoje
+  const first = await service.handleFaceIdentified(5050);
+  assert.equal(first.allowed, true);
+  const kiosk1 = service.getTurnstileKioskDisplay();
+  assert.equal(kiosk1.streak, 1);
+  assert.ok(kiosk1.monthlyVisits >= 1);
+  assert.equal(kiosk1.returning, true);
+  assert.equal(kiosk1.nearGoal, false);
+  assert.deepEqual(service.getTurnstileDisplay().progress, { visits: 1, goal: 3 });
+
+  // 2ª passagem no mesmo dia: progress no display mínimo fica undefined, mas streak continua no kiosk extra
+  const second = await service.handleFaceIdentified(5050);
+  assert.equal(second.allowed, true);
+  assert.equal(service.getTurnstileDisplay().progress, undefined);
+  const kiosk2 = service.getTurnstileKioskDisplay();
+  assert.equal(kiosk2.streak, 1);
+  assert.ok(kiosk2.monthlyVisits >= 1);
+});

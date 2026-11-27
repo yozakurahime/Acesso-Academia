@@ -12,12 +12,15 @@ const progressWrap = document.getElementById('displayProgressWrap');
 const progress = document.getElementById('displayProgress');
 const goalDots = document.getElementById('displayGoalDots');
 const planAlert = document.getElementById('displayPlanAlert');
+const displayBadges = document.getElementById('displayBadges');
 const workoutCard = document.getElementById('displayWorkoutCard');
 const workoutTitle = document.getElementById('displayWorkoutTitle');
 const workoutMeta = document.getElementById('displayWorkoutMeta');
 const idleWidgets = display?.querySelector('.turnstile-idle-widgets');
 const ranking = document.getElementById('displayRanking');
+const rankingTitle = document.getElementById('displayRankingTitle');
 const rankingList = document.getElementById('displayRankingList');
+const confettiLayer = document.getElementById('confettiLayer');
 const challengeBox = document.getElementById('displayChallenge');
 const challengeCount = document.getElementById('displayChallengeCount');
 const challengeFill = document.getElementById('displayChallengeFill');
@@ -160,6 +163,40 @@ function getTimeGreeting() {
   return 'Boa noite';
 }
 
+let confettiTimer = null;
+const CONFETTI_COLORS = ['#ff6a00', '#ff9d42', '#34d399', '#38bdf8', '#fde68a', '#fb7185'];
+
+function launchConfetti() {
+  if (!confettiLayer) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  clearTimeout(confettiTimer);
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 32; i += 1) {
+    const piece = document.createElement('span');
+    piece.className = 'turnstile-confetti-piece';
+    const sx = 12 + Math.random() * 76;
+    const sy = 10 + Math.random() * 20;
+    const tx = Math.round((Math.random() - 0.5) * 260);
+    const ty = Math.round(220 + Math.random() * 320);
+    const rot = Math.round((Math.random() - 0.5) * 720);
+    const dur = Math.round(1100 + Math.random() * 600);
+    const delay = Math.round(Math.random() * 180);
+    piece.style.setProperty('--sx', `${sx}%`);
+    piece.style.setProperty('--sy', `${sy}%`);
+    piece.style.setProperty('--tx', `${tx}px`);
+    piece.style.setProperty('--ty', `${ty}px`);
+    piece.style.setProperty('--rot', `${rot}deg`);
+    piece.style.setProperty('--dur', `${dur}ms`);
+    piece.style.setProperty('--delay', `${delay}ms`);
+    piece.style.setProperty('--color', CONFETTI_COLORS[i % CONFETTI_COLORS.length]);
+    frag.appendChild(piece);
+  }
+  confettiLayer.replaceChildren(frag);
+  confettiTimer = setTimeout(() => {
+    confettiLayer.replaceChildren();
+  }, 1950);
+}
+
 const screens = {
   idle: ['◎', 'Controle de acesso', 'Olhe para o leitor facial', 'Aguarde a confirmação para passar.'],
   allowed: ['✓', 'Acesso liberado', 'Pode passar', 'Bom treino!'],
@@ -272,6 +309,8 @@ function formatTurnstileMessages(state, event, defaults) {
     studentMsg = 'Treino concluído! Até a próxima!';
   } else if (event?.progress?.visits && event?.progress?.goal && event.progress.visits >= event.progress.goal) {
     studentMsg = 'Meta da semana batida! Bom treino!';
+  } else if (event?.returning) {
+    studentMsg = 'Que bom te ver de volta! Bom treino!';
   } else if (event?.progress?.visits === 1) {
     studentMsg = 'Primeiro treino da semana! Bora pra cima!';
   }
@@ -352,9 +391,7 @@ function render(state, event) {
   statusLabel.textContent = copy.status;
   renderTurnstileTitle(title, copy.title, state, event);
   message.textContent = copy.message;
-  if (isNewEvent || state !== 'idle') {
-    triggerCardEnterAnimation();
-  }
+  triggerCardEnterAnimation();
   if (isNewEvent) {
     playFeedbackSound(state);
   }
@@ -387,6 +424,37 @@ function render(state, event) {
     } else {
       planAlert.textContent = '';
       planAlert.hidden = true;
+    }
+  }
+
+  // Badges motivacionais (streak >= 2 e retorno após 14+ dias)
+  if (displayBadges) {
+    displayBadges.replaceChildren();
+    if (state === 'allowed') {
+      const streakVal = Number(event?.streak || 0);
+      if (streakVal >= 2) {
+        const streakPill = document.createElement('span');
+        streakPill.className = 'turnstile-streak-pill';
+        streakPill.textContent = `🔥 ${streakVal} dias seguidos`;
+        displayBadges.appendChild(streakPill);
+      }
+      if (event?.returning) {
+        const retPill = document.createElement('span');
+        retPill.className = 'turnstile-returning-pill';
+        retPill.textContent = '👋 Que bom te ver de volta!';
+        displayBadges.appendChild(retPill);
+      }
+    }
+    displayBadges.hidden = displayBadges.childElementCount === 0;
+  }
+
+  // Confetes leves somente em marcos reais
+  if (isNewEvent && state === 'allowed') {
+    const streakVal = Number(event?.streak || 0);
+    const goalMet = Boolean(event?.progress?.visits && event?.progress?.goal && event.progress.visits >= event.progress.goal);
+    const streakMilestone = streakVal > 0 && (streakVal % 7 === 0 || streakVal % 15 === 0 || streakVal % 30 === 0);
+    if (event?.isBirthday || goalMet || streakMilestone) {
+      launchConfetti();
     }
   }
 
@@ -497,10 +565,21 @@ const DAILY_QUOTES = [
 ];
 
 let quoteIndex = Math.floor(Date.now() / 86_400_000) % DAILY_QUOTES.length;
+let quoteFadeTimer = null;
 function renderDailyQuote(advance = false) {
   if (!quoteTextEl) return;
-  if (advance) quoteIndex = (quoteIndex + 1) % DAILY_QUOTES.length;
-  quoteTextEl.textContent = `“${DAILY_QUOTES[quoteIndex]}”`;
+  clearTimeout(quoteFadeTimer);
+  if (!advance) {
+    quoteTextEl.classList.remove('is-fading');
+    quoteTextEl.textContent = `“${DAILY_QUOTES[quoteIndex]}”`;
+    return;
+  }
+  quoteIndex = (quoteIndex + 1) % DAILY_QUOTES.length;
+  quoteTextEl.classList.add('is-fading');
+  quoteFadeTimer = setTimeout(() => {
+    quoteTextEl.textContent = `“${DAILY_QUOTES[quoteIndex]}”`;
+    quoteTextEl.classList.remove('is-fading');
+  }, 280);
 }
 
 function weatherIconForCode(code) {
@@ -548,6 +627,72 @@ async function fetchWithTimeout(url, ms = 3000, externalSignal = null) {
   }
 }
 
+let rankingState = { streakRanking: [], ranking: [] };
+let rankingMode = 'streak';
+let rankingSwitchTimer = null;
+
+function buildRankingEntries(rawList) {
+  return rawList.slice(0, 5).map((entry, index) => {
+    const item = document.createElement('li');
+    if (index === 0) item.classList.add('is-top1');
+    else if (index === 1) item.classList.add('is-top2');
+    else if (index === 2) item.classList.add('is-top3');
+    const position = document.createElement('span');
+    const name = document.createElement('strong');
+    const count = document.createElement('span');
+    position.className = 'turnstile-rank-position';
+    position.textContent = index === 0 ? '🥇 1º' : index === 1 ? '🥈 2º' : index === 2 ? '🥉 3º' : `${index + 1}º`;
+    name.textContent = entry.alias;
+    count.className = 'turnstile-rank-streak';
+    if (typeof entry.streak === 'number') {
+      count.textContent = `${entry.streak} ${entry.streak === 1 ? 'dia seguido' : 'dias seguidos'}`;
+    } else {
+      const visits = Number(entry.visits || 0);
+      count.textContent = `${visits} ${visits === 1 ? 'visita' : 'visitas'}`;
+    }
+    item.append(position, name, count);
+    return item;
+  });
+}
+
+function renderRankingView(animate = false) {
+  const hasStreak = rankingState.streakRanking.length > 0;
+  const hasWeek = rankingState.ranking.length > 0;
+  if (!hasStreak && !hasWeek) {
+    rankingList.replaceChildren();
+    updateIdleWidgetsVisibility();
+    return;
+  }
+  const useStreak = (rankingMode === 'streak' && hasStreak) || !hasWeek;
+  const targetTitle = useStreak ? '🔥 Top 5 · Dias seguidos' : '🏆 Top 5 · Semana';
+  const targetList = useStreak ? rankingState.streakRanking : rankingState.ranking;
+
+  const applyUpdate = () => {
+    if (rankingTitle) rankingTitle.textContent = targetTitle;
+    rankingList.replaceChildren(...buildRankingEntries(targetList));
+    updateIdleWidgetsVisibility();
+  };
+
+  if (animate && ranking) {
+    clearTimeout(rankingSwitchTimer);
+    ranking.classList.add('is-switching');
+    rankingSwitchTimer = setTimeout(() => {
+      applyUpdate();
+      ranking.classList.remove('is-switching');
+    }, 220);
+  } else {
+    applyUpdate();
+  }
+}
+
+function rotateRankingMode() {
+  if (document.hidden || display?.dataset.state !== 'idle') return;
+  if (rankingState.streakRanking.length > 0 && rankingState.ranking.length > 0) {
+    rankingMode = rankingMode === 'streak' ? 'week' : 'streak';
+    renderRankingView(true);
+  }
+}
+
 async function pollRanking() {
   if (document.hidden) return;
   try {
@@ -572,30 +717,13 @@ async function pollRanking() {
       challengeCount.textContent = `${challengeData.completed} / ${challengeData.target} treinos (${pct}%)`;
       challengeFill.style.width = `${pct}%`;
     }
-    const rawList = (data?.streakRanking && data.streakRanking.length) ? data.streakRanking : (data?.ranking || []);
-    const entries = rawList.slice(0, 5).map((entry, index) => {
-      const item = document.createElement('li');
-      if (index === 0) item.classList.add('is-top1');
-      else if (index === 1) item.classList.add('is-top2');
-      else if (index === 2) item.classList.add('is-top3');
-      const position = document.createElement('span');
-      const name = document.createElement('strong');
-      const count = document.createElement('span');
-      position.className = 'turnstile-rank-position';
-      position.textContent = index === 0 ? '🥇 1º' : index === 1 ? '🥈 2º' : index === 2 ? '🥉 3º' : `${index + 1}º`;
-      name.textContent = entry.alias;
-      count.className = 'turnstile-rank-streak';
-      if (typeof entry.streak === 'number') {
-        count.textContent = `${entry.streak} ${entry.streak === 1 ? 'dia seguido' : 'dias seguidos'}`;
-      } else {
-        const visits = Number(entry.visits || 0);
-        count.textContent = `${visits} ${visits === 1 ? 'visita' : 'visitas'}`;
-      }
-      item.append(position, name, count);
-      return item;
-    });
-    rankingList.replaceChildren(...entries);
+    rankingState = {
+      streakRanking: Array.isArray(data?.streakRanking) ? data.streakRanking : [],
+      ranking: Array.isArray(data?.ranking) ? data.ranking : [],
+    };
+    renderRankingView(false);
   } catch {
+    rankingState = { streakRanking: [], ranking: [] };
     rankingList.replaceChildren();
   } finally {
     updateIdleWidgetsVisibility();
@@ -609,10 +737,13 @@ async function pollRanking() {
 function updateClock() {
   const now = new Date();
   if (clockEl) {
-    clockEl.textContent = now.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const colon = document.createElement('span');
+    colon.className = 'turnstile-clock-colon';
+    colon.setAttribute('aria-hidden', 'true');
+    colon.textContent = ':';
+    clockEl.replaceChildren(document.createTextNode(hh), colon, document.createTextNode(mm));
   }
   if (dateEl) {
     dateEl.textContent = now.toLocaleDateString('pt-BR', {
@@ -724,3 +855,4 @@ setInterval(refreshWeather, 30 * 60 * 1000);
 requestKioskWakeLock();
 pollDisplay();
 pollRanking();
+setInterval(rotateRankingMode, 16000);

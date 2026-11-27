@@ -175,6 +175,13 @@ test('Rotas /api/student funcionam com sessao propria mesmo com login admin ativ
     assert.equal(repeated.created, false);
     assert.equal(repeated.fitness.challenge.completed, 1);
 
+    const richRankingRes = await fetch(`${baseUrl}/api/turnstile/ranking?rich=1`);
+    assert.equal(richRankingRes.status, 200);
+    const richRanking = await richRankingRes.json();
+    assert.deepEqual(richRanking.challenge, { completed: 1, target: 500 });
+    assert.ok(Array.isArray(richRanking.ranking));
+    assert.ok(Array.isArray(richRanking.streakRanking));
+
     // Atualiza foto de perfil pelo portal
     const photoRes = await fetch(`${baseUrl}/api/student/me/photo`, {
       method: 'PUT',

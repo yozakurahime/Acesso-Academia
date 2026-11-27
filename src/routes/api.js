@@ -6,7 +6,7 @@ import { isIP } from 'node:net';
 import QRCode from 'qrcode';
 import { StudentPortalService } from '../services/studentPortalService.js';
 import { PartnerService } from '../services/partnerService.js';
-import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, receptionFitnessSummary, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
+import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, monthlyFitnessChallenge, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
 import { listExerciseCatalog, saveCatalogExercise } from '../services/exerciseCatalog.js';
 import { MAX_EXERCISE_VIDEO } from '../services/exerciseVideos.js';
 import { DeviceService } from '../services/deviceService.js';
@@ -614,16 +614,17 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
   });
   router.get('/turnstile/ranking', handle(async (req, res) => {
     if (!isLocalDeviceRequest(req)) return res.sendStatus(403);
-    const ranking = fitnessRanking(store, undefined, 3);
-    if (req.query?.rich === '1') {
+    const isRich = req.query?.rich === '1';
+    const ranking = fitnessRanking(store, undefined, isRich ? 5 : 3);
+    if (isRich) {
       const occ = typeof accessService?.getCurrentOccupancy === 'function' ? accessService.getCurrentOccupancy() : null;
-      const summary = receptionFitnessSummary(store);
+      const challenge = monthlyFitnessChallenge(store);
       const streakRanking = consecutiveDaysRanking(store, undefined, 5);
       return res.set('Cache-Control', 'no-store').json({
         ranking,
         streakRanking,
         occupancy: occ ? { count: occ.count, maxCapacity: occ.maxCapacity } : null,
-        challenge: summary?.challenge || null,
+        challenge: challenge || null,
         gymName: store.getSettings()?.gym_name || 'Academia Oxigênio',
       });
     }

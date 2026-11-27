@@ -5,7 +5,7 @@ import { PartnerService, normalizePartnerInput } from './partnerService.js';
 import { buildPaymentReceiptPayload, printReceiptToWindowsPrinter } from './receiptPrinterService.js';
 import { DeviceService } from './deviceService.js';
 import { matchesDeviceIdentity } from './controlIdClient.js';
-import { fitnessToday, weeklyGoal, weeklyVisits, receptionFitnessSummary } from './fitnessProgress.js';
+import { fitnessToday, memberStreak, monthlyVisits, receptionFitnessSummary, weeklyGoal, weeklyVisits } from './fitnessProgress.js';
 import { calculatePaymentFee, resolvePaymentChannel } from './feeUtils.js';
 
 function withoutPortalCredentials(member) {
@@ -159,6 +159,10 @@ export class AccessService {
       extra.daysRemaining = 4;
       extra.validUntil = addDays(today, 4);
       extra.inGrace = false;
+      extra.streak = 5;
+      extra.monthlyVisits = 12;
+      extra.returning = false;
+      extra.nearGoal = false;
       extra.workoutSummary = { title: 'Treino A — Superiores', goal: 'Hipertrofia', exerciseCount: 6 };
       return extra;
     }
@@ -197,6 +201,24 @@ export class AccessService {
       if (wk) {
         const exCount = this.store.get('SELECT COUNT(*) AS c FROM workout_exercises WHERE workout_id = ?', [wk.id])?.c || 0;
         extra.workoutSummary = { title: wk.title, goal: wk.goal || null, exerciseCount: exCount };
+      }
+      if (outcome === 'allowed' && (member.access_role || 'student') === 'student' && !member.is_visitor) {
+        const streak = memberStreak(this.store, member.id, today);
+        const monthVisits = monthlyVisits(this.store, member.id, today);
+        const weekVisits = weeklyVisits(this.store, member.id, today);
+        const goal = weeklyGoal(this.store, member.id);
+        const lastVisitBeforeToday = this.store.get(
+          `SELECT substr(MAX(occurred_at), 1, 10) AS last_day
+           FROM access_logs
+           WHERE member_id = ? AND event_code = 7 AND event_label = 'Acesso autorizado (FaceID)'
+             AND occurred_at < ?`,
+          [member.id, today],
+        )?.last_day;
+        const returningCutoff = addDays(today, -14);
+        extra.streak = streak;
+        extra.monthlyVisits = monthVisits.length;
+        extra.returning = Boolean(lastVisitBeforeToday && lastVisitBeforeToday <= returningCutoff);
+        extra.nearGoal = Boolean(goal > 1 && weekVisits.length === goal - 1);
       }
     }
     return extra;
