@@ -66,11 +66,20 @@
     text.textContent = `⚠️ ATENÇÃO: Aba fechada (${missingNames.join(' e ')})! Abra para liberar a catraca automático:`;
     box.appendChild(text);
 
+    function safeSendMessage(payload, cb) {
+      if (!chrome?.runtime?.id) return;
+      try {
+        chrome.runtime.sendMessage(payload, cb);
+      } catch {
+        // Extensão recarregada sem recarregar a aba.
+      }
+    }
+
     if (!status.wellhubOpen) {
       const btnW = document.createElement('button');
       btnW.type = 'button';
       btnW.textContent = 'Abrir Wellhub';
-      btnW.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'OPEN_PARTNER_TAB', provider: 'wellhub' }));
+      btnW.addEventListener('click', () => safeSendMessage({ type: 'OPEN_PARTNER_TAB', provider: 'wellhub' }));
       box.appendChild(btnW);
     }
 
@@ -78,7 +87,7 @@
       const btnT = document.createElement('button');
       btnT.type = 'button';
       btnT.textContent = 'Abrir TotalPass';
-      btnT.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'OPEN_PARTNER_TAB', provider: 'totalpass' }));
+      btnT.addEventListener('click', () => safeSendMessage({ type: 'OPEN_PARTNER_TAB', provider: 'totalpass' }));
       box.appendChild(btnT);
     }
 
