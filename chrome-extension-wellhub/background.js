@@ -46,7 +46,41 @@ async function postSync(baseUrl, items, cfg, allowRelogin = true, provider = 'we
   return resp.json();
 }
 
+const WELLHUB_URL = 'https://partners.gympass.com/validation/academia-oxigenio--3';
+const TOTALPASS_URL = 'https://booking.totalpass.com/br/check-ins';
+
+async function checkRequiredTabs() {
+  const cfg = await getConfig();
+  const tabs = await chrome.tabs.query({});
+  const wellhubOpen = tabs.some((t) => /partners\.(gympass|wellhub)\.com\/(new\/)?validation\//i.test(t.url || ''));
+  const totalpassOpen = tabs.some((t) => /booking\.totalpass\.com\/br\/check-ins/i.test(t.url || ''));
+  const missing = cfg.enabled && (!wellhubOpen || !totalpassOpen);
+  await chrome.action.setBadgeText({ text: missing ? '!' : '' }).catch(() => {});
+  if (missing) {
+    await chrome.action.setBadgeBackgroundColor({ color: '#dc2626' }).catch(() => {});
+  }
+  return { enabled: cfg.enabled, wellhubOpen, totalpassOpen };
+}
+
+chrome.tabs?.onCreated?.addListener(() => checkRequiredTabs().catch(() => {}));
+chrome.tabs?.onRemoved?.addListener(() => checkRequiredTabs().catch(() => {}));
+chrome.tabs?.onUpdated?.addListener((_tabId, info) => {
+  if (info.url || info.status === 'complete') checkRequiredTabs().catch(() => {});
+});
+checkRequiredTabs().catch(() => {});
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'CHECK_PARTNER_TABS') {
+    checkRequiredTabs()
+      .then((res) => sendResponse(res))
+      .catch(() => sendResponse({ enabled: true, wellhubOpen: true, totalpassOpen: true }));
+    return true;
+  }
+  if (message?.type === 'OPEN_PARTNER_TAB') {
+    const url = message.provider === 'totalpass' ? TOTALPASS_URL : WELLHUB_URL;
+    chrome.tabs.create({ url }).then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message?.type !== 'WELLHUB_SYNC_CHECKINS') return false;
 
   (async () => {
