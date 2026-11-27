@@ -623,8 +623,25 @@ export class AccessService {
       (SELECT COALESCE(SUM(total_cents), 0) FROM sales WHERE sold_at >= ? AND sold_at < ?) AS salesMonthCents`,
     [today, today, today, tomorrow, today, tomorrow, today, tomorrow, monthStart, nextMonthStart]);
 
+    const partnerRow = this.store.get(
+      `SELECT
+        SUM(CASE WHEN partner_provider = 'wellhub' THEN 1 ELSE 0 END) AS wellhubActive,
+        SUM(CASE WHEN partner_provider = 'totalpass' THEN 1 ELSE 0 END) AS totalpassActive
+       FROM members
+       WHERE access_role = 'student' AND status <> 'blocked' AND partner_provider IN ('wellhub', 'totalpass')`,
+    );
+    const wellhubActiveMembers = Number(partnerRow?.wellhubActive || 0);
+    const totalpassActiveMembers = Number(partnerRow?.totalpassActive || 0);
+    const activePartnerMembers = wellhubActiveMembers + totalpassActiveMembers;
+    const activeMembersTotal = counts.get('active') ?? 0;
+    const activeDirectMembers = Math.max(0, activeMembersTotal - activePartnerMembers);
+
     return {
-      activeMembers: counts.get('active') ?? 0,
+      activeMembers: activeMembersTotal,
+      activeDirectMembers,
+      activePartnerMembers,
+      wellhubActiveMembers,
+      totalpassActiveMembers,
       blockedMembers: counts.get('blocked') ?? 0,
       pendingMembers: counts.get('pending') ?? 0,
       teamMembers: counts.get('team') ?? 0,

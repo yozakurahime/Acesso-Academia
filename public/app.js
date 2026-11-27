@@ -1012,11 +1012,19 @@ document.getElementById('btnNewMember').addEventListener('click', async (event) 
 
 document.querySelectorAll('[data-go]').forEach((button) => {
   const activate = async () => {
-    const { go, focus, expand } = button.dataset;
+    const { go, focus, expand, memberFilter } = button.dataset;
     const expandEl = expand ? document.getElementById(expand) : null;
     if (expandEl && 'open' in expandEl) expandEl.open = true;
     if (focus === 'mName') setMemberFormOpen(true);
+    if (memberFilter && go === 'members') {
+      state.memberFilter = memberFilter;
+      state.memberLimit = 50;
+    }
     if (await switchTab(go) && state.activeTab === go) {
+      if (memberFilter && go === 'members') {
+        updateMemberFilterChips();
+        renderMembersTable();
+      }
       if (expandEl?.dataset?.settingsCat && typeof activateSettingsCategory === 'function') {
         activateSettingsCategory(expandEl.dataset.settingsCat);
         expandEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1298,8 +1306,14 @@ async function loadDashboard() {
       ? (occupancy.maxCapacity > 0 ? `${occupancy.count} / ${occupancy.maxCapacity}` : `${occupancy.count} aluno(s)`)
       : '—';
   }
-  document.getElementById('statActive').textContent = data.activeMembers;
+  document.getElementById('statActive').textContent = data.activeDirectMembers ?? data.activeMembers;
   document.getElementById('statBlocked').textContent = data.blockedMembers + data.pendingMembers;
+  const partnerActiveEl = document.getElementById('statPartnerActive');
+  if (partnerActiveEl) partnerActiveEl.textContent = data.activePartnerMembers ?? 0;
+  const partnerBreakdownEl = document.getElementById('statPartnerBreakdown');
+  if (partnerBreakdownEl) {
+    partnerBreakdownEl.textContent = `Wellhub: ${data.wellhubActiveMembers ?? 0} · TotalPass: ${data.totalpassActiveMembers ?? 0}`;
+  }
   const grossToday = data.revenueTodayCents + (data.salesTodayCents ?? 0);
   const netToday = (data.revenueTodayNetCents ?? data.revenueTodayCents) + (data.salesTodayCents ?? 0);
   const feeToday = Number(data.revenueTodayFeeCents || 0);
@@ -2795,8 +2809,10 @@ function updateMemberFilterChips() {
   const labels = {
     all: `Todos (${counts.all})`,
     active: `Ativos (${counts.active})`,
+    direct_active: `Ativos diretos (${counts.direct_active})`,
     blocked: `Bloqueados (${counts.blocked})`,
     pending: `Pendentes (${counts.pending})`,
+    partner: `Convênios (${counts.partner})`,
     active_noface: `Ativos sem FaceID (${counts.active_noface})`,
     noface: `Sem FaceID (${counts.noface})`,
   };
@@ -2818,6 +2834,7 @@ function renderMembersTable() {
     const m = entry.member;
     const status = m.access_status || m.status;
     if (['active', 'blocked', 'pending'].includes(state.memberFilter) && status !== state.memberFilter) return false;
+    if (state.memberFilter === 'direct_active' && (status !== 'active' || m.partner_provider)) return false;
     if (state.memberFilter === 'active_noface' && (status !== 'active' || m.face_registered)) return false;
     if (state.memberFilter === 'noface' && m.face_registered) return false;
     if (state.memberFilter === 'partner' && !m.partner_provider) return false;
@@ -2924,10 +2941,11 @@ function buildMemberSearchEntry(member) {
 
 function recomputeMemberCounts() {
   const todayIso = billingDateFormat.format(new Date());
-  const counts = { all: state.allMembers.length, active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, active_noface: 0, noface: 0 };
+  const counts = { all: state.allMembers.length, active: 0, direct_active: 0, blocked: 0, pending: 0, expired: 0, partner: 0, active_noface: 0, noface: 0 };
   for (const member of state.allMembers) {
     const status = member.access_status || member.status;
     if (status === 'active' || status === 'blocked' || status === 'pending') counts[status]++;
+    if (status === 'active' && !member.partner_provider) counts.direct_active++;
     if (!member.face_registered) {
       counts.noface++;
       if (status === 'active') counts.active_noface++;
@@ -4798,7 +4816,8 @@ async function loadCurrentCash() {
   if (!session) {
     badge.textContent = 'Fechado';
     badge.className = 'badge badge-pending';
-    document.getElementById('statCash').textContent = 'Fechado';
+    const statCashEl = document.getElementById('statCash');
+    if (statCashEl) statCashEl.textContent = 'Fechado';
     document.getElementById('cashMovementDrawer')?.classList.add('hidden');
     document.getElementById('cashCloseDrawer')?.classList.add('hidden');
     closedView.classList.remove('hidden');
@@ -4806,7 +4825,8 @@ async function loadCurrentCash() {
   } else {
     badge.textContent = `Aberto (${session.staff_name || 'Operador'})`;
     badge.className = 'badge badge-active';
-    document.getElementById('statCash').textContent = fmtMoney(session.expected_cents);
+    const statCashEl = document.getElementById('statCash');
+    if (statCashEl) statCashEl.textContent = fmtMoney(session.expected_cents);
     closedView.classList.add('hidden');
     openView.classList.remove('hidden');
 

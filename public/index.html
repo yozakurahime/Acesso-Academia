@@ -197,17 +197,17 @@
         </div>
 
         <div class="cards overview-cards dashboard-primary">
-          <div class="card card-accent-green card-clickable" data-go="members" role="button" tabindex="0">
+          <div class="card card-accent-green card-clickable" data-go="members" data-member-filter="direct_active" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
-                <span class="card-label">Alunos com acesso ativo</span>
+                <span class="card-label">Alunos ativos (diretos)</span>
                 <strong id="statActive" class="card-value">—</strong>
-                <small class="card-sub">Liberados na catraca</small>
+                <small class="card-sub">Pagantes da academia</small>
               </div>
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-red card-clickable" data-go="members" role="button" tabindex="0">
+          <div class="card card-accent-red card-clickable" data-go="members" data-member-filter="blocked" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Alunos bloqueados ou pendentes</span>
@@ -217,7 +217,7 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-orange card-clickable" data-go="billing" role="button" tabindex="0">
+          <div class="card card-accent-orange card-clickable" data-go="cash" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
                 <span class="card-label">Recebido hoje</span>
@@ -237,12 +237,12 @@
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-log"/></svg></div>
             </div>
           </div>
-          <div class="card card-accent-amber card-clickable" data-go="cash" role="button" tabindex="0">
+          <div class="card card-accent-amber card-clickable" data-go="members" data-member-filter="partner" role="button" tabindex="0">
             <div class="stat-card-inner">
               <div>
-                <span class="card-label">Caixa atual</span>
-                <strong id="statCash" class="card-value">—</strong>
-                <small class="card-sub">Status do turno</small>
+                <span class="card-label">Convênios ativos</span>
+                <strong id="statPartnerActive" class="card-value">—</strong>
+                <small id="statPartnerBreakdown" class="card-sub">Wellhub e TotalPass</small>
               </div>
               <div class="stat-card-icon"><svg class="icon" aria-hidden="true"><use href="#i-box"/></svg></div>
             </div>
@@ -414,6 +414,7 @@
           <div id="memberFilterChips" class="filter-chips">
             <button type="button" class="chip active" data-filter="all">Todos</button>
             <button type="button" class="chip" data-filter="active">Ativos</button>
+            <button type="button" class="chip" data-filter="direct_active">Ativos (diretos)</button>
             <button type="button" class="chip" data-filter="blocked">Bloqueados</button>
             <button type="button" class="chip" data-filter="pending">Pendentes</button>
             <button type="button" class="chip" data-filter="expired">Vencidos</button>
