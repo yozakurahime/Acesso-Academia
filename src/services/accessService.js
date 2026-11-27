@@ -845,6 +845,12 @@ export class AccessService {
     const memberId = this.store.transaction(() => {
       const gym = new GymService(this.store);
       gym.assertUniqueMemberName(name);
+      const partner = access_role === 'student'
+        ? normalizePartnerInput({ partner_provider, wellhub_id })
+        : { partner_provider: null, wellhub_id: null };
+      if (partner.partner_provider === 'wellhub') {
+        gym.assertUniqueWellhubId(partner.wellhub_id);
+      }
       const guardianCheck = gym.assertValidGuardianData({
         birth_date,
         guardian_name,
@@ -853,13 +859,8 @@ export class AccessService {
         guardian_relationship,
         phone,
         document,
+        allowEmptyLegacyCpf: Boolean(partner.partner_provider) && !String(document || '').trim(),
       });
-      const partner = access_role === 'student'
-        ? normalizePartnerInput({ partner_provider, wellhub_id })
-        : { partner_provider: null, wellhub_id: null };
-      if (partner.partner_provider === 'wellhub') {
-        gym.assertUniqueWellhubId(partner.wellhub_id);
-      }
       const modalityId = modality_id ? Number(modality_id) : null;
       const classId = class_id ? Number(class_id) : null;
       if (modalityId !== null || classId !== null) {
