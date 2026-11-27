@@ -125,7 +125,7 @@
   function tryAutoConfirmPending() {
     if (!cfg.autoConfirm) return false;
     const now = Date.now();
-    if (now - lastConfirmClickAt < 1800) return false;
+    if (now - lastConfirmClickAt < 2500) return true;
 
     const dialogBtns = [...document.querySelectorAll('[role="dialog"] button')].filter((btn) => {
       if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') return false;
@@ -145,6 +145,12 @@
     if (confirmBtns.length > 0) {
       const btn = confirmBtns[0];
       lastConfirmClickAt = now;
+      console.log(`[Oxigênio Bot] Clicando em "${(btn.textContent || '').trim()}"`, btn.dataset?.testid || '');
+      try { btn.focus(); } catch {}
+      btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       btn.click();
       updateBadge(`Oxigênio Bot (${providerLabel}): Validando check-in...`);
       return true;
