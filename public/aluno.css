@@ -646,6 +646,26 @@
 .celebration-icon { font-size: 23px; }
 .celebration-close { width: 42px; height: 42px; border: 0; border-radius: 9px; background: transparent; color: inherit; cursor: pointer; font-size: 24px; }
 
+.student-notices-banner {
+  margin-bottom: 14px;
+  padding: 13px 16px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--accent-soft);
+}
+.student-notices-head {
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.student-notices-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
 .student-page dialog {
   width: min(calc(100% - 24px), 540px);
   max-width: none;

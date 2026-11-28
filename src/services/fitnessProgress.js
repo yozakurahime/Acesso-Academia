@@ -215,3 +215,18 @@ export function completeFitnessWorkout(store, memberId, workoutId, date = fitnes
   return store.run('INSERT OR IGNORE INTO student_workout_completions (member_id, workout_id, completed_on) VALUES (?, ?, ?)',
     [memberId, workout.id, date]).changes === 1;
 }
+
+export const DEFAULT_GYM_NOTICES = [
+  '🎄 Natal (24 e 25/12): dia 24 funcionaremos até 12h e voltamos na segunda-feira, dia 28/12.',
+  '🎆 Ano Novo (31/12 e 01/01): dia 31 funcionaremos até 12h e retornamos no dia 04/01.',
+];
+
+export function resolveGymNotices(settings = {}) {
+  const hasCustom = settings?.turnstile_notices !== undefined && settings?.turnstile_notices !== null;
+  if (!hasCustom) return [...DEFAULT_GYM_NOTICES];
+  return String(settings.turnstile_notices)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+}

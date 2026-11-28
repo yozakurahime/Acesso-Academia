@@ -6,7 +6,7 @@ import { isIP } from 'node:net';
 import QRCode from 'qrcode';
 import { StudentPortalService } from '../services/studentPortalService.js';
 import { PartnerService } from '../services/partnerService.js';
-import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
+import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, resolveGymNotices, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
 import { listExerciseCatalog, saveCatalogExercise } from '../services/exerciseCatalog.js';
 import { MAX_EXERCISE_VIDEO } from '../services/exerciseVideos.js';
 import { DeviceService } from '../services/deviceService.js';
@@ -620,18 +620,7 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     if (isRich) {
       const occ = typeof accessService?.getCurrentOccupancy === 'function' ? accessService.getCurrentOccupancy() : null;
       const settings = store.getSettings() || {};
-      const defaultNotices = [
-        '🎄 Natal (24 e 25/12): dia 24 funcionaremos até 12h e voltamos na segunda-feira, dia 28/12.',
-        '🎆 Ano Novo (31/12 e 01/01): dia 31 funcionaremos até 12h e retornamos no dia 04/01.',
-      ];
-      const hasCustomNotices = settings.turnstile_notices !== undefined && settings.turnstile_notices !== null;
-      const notices = hasCustomNotices
-        ? String(settings.turnstile_notices)
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .slice(0, 12)
-        : defaultNotices;
+      const notices = resolveGymNotices(settings);
       const streakRanking = consecutiveDaysRanking(store, undefined, 5);
       return res.set('Cache-Control', 'no-store').json({
         ranking,

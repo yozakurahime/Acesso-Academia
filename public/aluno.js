@@ -345,6 +345,28 @@ function computeMemberCelebration(member) {
   return { icon, title, message: messages.join(' ') };
 }
 
+function renderStudentNotices(notices) {
+  const banner = document.getElementById('stNoticesBanner');
+  const list = document.getElementById('stNoticesList');
+  if (!banner || !list) return;
+  const items = Array.isArray(notices)
+    ? notices.map((n) => String(n || '').trim()).filter(Boolean)
+    : [];
+  if (!items.length) {
+    list.replaceChildren();
+    banner.classList.add('hidden');
+    return;
+  }
+  list.replaceChildren(
+    ...items.map((text) => {
+      const li = document.createElement('li');
+      li.textContent = text;
+      return li;
+    }),
+  );
+  banner.classList.remove('hidden');
+}
+
 function renderCelebrationBanner(member) {
   const banner = document.getElementById('stCelebrationBanner');
   if (!banner) return;
@@ -489,6 +511,7 @@ function renderPortal() {
   document.title = `${m.name} — Portal do Aluno`;
   document.getElementById('stMemberName').textContent = m.name;
   renderCelebrationBanner(m);
+  renderStudentNotices(data.notices);
   const badge = document.getElementById('stStatusBadge');
   const statusMap = { active: ['Ativo', 'badge-active'], pending: ['Pendente', 'badge-pending'], blocked: ['Bloqueado', 'badge-blocked'] };
   const [label, cls] = statusMap[m.status] || [m.status || '-', 'badge-pending'];

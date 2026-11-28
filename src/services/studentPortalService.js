@@ -8,7 +8,7 @@ function hashInviteCode(code) {
   const derived = scryptSync(String(code), salt, 64).toString('hex');
   return `${salt}:${derived}`;
 }
-import { studentFitnessProgress } from './fitnessProgress.js';
+import { resolveGymNotices, studentFitnessProgress } from './fitnessProgress.js';
 
 function onlyDigits(value) {
   return String(value || '').replace(/\D+/g, '');
@@ -278,6 +278,7 @@ export class StudentPortalService {
       classes,
       workouts,
       recentCheckins,
+      notices: resolveGymNotices(settings),
       fitness: studentFitnessProgress(this.store, Number(memberId)),
     };
   }
