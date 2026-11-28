@@ -137,11 +137,13 @@ export class AccessService {
     return { ...base, ...extra };
   }
 
-  _buildKioskExtra(id, outcome, { member = null, today = fitnessToday(), preview = false, direction = null } = {}) {
+  _buildKioskExtra(id, outcome, { member = null, today = fitnessToday(), preview = false, direction = null, totalMs = null } = {}) {
     const occ = this.getCurrentOccupancy();
     const extra = {
       id,
-      totalMs: outcome === 'allowed' && !preview ? 8000 : 6000,
+      totalMs: Number.isFinite(Number(totalMs)) && Number(totalMs) > 0
+        ? Number(totalMs)
+        : (outcome === 'allowed' && !preview ? 8000 : 6000),
       occupancyInfo: { count: occ.count, maxCapacity: occ.maxCapacity },
     };
     if (direction) extra.direction = direction;
@@ -537,13 +539,26 @@ export class AccessService {
     return { cancelled: true, requestId: id };
   }
 
-  publishTurnstileDisplay(outcome, { member = null, reason = null, preview = false, progress = null, occupancy = null, source = null, direction = null } = {}) {
+  publishTurnstileDisplay(outcome, { member = null, reason = null, preview = false, progress = null, occupancy = null, source = null, direction = null, releaseSeconds = null } = {}) {
     const today = fitnessToday();
-    const maxCap = Number(this.store.getSettings()?.max_capacity || 0);
+    const settings = this.store.getSettings() || {};
+    const maxCap = Number(settings.max_capacity || 0);
+    let totalMs = 6000;
+    if (outcome === 'allowed' && !preview) {
+      const activeTurnstileSeconds = Number(
+        this.store.get('SELECT release_seconds FROM turnstiles WHERE active = 1 ORDER BY id ASC LIMIT 1')?.release_seconds || 0,
+      );
+      const configuredSeconds = Number(releaseSeconds) > 0
+        ? Number(releaseSeconds)
+        : Number(settings.turnstile_release_seconds) > 0
+          ? Number(settings.turnstile_release_seconds)
+          : (activeTurnstileSeconds > 0 ? activeTurnstileSeconds : 8);
+      totalMs = Math.max(1000, Math.round(configuredSeconds * 1000));
+    }
     const display = {
       id: ++this.turnstileDisplayId,
       outcome,
-      expiresAt: Date.now() + (outcome === 'allowed' && !preview ? 8000 : 6000),
+      expiresAt: Date.now() + totalMs,
     };
     if (occupancy != null || maxCap > 0) {
       display.occupancy = occupancy ?? this.getCurrentOccupancy().count;
@@ -560,7 +575,7 @@ export class AccessService {
     if (preview) display.preview = true;
 
     this.turnstileDisplay = display;
-    this.turnstileDisplayKioskExtra = this._buildKioskExtra(display.id, outcome, { member, today, preview, direction });
+    this.turnstileDisplayKioskExtra = this._buildKioskExtra(display.id, outcome, { member, today, preview, direction, totalMs });
 
     if (outcome === 'allowed' && !preview && this._turnstileListeners.size > 0) {
       const releaseEvent = {

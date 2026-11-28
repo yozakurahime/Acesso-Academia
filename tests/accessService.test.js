@@ -1165,4 +1165,11 @@ test('getTurnstileKioskDisplay expõe streak, monthlyVisits, returning e nearGoa
   const kiosk2 = service.getTurnstileKioskDisplay();
   assert.equal(kiosk2.streak, 1);
   assert.ok(kiosk2.monthlyVisits >= 1);
+
+  // Vincula duração do card allowed ao tempo de liberação configurado na catraca
+  store.updateSettings({ turnstile_release_seconds: '12' });
+  service.publishTurnstileDisplay('allowed', { member: { id: member.id, name: member.name }, source: 'FaceID' });
+  const kiosk12 = service.getTurnstileKioskDisplay();
+  assert.equal(kiosk12.totalMs, 12000);
+  assert.ok(kiosk12.remainingMs > 10000 && kiosk12.remainingMs <= 12000);
 });
