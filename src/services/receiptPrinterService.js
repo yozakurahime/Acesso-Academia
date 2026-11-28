@@ -226,7 +226,12 @@ if (-not [RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)) {
 `;
 
 export function printReceiptToWindowsPrinter(receipt, { printerName = process.env.EDGE_PRINTER_NAME || 'MP-4200 TH' } = {}) {
-  if (process.env.NODE_ENV === 'test' || process.env.OXIGENIO_DISABLE_PRINTER === '1') {
+  const isTestRunner =
+    process.env.NODE_ENV === 'test' ||
+    Boolean(process.env.NODE_TEST_CONTEXT) ||
+    process.execArgv.includes('--test') ||
+    process.argv.some((arg) => /(?:^|[\\/])tests[\\/]|run-tests\.mjs$/i.test(String(arg)));
+  if (isTestRunner || process.env.OXIGENIO_DISABLE_PRINTER === '1') {
     return Promise.resolve({ ok: false, skipped: true, reason: 'test_env' });
   }
   if (process.platform !== 'win32') {
