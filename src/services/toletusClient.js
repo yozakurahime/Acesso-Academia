@@ -251,9 +251,11 @@ export class ToletusClient {
   /** Configura o controle de fluxo / lado liberado (0x0202 legado + 0x020F estendido com pictogramas ligados). */
   async setFlowControl(freeSide = 'none', override = null) {
     const legacyModes = { both: 0, exit: 1, entry: 2, none: 3 };
-    const extendedModes = { exit: 0, none: 2, entry: 3, both: 5 };
+    const defaultDir = String(override?.defaultDirection || '').trim().toLowerCase();
+    const noneExtCode = defaultDir === 'entry' ? 1 : defaultDir === 'exit' ? 4 : 2;
+    const extendedModes = { exit: 0, none: noneExtCode, entry: 3, both: 5 };
     const legacyCode = Object.hasOwn(legacyModes, freeSide) ? legacyModes[freeSide] : 3;
-    const extCode = Object.hasOwn(extendedModes, freeSide) ? extendedModes[freeSide] : 2;
+    const extCode = Object.hasOwn(extendedModes, freeSide) ? extendedModes[freeSide] : noneExtCode;
 
     const legacyPayload = Buffer.alloc(16, 0x00);
     legacyPayload[0] = legacyCode;

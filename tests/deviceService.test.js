@@ -98,13 +98,13 @@ test('DeviceService: applyTurnstileConfig sends Toletus 0x020A duration and 0x02
   assert.equal(sent[2].packet[3], 0);
   assert.equal(sent[2].packet[4], 0);
 
-  // free_side = 'none' -> 0x0202=3 e 0x020F=2 com pictogramas=0
+  // free_side = 'none' + default_direction = 'entry' -> 0x0202=3 e 0x020F=1 (entrada controlada, saida bloqueada com X)
   devices.updateTurnstile(turnstile.id, { free_side: 'none' });
   await devices.applyTurnstileConfig(turnstile.id);
   assert.equal(sent[4].packet.readUInt16LE(1), 0x0202);
   assert.equal(sent[4].packet[3], 3);
   assert.equal(sent[5].packet.readUInt16LE(1), 0x020F);
-  assert.equal(sent[5].packet[3], 2);
+  assert.equal(sent[5].packet[3], 1);
   assert.equal(sent[5].packet[4], 0);
 });
 

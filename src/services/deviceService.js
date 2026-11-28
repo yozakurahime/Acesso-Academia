@@ -177,7 +177,7 @@ export class DeviceService {
     }
     if (!this.toletus) throw new Error('Cliente Toletus indisponível.');
     const durationRes = await this.toletus.setReleaseDuration(t.release_seconds, { ip: t.ip, port: t.port, enabled: true });
-    const flowRes = await this.toletus.setFlowControl(t.free_side, { ip: t.ip, port: t.port, enabled: true });
+    const flowRes = await this.toletus.setFlowControl(t.free_side, { ip: t.ip, port: t.port, enabled: true, defaultDirection: t.default_direction });
     return { applied: true, driver: 'toletus', release_seconds: t.release_seconds, free_side: t.free_side, durationRes, flowRes };
   }
 
