@@ -1508,7 +1508,14 @@ export class GatewayService {
         terminal_id: chosenTerminal,
         print_on_terminal: 'no_ticket',
       },
-      ...(defaultType ? { payment_method: { default_type: defaultType } } : {}),
+      ...(defaultType
+        ? {
+            payment_method: {
+              default_type: defaultType,
+              ...(defaultType === 'credit_card' ? { default_installments: 1 } : {}),
+            },
+          }
+        : {}),
     };
 
     const idempotencyKey = `point_order:${member.id}:${charge?.id || 'adhoc'}:${chosenTerminal}:${finalAmount}:${Date.now()}`;

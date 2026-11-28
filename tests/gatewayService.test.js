@@ -272,6 +272,8 @@ test('Mercado Pago Point Smart: lista terminais, envia cobrança, dá baixa via 
   assert.equal(order.order_id, 'ORD_MP_01');
   assert.equal(capturedOrderBody.type, 'point');
   assert.equal(capturedOrderBody.config.point.terminal_id, 'PAX_A910__SMART01');
+  assert.equal(capturedOrderBody.config.payment_method.default_type, 'credit_card');
+  assert.equal(capturedOrderBody.config.payment_method.default_installments, 1);
   assert.equal(capturedOrderBody.transactions.payments[0].amount, '120.00');
 
   const pendingCheck = await gw.checkPointOrder(order.id);
