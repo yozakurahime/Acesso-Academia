@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v22';
+const CACHE_VERSION = 'v23';
 const SHELL_CACHE = `oxigenio-aluno-shell-${CACHE_VERSION}`;
 const API_CACHE = `oxigenio-aluno-api-${CACHE_VERSION}`;
 

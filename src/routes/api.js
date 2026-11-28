@@ -1323,6 +1323,15 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     }),
   );
 
+  router.post(
+    '/devices/readers/:id/apply',
+    requireAdmin,
+    handle(async (req, res) => {
+      const result = await deviceService.applyReaderConfig(req.params.id);
+      res.json(result);
+    }),
+  );
+
   // Callback do Modo Online da Control iD quando reconhece uma face
   const handleControlIdIdentified = handle(async (req, res) => {
     const settings = store.getSettings();

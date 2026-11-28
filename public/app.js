@@ -5720,6 +5720,7 @@ function resetReaderForm() {
   document.getElementById('rSecboxId').value = '65793';
   document.getElementById('rGroupId').value = '1';
   document.getElementById('rDirection').value = 'entry';
+  if (document.getElementById('rMaxDistanceCm')) document.getElementById('rMaxDistanceCm').value = '100';
   document.getElementById('rTurnstileId').value = '';
   document.getElementById('rActive').checked = true;
   document.getElementById('btnSaveReader').textContent = 'Salvar Leitor';
@@ -5795,6 +5796,7 @@ function renderReaders() {
       <td><span class="badge ${r.active ? 'badge-active' : 'badge-inactive'}">${r.active ? 'Ativo' : 'Inativo'}</span></td>
       <td class="inline-actions">
         <button type="button" class="btn btn-secondary btn-sm" data-reader-action="test" data-id="${r.id}">Testar</button>
+        <button type="button" class="btn btn-primary btn-sm" data-reader-action="apply" data-id="${r.id}">Aplicar</button>
         <button type="button" class="btn btn-secondary btn-sm" data-reader-action="edit" data-id="${r.id}">Editar</button>
         <button type="button" class="btn btn-danger btn-sm" data-reader-action="delete" data-id="${r.id}">Excluir</button>
       </td>
@@ -8606,18 +8608,25 @@ document.getElementById('readerForm')?.addEventListener('submit', async (e) => {
     secbox_id: Number(document.getElementById('rSecboxId').value) || 65793,
     group_id: Number(document.getElementById('rGroupId').value) || 1,
     direction: document.getElementById('rDirection').value,
+    max_distance_cm: Number(document.getElementById('rMaxDistanceCm')?.value) || 100,
     turnstile_id: document.getElementById('rTurnstileId').value ? Number(document.getElementById('rTurnstileId').value) : null,
     active: document.getElementById('rActive').checked,
   };
   const password = document.getElementById('rPassword').value;
   if (password) payload.password = password;
   try {
+    let savedReader = null;
     if (id) {
-      await api(`/api/devices/readers/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      const res = await api(`/api/devices/readers/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      savedReader = res.item;
       showToast('Leitor atualizado!');
     } else {
-      await api('/api/devices/readers', { method: 'POST', body: JSON.stringify(payload) });
+      const res = await api('/api/devices/readers', { method: 'POST', body: JSON.stringify(payload) });
+      savedReader = res.item;
       showToast('Leitor cadastrado!');
+    }
+    if (savedReader?.id && payload.active) {
+      api(`/api/devices/readers/${savedReader.id}/apply`, { method: 'POST' }).catch(() => {});
     }
     resetReaderForm();
     await loadDevices();
@@ -8645,6 +8654,7 @@ document.getElementById('readersBody')?.addEventListener('click', async (e) => {
     document.getElementById('rSecboxId').value = String(item.secbox_id || 65793);
     document.getElementById('rGroupId').value = String(item.group_id || 1);
     document.getElementById('rDirection').value = item.direction || 'entry';
+    if (document.getElementById('rMaxDistanceCm')) document.getElementById('rMaxDistanceCm').value = String(item.max_distance_cm || 100);
     document.getElementById('rTurnstileId').value = item.turnstile_id ? String(item.turnstile_id) : '';
     document.getElementById('rActive').checked = Boolean(item.active);
     document.getElementById('btnSaveReader').textContent = 'Atualizar Leitor';
@@ -8656,6 +8666,9 @@ document.getElementById('readersBody')?.addEventListener('click', async (e) => {
       if (action === 'test') {
         const res = await api(`/api/devices/readers/${id}/test`, { method: 'POST' });
         showToast(res.message || 'Leitor testado!');
+      } else if (action === 'apply') {
+        const res = await api(`/api/devices/readers/${id}/apply`, { method: 'POST' });
+        showToast(`Distância aplicada (${res.distanceCm} cm) no leitor!`);
       } else if (action === 'delete') {
         if (!confirm(`Excluir o leitor "${item?.name || id}"?`)) return;
         await api(`/api/devices/readers/${id}`, { method: 'DELETE' });

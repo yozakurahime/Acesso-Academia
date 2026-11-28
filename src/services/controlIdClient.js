@@ -430,4 +430,22 @@ export class ControlIdClient {
 
     return data?.access_logs || [];
   }
+
+  /**
+   * Ajusta a distancia maxima de deteccao facial no Control iD (30 a 200 cm)
+   * usando min_detect_bounds_width = 11.6 / distanceCm.
+   */
+  async setFaceDetectionDistanceCm(distanceCm = 100, override = null) {
+    if (override) return this.forDevice(override).setFaceDetectionDistanceCm(distanceCm);
+    const cm = Math.max(30, Math.min(200, Math.round(Number(distanceCm || 100))));
+    const minDetectBoundsWidth = (11.6 / cm).toFixed(6);
+    const cfg = this.getConfig();
+    if (cfg.mockMode) {
+      return { applied: true, mock: true, distanceCm: cm, minDetectBoundsWidth };
+    }
+    await this.requestJson('/set_configuration.fcgi', {
+      face_id: { min_detect_bounds_width: minDetectBoundsWidth },
+    });
+    return { applied: true, mock: false, distanceCm: cm, minDetectBoundsWidth };
+  }
 }

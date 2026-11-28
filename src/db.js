@@ -652,6 +652,7 @@ export class DatabaseStore {
         secbox_id INTEGER NOT NULL DEFAULT 65793,
         group_id INTEGER NOT NULL DEFAULT 1,
         direction TEXT NOT NULL DEFAULT 'entry',
+        max_distance_cm INTEGER NOT NULL DEFAULT 100,
         turnstile_id INTEGER REFERENCES turnstiles(id) ON DELETE SET NULL,
         active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -938,6 +939,9 @@ export class DatabaseStore {
     this.ensureColumns('whatsapp_chat_messages', {
       media_type: 'TEXT',
       media_url: 'TEXT',
+    });
+    this.ensureColumns('readers', {
+      max_distance_cm: 'INTEGER NOT NULL DEFAULT 100',
     });
     this.db.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_access_logs_edge_event_id ON access_logs(edge_event_id)');
     this.db.run(`

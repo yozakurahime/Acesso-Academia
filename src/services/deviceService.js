@@ -228,6 +228,11 @@ export class DeviceService {
     if (!DIRECTIONS.includes(direction)) {
       throw Object.assign(new Error('Direção do leitor inválida (entry, exit ou both).'), { statusCode: 400 });
     }
+    const rawDistance = Number(data.max_distance_cm ?? existing?.max_distance_cm ?? 100);
+    if (!Number.isFinite(rawDistance) || rawDistance < 30 || rawDistance > 200) {
+      throw Object.assign(new Error('Distância máxima do leitor deve ficar entre 30 e 200 cm.'), { statusCode: 400 });
+    }
+    const maxDistanceCm = Math.round(rawDistance);
     let turnstileId = Object.hasOwn(data, 'turnstile_id')
       ? (data.turnstile_id ? Number(data.turnstile_id) : null)
       : (existing?.turnstile_id ?? null);
@@ -235,7 +240,7 @@ export class DeviceService {
       throw Object.assign(new Error('Catraca vinculada não encontrada.'), { statusCode: 400 });
     }
     const active = Object.hasOwn(data, 'active') ? (data.active ? 1 : 0) : (existing?.active ?? 1);
-    return { name, ip, port, username, password, action_mode: actionMode, secbox_id: secboxId, group_id: groupId, direction, turnstile_id: turnstileId, active };
+    return { name, ip, port, username, password, action_mode: actionMode, secbox_id: secboxId, group_id: groupId, direction, max_distance_cm: maxDistanceCm, turnstile_id: turnstileId, active };
   }
 
   _syncPrimaryReaderToSettings(reader) {
@@ -255,9 +260,9 @@ export class DeviceService {
   createReader(data) {
     const norm = this._normalizeReaderPayload(data);
     const res = this.store.run(
-      `INSERT INTO readers (name, brand, ip, port, username, password, action_mode, secbox_id, group_id, direction, turnstile_id, active)
-       VALUES (?, 'controlid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [norm.name, norm.ip, norm.port, norm.username, norm.password, norm.action_mode, norm.secbox_id, norm.group_id, norm.direction, norm.turnstile_id, norm.active],
+      `INSERT INTO readers (name, brand, ip, port, username, password, action_mode, secbox_id, group_id, direction, max_distance_cm, turnstile_id, active)
+       VALUES (?, 'controlid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [norm.name, norm.ip, norm.port, norm.username, norm.password, norm.action_mode, norm.secbox_id, norm.group_id, norm.direction, norm.max_distance_cm, norm.turnstile_id, norm.active],
     );
     const created = this.getReader(res.lastInsertRowid, { includeSecret: true });
     this._syncPrimaryReaderToSettings(created);
@@ -270,10 +275,10 @@ export class DeviceService {
     const norm = this._normalizeReaderPayload(data, existing);
     this.store.run(
       `UPDATE readers
-       SET name = ?, ip = ?, port = ?, username = ?, password = ?, action_mode = ?, secbox_id = ?, group_id = ?, direction = ?, turnstile_id = ?, active = ?,
+       SET name = ?, ip = ?, port = ?, username = ?, password = ?, action_mode = ?, secbox_id = ?, group_id = ?, direction = ?, max_distance_cm = ?, turnstile_id = ?, active = ?,
            updated_at = datetime('now', 'localtime')
        WHERE id = ?`,
-      [norm.name, norm.ip, norm.port, norm.username, norm.password, norm.action_mode, norm.secbox_id, norm.group_id, norm.direction, norm.turnstile_id, norm.active, existing.id],
+      [norm.name, norm.ip, norm.port, norm.username, norm.password, norm.action_mode, norm.secbox_id, norm.group_id, norm.direction, norm.max_distance_cm, norm.turnstile_id, norm.active, existing.id],
     );
     const updated = this.getReader(existing.id, { includeSecret: true });
     this._syncPrimaryReaderToSettings(updated);
@@ -302,6 +307,14 @@ export class DeviceService {
     if (!reader) throw Object.assign(new Error('Leitor não encontrado.'), { statusCode: 404 });
     if (!this.controlId) throw new Error('Cliente Control iD indisponível.');
     return this.controlId.testConnection(reader);
+  }
+
+  async applyReaderConfig(id) {
+    const reader = this.getReader(id, { includeSecret: true });
+    if (!reader) throw Object.assign(new Error('Leitor não encontrado.'), { statusCode: 404 });
+    if (!this.controlId) throw new Error('Cliente Control iD indisponível.');
+    const res = await this.controlId.setFaceDetectionDistanceCm(reader.max_distance_cm || 100, reader);
+    return { ...res, id: reader.id, name: reader.name };
   }
 
   findReaderByRequest({ readerId = null, readerIp = null } = {}) {
