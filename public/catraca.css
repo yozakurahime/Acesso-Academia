@@ -703,14 +703,14 @@ body[data-state="offline"]::after {
   min-width: 0;
 }
 
-.turnstile-idle-widgets.no-challenge {
+.turnstile-idle-widgets.no-notice {
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.15fr);
 }
 
 .turnstile-idle-widgets.is-empty { display: none; }
 
 .turnstile-ranking,
-.turnstile-challenge,
+.turnstile-notice,
 .turnstile-portal-qr,
 .turnstile-quote {
   position: relative;
@@ -776,34 +776,40 @@ body[data-state="offline"]::after {
 .turnstile-rank-streak { color: #ffd0a6; font-size: 0.84em; font-weight: 600; white-space: nowrap; }
 .turnstile-rank-position { color: var(--accent-warm); font-weight: 800; white-space: nowrap; }
 
-.turnstile-challenge-head { display: grid; gap: 10px; }
-.turnstile-challenge-head span { font-size: clamp(18px, 1.65vw, 28px); color: var(--quiet); font-weight: 600; }
-.turnstile-challenge-bar {
-  height: 14px;
-  background: rgba(255, 255, 255, 0.10);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.turnstile-challenge-fill {
-  position: relative;
-  overflow: hidden;
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #ff6a00 0%, #ffb36b 100%);
-  box-shadow: 0 0 18px rgba(255, 106, 0, 0.45);
+.turnstile-notice {
+  gap: 12px;
+  justify-content: space-between;
 }
 
-.turnstile-challenge-fill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: 45%;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.28) 50%, transparent 100%);
-  transform: translateX(-100%);
-  animation: challengeShimmer 2.8s ease-in-out infinite;
-  pointer-events: none;
+.turnstile-notice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.turnstile-notice-counter {
+  font-size: clamp(13px, 1.1vw, 18px);
+  font-weight: 700;
+  color: var(--quiet);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-border);
+}
+
+.turnstile-notice-text {
+  margin: 0;
+  font-size: clamp(18px, 1.7vw, 28px);
+  line-height: 1.38;
+  font-weight: 600;
+  color: var(--ink);
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+
+.turnstile-notice-text.is-fading {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .turnstile-portal-qr-body {
@@ -914,7 +920,7 @@ body[data-state="unrecognized"] .turnstile-timer-fill { background: #fbbf24; }
   }
   .turnstile-hero-wrap { width: clamp(100px, 24vw, 220px); }
   .turnstile-idle-widgets,
-  .turnstile-idle-widgets.no-challenge {
+  .turnstile-idle-widgets.no-notice {
     grid-template-columns: minmax(0, 1fr);
   }
   .turnstile-header-right { flex-wrap: wrap; justify-content: flex-end; }
@@ -948,7 +954,7 @@ body[data-state="unrecognized"] .turnstile-timer-fill { background: #fbbf24; }
     gap: 10px;
   }
   .turnstile-ranking,
-  .turnstile-challenge,
+  .turnstile-notice,
   .turnstile-portal-qr,
   .turnstile-quote {
     padding: 12px 18px;

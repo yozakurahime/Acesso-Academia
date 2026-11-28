@@ -21,9 +21,9 @@ const ranking = document.getElementById('displayRanking');
 const rankingTitle = document.getElementById('displayRankingTitle');
 const rankingList = document.getElementById('displayRankingList');
 const confettiLayer = document.getElementById('confettiLayer');
-const challengeBox = document.getElementById('displayChallenge');
-const challengeCount = document.getElementById('displayChallengeCount');
-const challengeFill = document.getElementById('displayChallengeFill');
+const noticeBox = document.getElementById('displayNotice');
+const noticeTextEl = document.getElementById('displayNoticeText');
+const noticeCounterEl = document.getElementById('displayNoticeCounter');
 const occupancyBadge = document.getElementById('displayOccupancy');
 const birthdayBanner = document.getElementById('displayBirthday');
 const weatherBadge = document.getElementById('displayWeather');
@@ -87,7 +87,9 @@ let pollDisplayController = null;
 let offlineFailures = 0;
 let wakeLock = null;
 let idleOccupancy = null;
-let challengeData = null;
+let noticeList = [];
+let noticeIndex = 0;
+let noticeFadeTimer = null;
 let deniedLockUntil = 0;
 let audioCtx = null;
 const MIN_DENIED_DISPLAY_MS = 4200;
@@ -530,23 +532,54 @@ function render(state, event) {
   }
 }
 
+function renderNotice(advance = false) {
+  if (!noticeTextEl) return;
+  clearTimeout(noticeFadeTimer);
+  if (!noticeList.length) {
+    noticeTextEl.textContent = '';
+    if (noticeCounterEl) noticeCounterEl.hidden = true;
+    return;
+  }
+  if (advance && noticeList.length > 1) {
+    noticeIndex = (noticeIndex + 1) % noticeList.length;
+    noticeTextEl.classList.add('is-fading');
+    noticeFadeTimer = setTimeout(() => {
+      const idx = noticeIndex % noticeList.length;
+      noticeTextEl.textContent = noticeList[idx];
+      if (noticeCounterEl) {
+        noticeCounterEl.hidden = noticeList.length <= 1;
+        noticeCounterEl.textContent = `${idx + 1}/${noticeList.length}`;
+      }
+      noticeTextEl.classList.remove('is-fading');
+    }, 280);
+    return;
+  }
+  const idx = noticeIndex % noticeList.length;
+  noticeTextEl.classList.remove('is-fading');
+  noticeTextEl.textContent = noticeList[idx];
+  if (noticeCounterEl) {
+    noticeCounterEl.hidden = noticeList.length <= 1;
+    noticeCounterEl.textContent = `${idx + 1}/${noticeList.length}`;
+  }
+}
+
 function updateIdleWidgetsVisibility() {
   const isIdle = display.dataset.state === 'idle' && preview.hidden;
   ranking.hidden = !isIdle || !rankingList.childElementCount;
-  if (challengeBox) {
-    challengeBox.hidden = !isIdle || !challengeData || !challengeData.target;
+  if (noticeBox) {
+    noticeBox.hidden = !isIdle || !noticeList.length;
   }
   if (portalQrBox) portalQrBox.hidden = !isIdle;
   if (quoteBox) quoteBox.hidden = !isIdle;
   if (idleWidgets) {
-    const hasChallenge = Boolean(challengeBox && !challengeBox.hidden);
+    const hasNotice = Boolean(noticeBox && !noticeBox.hidden);
     const hasVisibleWidget = Boolean(
       !ranking.hidden
-      || hasChallenge
+      || hasNotice
       || (portalQrBox && !portalQrBox.hidden)
       || (quoteBox && !quoteBox.hidden)
     );
-    idleWidgets.classList.toggle('no-challenge', !hasChallenge);
+    idleWidgets.classList.toggle('no-notice', !hasNotice);
     idleWidgets.classList.toggle('is-empty', !hasVisibleWidget);
   }
 }
@@ -711,11 +744,14 @@ async function pollRanking() {
       idleOccupancy = data.occupancy;
       if (display.dataset.state === 'idle') renderOccupancyBadge(idleOccupancy);
     }
-    if (data?.challenge && challengeCount && challengeFill) {
-      challengeData = data.challenge;
-      const pct = Math.min(100, Math.round((Number(challengeData.completed || 0) / Math.max(1, Number(challengeData.target || 1))) * 100));
-      challengeCount.textContent = `${challengeData.completed} / ${challengeData.target} treinos (${pct}%)`;
-      challengeFill.style.width = `${pct}%`;
+    if (Array.isArray(data?.notices)) {
+      const nextNotices = data.notices.map((n) => String(n || '').trim()).filter(Boolean);
+      const changed = nextNotices.length !== noticeList.length || nextNotices.some((n, i) => n !== noticeList[i]);
+      noticeList = nextNotices;
+      if (changed) {
+        if (noticeIndex >= noticeList.length) noticeIndex = 0;
+        renderNotice(false);
+      }
     }
     rankingState = {
       streakRanking: Array.isArray(data?.streakRanking) ? data.streakRanking : [],
@@ -856,3 +892,4 @@ requestKioskWakeLock();
 pollDisplay();
 pollRanking();
 setInterval(rotateRankingMode, 16000);
+setInterval(() => renderNotice(true), 12000);

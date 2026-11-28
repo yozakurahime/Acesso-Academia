@@ -6,7 +6,7 @@ import { isIP } from 'node:net';
 import QRCode from 'qrcode';
 import { StudentPortalService } from '../services/studentPortalService.js';
 import { PartnerService } from '../services/partnerService.js';
-import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, monthlyFitnessChallenge, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
+import { completeFitnessWorkout, consecutiveDaysRanking, fitnessRanking, saveFitnessPreferences, studentFitnessProgress, weeklyGoal } from '../services/fitnessProgress.js';
 import { listExerciseCatalog, saveCatalogExercise } from '../services/exerciseCatalog.js';
 import { MAX_EXERCISE_VIDEO } from '../services/exerciseVideos.js';
 import { DeviceService } from '../services/deviceService.js';
@@ -112,6 +112,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'turnstile_release_seconds',
   'turnstile_direction',
   'turnstile_free_side',
+  'turnstile_notices',
   'antipassback_minutes',
   'max_capacity',
   'auto_collection_enabled',
@@ -618,14 +619,26 @@ export function createApiRouter({ store, controlId, toletus, accessService, gymS
     const ranking = fitnessRanking(store, undefined, isRich ? 5 : 3);
     if (isRich) {
       const occ = typeof accessService?.getCurrentOccupancy === 'function' ? accessService.getCurrentOccupancy() : null;
-      const challenge = monthlyFitnessChallenge(store);
+      const settings = store.getSettings() || {};
+      const defaultNotices = [
+        '🎄 Natal (24 e 25/12): dia 24 funcionaremos até 12h e voltamos na segunda-feira, dia 28/12.',
+        '🎆 Ano Novo (31/12 e 01/01): dia 31 funcionaremos até 12h e retornamos no dia 04/01.',
+      ];
+      const hasCustomNotices = settings.turnstile_notices !== undefined && settings.turnstile_notices !== null;
+      const notices = hasCustomNotices
+        ? String(settings.turnstile_notices)
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .slice(0, 12)
+        : defaultNotices;
       const streakRanking = consecutiveDaysRanking(store, undefined, 5);
       return res.set('Cache-Control', 'no-store').json({
         ranking,
         streakRanking,
         occupancy: occ ? { count: occ.count, maxCapacity: occ.maxCapacity } : null,
-        challenge: challenge || null,
-        gymName: store.getSettings()?.gym_name || 'Academia Oxigênio',
+        notices,
+        gymName: settings.gym_name || 'Academia Oxigênio',
       });
     }
     res.set('Cache-Control', 'no-store').json({ ranking });

@@ -6,7 +6,7 @@
   <title>Academia Oxigênio | Tela da catraca</title>
   <link rel="icon" href="/oxigenio.jpg" />
   <meta name="theme-color" content="#07080b" />
-  <link rel="stylesheet" href="/catraca.css?v=20261127.2" />
+  <link rel="stylesheet" href="/catraca.css?v=20261127.3" />
 </head>
 <body class="turnstile" data-state="idle">
   <div class="turnstile-embers" aria-hidden="true">
@@ -65,14 +65,12 @@
         <h2 id="displayRankingTitle">🔥 Top 5 · Dias seguidos</h2>
         <ol id="displayRankingList"></ol>
       </section>
-      <section id="displayChallenge" class="turnstile-challenge" aria-labelledby="displayChallengeTitle" hidden>
-        <div class="turnstile-challenge-head">
-          <h2 id="displayChallengeTitle">Desafio mensal</h2>
-          <span id="displayChallengeCount" aria-live="off"></span>
+      <section id="displayNotice" class="turnstile-notice" aria-labelledby="displayNoticeTitle" hidden>
+        <div class="turnstile-notice-head">
+          <h2 id="displayNoticeTitle">📢 Avisos da Academia</h2>
+          <span id="displayNoticeCounter" class="turnstile-notice-counter" hidden></span>
         </div>
-        <div class="turnstile-challenge-bar" aria-hidden="true">
-          <div id="displayChallengeFill" class="turnstile-challenge-fill" style="width:0%"></div>
-        </div>
+        <p id="displayNoticeText" class="turnstile-notice-text"></p>
       </section>
       <section id="displayPortalQr" class="turnstile-portal-qr" aria-labelledby="displayPortalQrTitle" hidden>
         <h2 id="displayPortalQrTitle">📱 Portal do Aluno</h2>
@@ -100,6 +98,6 @@
       </div>
     </div>
   </section>
-  <script src="/catraca.js?v=20261127.1" defer></script>
+  <script src="/catraca.js?v=20261127.3" defer></script>
 </body>
 </html>

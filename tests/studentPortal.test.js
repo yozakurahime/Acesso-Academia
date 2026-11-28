@@ -178,7 +178,7 @@ test('Rotas /api/student funcionam com sessao propria mesmo com login admin ativ
     const richRankingRes = await fetch(`${baseUrl}/api/turnstile/ranking?rich=1`);
     assert.equal(richRankingRes.status, 200);
     const richRanking = await richRankingRes.json();
-    assert.deepEqual(richRanking.challenge, { completed: 1, target: 500 });
+    assert.ok(Array.isArray(richRanking.notices) && richRanking.notices.length >= 2);
     assert.ok(Array.isArray(richRanking.ranking));
     assert.ok(Array.isArray(richRanking.streakRanking));
 

@@ -589,6 +589,18 @@ export class WhatsappBotService {
       }
     } catch {}
 
+    try {
+      const settings = this.store.getSettings?.() || {};
+      const hasCustomNotices = settings.turnstile_notices !== undefined && settings.turnstile_notices !== null;
+      const rawNotices = hasCustomNotices
+        ? String(settings.turnstile_notices)
+        : '🎄 Natal (24 e 25/12): dia 24 funcionaremos até 12h e voltamos na segunda-feira, dia 28/12.\n🎆 Ano Novo (31/12 e 01/01): dia 31 funcionaremos até 12h e retornamos no dia 04/01.';
+      const notices = rawNotices.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 12);
+      if (notices.length > 0) {
+        sections.push(`Avisos e horários especiais:\n${notices.map((n) => `- ${n}`).join('\n')}`);
+      }
+    } catch {}
+
     return sections.length > 0 ? `# DADOS ATUAIS DO SISTEMA (SEM DADOS PESSOAIS)\n${sections.join('\n\n')}` : '';
   }
 

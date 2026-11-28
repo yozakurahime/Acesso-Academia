@@ -5547,6 +5547,9 @@ async function loadSettings() {
   document.getElementById('sTolerance').value = s.tolerance_days || '3';
   if (document.getElementById('sAntipassback')) document.getElementById('sAntipassback').value = s.antipassback_minutes || '0';
   if (document.getElementById('sMaxCapacity')) document.getElementById('sMaxCapacity').value = s.max_capacity || '0';
+  if (document.getElementById('sTurnstileNotices')) {
+    document.getElementById('sTurnstileNotices').value = s.turnstile_notices ?? '🎄 Natal (24 e 25/12): dia 24 funcionaremos até 12h e voltamos na segunda-feira, dia 28/12.\n🎆 Ano Novo (31/12 e 01/01): dia 31 funcionaremos até 12h e retornamos no dia 04/01.';
+  }
   if (document.getElementById('backupLastAt')) {
     document.getElementById('backupLastAt').textContent = s.backup_last_at ? `Último backup: ${fmtDateTime(s.backup_last_at)}` : 'Nenhum backup gerado ainda.';
   }
@@ -8335,6 +8338,7 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
           tolerance_days: document.getElementById('sTolerance').value,
           antipassback_minutes: document.getElementById('sAntipassback')?.value || '0',
           max_capacity: document.getElementById('sMaxCapacity')?.value || '0',
+          turnstile_notices: document.getElementById('sTurnstileNotices')?.value || '',
           controlid_ip: document.getElementById('sIp').value,
           controlid_port: document.getElementById('sPort').value,
           controlid_user: document.getElementById('sUser').value,
