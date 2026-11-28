@@ -58,7 +58,7 @@ test('DeviceService: turnstile CRUD validates release_seconds, direction and fre
   assert.equal(removed.deleted, true);
 });
 
-test('DeviceService: applyTurnstileConfig sends Toletus 0x010A duration and 0x0102 flow control packets', async () => {
+test('DeviceService: applyTurnstileConfig sends Toletus 0x020A duration and 0x0202 flow control packets', async () => {
   const store = await DatabaseStore.create(null);
   store.updateSettings({ controlid_mock_mode: 'true' });
   const controlId = new ControlIdClient(() => store.getSettings());
@@ -84,14 +84,20 @@ test('DeviceService: applyTurnstileConfig sends Toletus 0x010A duration and 0x01
   assert.equal(res.applied, true);
   assert.equal(sent.length, 2);
 
-  // Command 0x010A: bytes [1..2] = 0x010A LE, payload [3..6] = 7000ms UInt32LE
-  assert.equal(sent[0].packet.readUInt16LE(1), 0x010A);
+  // Command 0x020A: bytes [1..2] = 0x020A LE, payload [3..6] = 7000ms UInt32LE
+  assert.equal(sent[0].packet.readUInt16LE(1), 0x020A);
   assert.equal(sent[0].packet.readUInt32LE(3), 7000);
   assert.equal(sent[0].override.ip, '10.0.0.55');
 
-  // Command 0x0102: bytes [1..2] = 0x0102 LE, payload [3] = 2 (exit free)
-  assert.equal(sent[1].packet.readUInt16LE(1), 0x0102);
-  assert.equal(sent[1].packet[3], 2);
+  // Command 0x0202: bytes [1..2] = 0x0202 LE, payload [3] = 1 (entrada controlada, saida livre)
+  assert.equal(sent[1].packet.readUInt16LE(1), 0x0202);
+  assert.equal(sent[1].packet[3], 1);
+
+  // free_side = 'none' -> payload [3] = 3 (entrada controlada, saida controlada)
+  devices.updateTurnstile(turnstile.id, { free_side: 'none' });
+  await devices.applyTurnstileConfig(turnstile.id);
+  assert.equal(sent[3].packet.readUInt16LE(1), 0x0202);
+  assert.equal(sent[3].packet[3], 3);
 });
 
 test('DeviceService: reader CRUD masks password and links to turnstile', async () => {

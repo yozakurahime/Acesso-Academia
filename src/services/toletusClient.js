@@ -240,20 +240,20 @@ export class ToletusClient {
     return this.releaseEntry(message, override);
   }
 
-  /** Configura o tempo de liberacao (0x010A) em milissegundos na placa LiteNet2. */
+  /** Configura o tempo de liberacao (0x020A) em milissegundos na placa LiteNet2. */
   async setReleaseDuration(seconds = 5, override = null) {
     const ms = Math.max(1000, Math.min(60000, Math.round(Number(seconds || 5) * 1000)));
     const payload = Buffer.alloc(16, 0x00);
     payload.writeUInt32LE(ms, 0);
-    return this.sendPacket(this.buildBinaryPacket(0x010a, payload), override);
+    return this.sendPacket(this.buildBinaryPacket(0x020a, payload), override);
   }
 
-  /** Configura o controle de fluxo / lado liberado (0x0102): none=0, entry=1, exit=2, both=3. */
+  /** Configura o controle de fluxo / lado liberado (0x0202): both=0, exit=1, entry=2, none=3. */
   async setFlowControl(freeSide = 'none', override = null) {
-    const modes = { none: 0, entry: 1, exit: 2, both: 3 };
-    const code = Object.hasOwn(modes, freeSide) ? modes[freeSide] : 0;
+    const modes = { both: 0, exit: 1, entry: 2, none: 3 };
+    const code = Object.hasOwn(modes, freeSide) ? modes[freeSide] : 3;
     const payload = Buffer.alloc(16, 0x00);
     payload[0] = code;
-    return this.sendPacket(this.buildBinaryPacket(0x0102, payload), override);
+    return this.sendPacket(this.buildBinaryPacket(0x0202, payload), override);
   }
 }
