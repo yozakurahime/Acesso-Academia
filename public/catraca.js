@@ -87,6 +87,10 @@ let pollDisplayController = null;
 let offlineFailures = 0;
 let wakeLock = null;
 let idleOccupancy = null;
+const DEFAULT_HOLIDAY_NOTICES = [
+  '🎄 Natal (24 e 25/12): dia 24 funcionaremos até 12h e voltamos na segunda-feira, dia 28/12.',
+  '🎆 Ano Novo (31/12 e 01/01): dia 31 funcionaremos até 12h e retornamos no dia 04/01.',
+];
 let noticeList = [];
 let noticeIndex = 0;
 let noticeFadeTimer = null;
@@ -752,6 +756,10 @@ async function pollRanking() {
         if (noticeIndex >= noticeList.length) noticeIndex = 0;
         renderNotice(false);
       }
+    } else if (!noticeList.length) {
+      noticeList = [...DEFAULT_HOLIDAY_NOTICES];
+      noticeIndex = 0;
+      renderNotice(false);
     }
     rankingState = {
       streakRanking: Array.isArray(data?.streakRanking) ? data.streakRanking : [],
