@@ -82,7 +82,7 @@ test('DeviceService: applyTurnstileConfig sends Toletus 0x020A duration and 0x02
 
   const res = await devices.applyTurnstileConfig(turnstile.id);
   assert.equal(res.applied, true);
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
 
   // Command 0x020A: bytes [1..2] = 0x020A LE, payload [3..6] = 7000ms UInt32LE
   assert.equal(sent[0].packet.readUInt16LE(1), 0x020A);
@@ -93,11 +93,19 @@ test('DeviceService: applyTurnstileConfig sends Toletus 0x020A duration and 0x02
   assert.equal(sent[1].packet.readUInt16LE(1), 0x0202);
   assert.equal(sent[1].packet[3], 1);
 
-  // free_side = 'none' -> payload [3] = 3 (entrada controlada, saida controlada)
+  // Command 0x020F: bytes [1..2] = 0x020F LE, payload [3] = 0 (exit), payload [4] = 0 (pictogramas ligados)
+  assert.equal(sent[2].packet.readUInt16LE(1), 0x020F);
+  assert.equal(sent[2].packet[3], 0);
+  assert.equal(sent[2].packet[4], 0);
+
+  // free_side = 'none' -> 0x0202=3 e 0x020F=2 com pictogramas=0
   devices.updateTurnstile(turnstile.id, { free_side: 'none' });
   await devices.applyTurnstileConfig(turnstile.id);
-  assert.equal(sent[3].packet.readUInt16LE(1), 0x0202);
-  assert.equal(sent[3].packet[3], 3);
+  assert.equal(sent[4].packet.readUInt16LE(1), 0x0202);
+  assert.equal(sent[4].packet[3], 3);
+  assert.equal(sent[5].packet.readUInt16LE(1), 0x020F);
+  assert.equal(sent[5].packet[3], 2);
+  assert.equal(sent[5].packet[4], 0);
 });
 
 test('DeviceService: reader CRUD masks password and links to turnstile', async () => {

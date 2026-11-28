@@ -248,12 +248,25 @@ export class ToletusClient {
     return this.sendPacket(this.buildBinaryPacket(0x020a, payload), override);
   }
 
-  /** Configura o controle de fluxo / lado liberado (0x0202): both=0, exit=1, entry=2, none=3. */
+  /** Configura o controle de fluxo / lado liberado (0x0202 legado + 0x020F estendido com pictogramas ligados). */
   async setFlowControl(freeSide = 'none', override = null) {
-    const modes = { both: 0, exit: 1, entry: 2, none: 3 };
-    const code = Object.hasOwn(modes, freeSide) ? modes[freeSide] : 3;
-    const payload = Buffer.alloc(16, 0x00);
-    payload[0] = code;
-    return this.sendPacket(this.buildBinaryPacket(0x0202, payload), override);
+    const legacyModes = { both: 0, exit: 1, entry: 2, none: 3 };
+    const extendedModes = { exit: 0, none: 2, entry: 3, both: 5 };
+    const legacyCode = Object.hasOwn(legacyModes, freeSide) ? legacyModes[freeSide] : 3;
+    const extCode = Object.hasOwn(extendedModes, freeSide) ? extendedModes[freeSide] : 2;
+
+    const legacyPayload = Buffer.alloc(16, 0x00);
+    legacyPayload[0] = legacyCode;
+    const legacyRes = await this.sendPacket(this.buildBinaryPacket(0x0202, legacyPayload), override);
+
+    const extPayload = Buffer.alloc(16, 0x00);
+    extPayload[0] = extCode;
+    extPayload[1] = 0; // 0 = Pictogramas (seta verde / X vermelho) ligados na entrada e na saída
+    try {
+      await this.sendPacket(this.buildBinaryPacket(0x020f, extPayload), override);
+    } catch {
+      // Placas com firmware anterior à V2.1.0 podem ignorar 0x020F; mantém resposta do 0x0202.
+    }
+    return legacyRes;
   }
 }
